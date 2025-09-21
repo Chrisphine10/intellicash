@@ -1,0 +1,205 @@
+body{
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+}
+
+#invoice{
+    position: relative;
+}
+
+#invoice .default-invoice{
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    -webkit-box-shadow: 0px 2px 4px rgb(31 30 47 / 10%);
+    box-shadow: 0px 2px 4px rgb(31 30 47 / 10%);
+}
+
+/** Custom Invoice **/
+#invoice .custom-invoice{
+    margin: 0;
+    padding: 30px;
+    background: #fff;
+    -webkit-box-shadow: 0px 2px 4px rgb(31 30 47 / 10%);
+    box-shadow: 0px 2px 4px rgb(31 30 47 / 10%);
+}
+
+/** Apply Only for PDF Export **/
+#invoice.pdf{
+    font-family: DejaVu Sans;
+    font-size: 20px;
+}
+
+#invoice.pdf .invoice-footer{
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}
+
+#invoice.pdf p{
+    margin-bottom: 0;
+}
+
+#invoice.pdf .invoice-footer p{
+    font-size: 18px;
+    text-align: center;
+    padding: 5px 10px;
+}
+/** End PDF Specefic CSS **/
+
+/** Default Invoice Template **/
+.default-invoice .invoice-header{
+    background: #30336b;
+    padding: 50px 30px;
+}
+
+.default-invoice .invoice-header .logo{
+    max-width: 120px;
+    max-height: 100px;
+}
+
+.default-invoice .invoice-header h2.title{
+    color: #fff;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.default-invoice .invoice-header .right-header{
+    text-align: right;
+}
+
+.default-invoice .invoice-header h4.company-name{
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.default-invoice .invoice-header p{
+    color: #fff;
+}
+
+.default-invoice .invoice-details{
+    padding: 30px 30px; 
+}
+
+.default-invoice .invoice-details .bill-to-heading{
+    font-size: 0.8rem;
+    display: inline-block;
+    margin-bottom: 0.8rem;
+}
+
+.default-invoice .invoice-details .bill-to{
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.default-invoice .invoice-body table{
+    margin-bottom: 0;
+}
+
+.default-invoice .invoice-body table thead th{
+    background-color: #30336b !important;
+    color: #fff;
+    border-bottom: 0;
+}
+
+.default-invoice .invoice-body table td{
+    vertical-align: top;
+    border-top: none;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.default-invoice .invoice-body table th, .default-invoice .invoice-body table td{
+    padding: 0.8rem 1rem;
+}
+
+.default-invoice .invoice-body .product-name{
+    min-width: 150px;
+}
+
+.default-invoice .invoice-body .product-name p:first-child{
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.default-invoice .invoice-body .product-name p:nth-child(2){
+    font-size: 0.8rem;
+}
+
+.default-invoice .invoice-summary{
+    background: #e6eefa;
+    overflow: hidden;
+}
+
+.default-invoice .invoice-summary table td {
+    padding: 0.5rem 1rem;
+    border-top: 0;
+    background-color: #30336b !important;
+    color: #FFF;
+}
+
+.default-invoice .invoice-summary .invoice-note{
+    padding: 1rem;
+}
+
+/**** Core CSS ****/
+#invoice .invoice-footer{
+    text-align: center;
+}
+
+#invoice .invoice-footer p{
+    padding: 10px;
+    font-size: 0.85rem;
+    color: #727272;
+}
+
+.default-invoice .col-12{
+    position: relative;
+    width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+.default-invoice .clear{
+    clear:both;
+}
+
+.default-invoice p, .default-invoice h5, .default-invoice h4{
+    margin: 0;
+}
+
+/**** Print CSS ****/
+@page { margin: 0 !important; }
+
+@media print {
+    .col-xl-4{
+        -ms-flex: 0 0 33.333333%;
+        flex: 0 0 33.333333%;
+        max-width: 33.333333%;
+    }
+    .col-xl-5{
+        -ms-flex: 0 0 41.666667%;
+        flex: 0 0 41.666667%;
+        max-width: 41.666667%;
+    }
+    .col-xl-6{
+        -ms-flex: 0 0 50%;
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+    .col-xl-7{
+        -ms-flex: 0 0 58.333333%;
+        flex: 0 0 58.333333%;
+        max-width: 58.333333%;
+    }
+    .col-xl-8{
+        -ms-flex: 0 0 66.666667%;
+        flex: 0 0 66.666667%;
+        max-width: 66.666667%;
+    }
+}
+
+
+

@@ -1,0 +1,79 @@
+{
+    "name": "{{ get_option('site_title', config('app.name')) }}",
+    "short_name": "{{ get_option('company_name', 'IntelliCash') }}",
+    "description": "{{ get_option('site_description', 'Progressive Web App for IntelliCash') }}",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "{{ get_option('primary_color', '#007bff') }}",
+    "orientation": "portrait-primary",
+    "scope": "/",
+    "lang": "{{ get_option('language', 'en') }}",
+    "categories": ["finance", "business", "productivity"],
+    "icons": [
+        {
+            "src": "/public/uploads/media/pwa-icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/public/uploads/media/pwa-icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/public/uploads/media/pwa-icon-144x144.png",
+            "sizes": "144x144",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/public/uploads/media/pwa-icon-72x72.png",
+            "sizes": "72x72",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Dashboard",
+            "short_name": "Dashboard",
+            "description": "View your dashboard",
+            "url": "/dashboard",
+            "icons": [
+                {
+                    "src": "/public/uploads/media/pwa-icon-96x96.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Transactions",
+            "short_name": "Transactions",
+            "description": "View transactions",
+            "url": "/transactions",
+            "icons": [
+                {
+                    "src": "/public/uploads/media/pwa-icon-96x96.png",
+                    "sizes": "96x96"
+                }
+            ]
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "/public/uploads/media/pwa-screenshot-desktop.png",
+            "sizes": "1280x720",
+            "type": "image/png",
+            "form_factor": "wide"
+        },
+        {
+            "src": "/public/uploads/media/pwa-screenshot-mobile.png",
+            "sizes": "750x1334",
+            "type": "image/png",
+            "form_factor": "narrow"
+        }
+    ]
+}

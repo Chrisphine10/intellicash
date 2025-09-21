@@ -1,0 +1,44 @@
+<?php 
+
+$language=array();
+
+$language["Home"]="Hogar";
+$language["About"]="Acerca de";
+$language["Features"]=" Características";
+$language["Pricing"]="Precios";
+$language["Pages"]="Paginas";
+$language["FAQ"]="FAQ";
+$language["Blogs"]="Blogs";
+$language["Contact"]="Contacto";
+$language["Dashboard"]="Panel";
+$language["Sign In"]="Sign In";
+$language["Sign Up"]="Sign Up";
+$language["Sign In"]="Iniciar sesión";
+$language["Sign Up"]="Inscribirse";
+$language["Get Started"]="Get Started";
+$language["Monthly"]="Monthly";
+$language["Yearly"]="Yearly";
+$language["Lifetime"]="Lifetime";
+$language["Most popular"]="Most popular";
+$language["Business Account"]="Business Account";
+$language["Active Staff"]="Active Staff";
+$language["Invoice"]="Invoice";
+$language["Quotation"]="Quotation";
+$language["Recurring Invoice"]="Recurring Invoice";
+$language["Customer Account"]="Customer Account";
+$language["Invoice Template Builder"]="Invoice Template Builder";
+$language["Accept Online Payment"]="Accept Online Payment";
+$language["Select"]="Select";
+$language["Read More"]="Read More";
+$language["Testimonials"]="Testimonials";
+$language["Newsletter"]="Newsletter";
+$language["Email address"]="Email address";
+$language["Subscribe"]="Subscribe";
+$language["Teams"]="Teams";
+$language["Posted on"]="Posted on";
+$language["Your Name"]="Your Name";
+$language["Your Email"]="Your Email";
+$language["Your Subjects"]="Your Subjects";
+$language["Your Message"]="Your Message";
+$language["Send Message"]="Send Message";
+$language["Social Links"]="Social Links";

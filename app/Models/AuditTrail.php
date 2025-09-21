@@ -1,0 +1,197 @@
+<?php
+
+namespace App\Models;
+
+use App\Traits\MultiTenant;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+
+use App\Models\Member;
+use App\Models\User;
+
+class AuditTrail extends Model
+{
+    use MultiTenant;
+
+    protected $table = 'audit_trails';
+    
+    // Disable timestamps since we only use created_at
+    public $timestamps = false;
+
+    protected $fillable = [
+        'event_type',
+        'auditable_type',
+        'auditable_id',
+        'old_values',
+        'new_values',
+        'user_type',
+        'user_id',
+        'ip_address',
+        'user_agent',
+        'url',
+        'method',
+        'description',
+        'metadata',
+        'session_id',
+        'tenant_id',
+        'created_at'
+    ];
+
+    protected $casts = [
+        'old_values' => 'array',
+        'new_values' => 'array',
+        'metadata' => 'array',
+        'created_at' => 'datetime',
+    ];
+
+
+    /**
+     * Get the auditable model (polymorphic relationship)
+     */
+    public function auditable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Get the user who performed the action
+     */
+    public function user(): BelongsTo
+    {
+        if ($this->user_type === 'member') {
+            return $this->belongsTo(Member::class, 'user_id');
+        } elseif ($this->user_type === 'system_admin') {
+            return $this->belongsTo(User::class, 'user_id');
+        }
+        
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Get the tenant this audit belongs to
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Scope for filtering by event type
+     */
+    public function scopeEventType($query, $eventType)
+    {
+        return $query->where('event_type', $eventType);
+    }
+
+    /**
+     * Scope for filtering by user type
+     */
+    public function scopeUserType($query, $userType)
+    {
+        return $query->where('user_type', $userType);
+    }
+
+    /**
+     * Scope for filtering by auditable model
+     */
+    public function scopeAuditableType($query, $auditableType)
+    {
+        return $query->where('auditable_type', $auditableType);
+    }
+
+    /**
+     * Scope for filtering by date range
+     */
+    public function scopeDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('created_at', [$startDate, $endDate]);
+    }
+
+    /**
+     * Get formatted event description
+     */
+    public function getFormattedDescriptionAttribute(): string
+    {
+        $modelName = class_basename($this->auditable_type);
+        $event = ucfirst(str_replace('_', ' ', $this->event_type));
+        
+        return "{$event} {$modelName}";
+    }
+
+    /**
+     * Get changes summary
+     */
+    public function getChangesSummaryAttribute(): array
+    {
+        try {
+            // Handle NULL values and ensure arrays
+            $oldValues = $this->old_values;
+            $newValues = $this->new_values;
+            
+            // Convert NULL to empty array
+            if ($oldValues === null) {
+                $oldValues = [];
+            }
+            if ($newValues === null) {
+                $newValues = [];
+            }
+            
+            // Ensure they are arrays
+            if (!is_array($oldValues)) {
+                $oldValues = [];
+            }
+            if (!is_array($newValues)) {
+                $newValues = [];
+            }
+            
+            // If both are empty, no changes
+            if (empty($oldValues) && empty($newValues)) {
+                return [];
+            }
+
+            $changes = [];
+            
+            // Compare old and new values
+            $allKeys = array_unique(array_merge(array_keys($oldValues), array_keys($newValues)));
+            
+            foreach ($allKeys as $key) {
+                $oldValue = $oldValues[$key] ?? null;
+                $newValue = $newValues[$key] ?? null;
+                
+                if ($oldValue !== $newValue) {
+                    $changes[$key] = [
+                        'old' => $oldValue,
+                        'new' => $newValue
+                    ];
+                }
+            }
+
+            return $changes;
+        } catch (\Exception $e) {
+            \Log::warning('Error in getChangesSummaryAttribute', [
+                'audit_id' => $this->id,
+                'error' => $e->getMessage(),
+                'old_values_type' => gettype($this->old_values),
+                'new_values_type' => gettype($this->new_values)
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Get user name for display
+     */
+    public function getUserNameAttribute(): ?string
+    {
+        if (!$this->user_id) {
+            return 'System';
+        }
+
+        if ($this->user_type === 'member') {
+            return $this->user?->first_name . ' ' . $this->user?->last_name;
+        }
+
+        return $this->user?->name;
+    }
+}

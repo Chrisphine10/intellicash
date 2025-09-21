@@ -1,0 +1,386 @@
+body {
+    background: linear-gradient(135deg, #f0f8f0 0%, #e8f5e8 50%, #d4f4d4 100%);
+    color: #000;
+    font-family: "Poppins", sans-serif;
+    min-height: 100vh;
+    position: relative;
+}
+
+body::before {
+    content: "";
+    background: rgba(50, 205, 50, 0.1);
+    position: fixed;
+    top: -200px;
+    left: -250px;
+    height: 500px;
+    width: 500px;
+    border-radius: 50%;
+}
+
+body::after {
+    content: "";
+    background: rgba(40, 164, 40, 0.15);
+    position: fixed;
+    bottom: -300px;
+    right: -300px;
+    height: 500px;
+    width: 500px;
+    border-radius: 50%;
+    z-index: -1;
+}
+
+@media (max-width: 768px) {
+    body::before {
+        top: -100px;
+        left: -100px;
+        height: 300px;
+        width: 300px;
+    }
+
+    body::after {
+        bottom: -100px;
+        right: -100px;
+        height: 300px;
+        width: 300px;
+    }
+}
+
+.logo {
+    max-width: 150px;
+    border-radius: 15px;
+    transform: translateX(-50%);
+    margin-left: 50%;
+}
+
+.custom-control-label {
+    margin-bottom: 0;
+    margin-top: 1px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.card-signin {
+    border: 0;
+    border-radius: 15px;
+    background: #ffffff;
+    box-shadow: 0 10px 40px rgba(50, 205, 50, 0.15), 0 4px 20px rgba(50, 205, 50, 0.1);
+    border-top: 4px solid #32cd32;
+}
+
+.card-signin .card-header {
+    font-weight: 300;
+    font-size: 1.5rem;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    background: #ffffff;
+}
+
+.login-form-head {
+    text-align: center;
+    background: #ffffff;
+    padding: 30px 15px;
+    border-bottom: 1px solid #e8e8e8;
+}
+
+.login-form-head h4 {
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #000;
+    margin: 0;
+}
+
+.card-signin .card-body {
+    padding: 1rem 2rem;
+}
+
+.form-signin {
+    font-family: "Poppins", sans-serif;
+    width: 100%;
+    text-align: center;
+}
+
+.form-signin .btn {
+    padding: 12px 20px;
+    transition: all 0.2s;
+}
+
+.form-signin .form-control {
+    padding: 12px 20px;
+    text-align: center;
+    border-left: 3px solid #32cd32;
+    height: auto;
+    border-radius: 8px;
+    border-top: 1px solid #e0e0e0;
+    border-right: 1px solid #e0e0e0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.form-signin .form-control:focus {
+    border: 1px 1px 1px 1px;
+    border-color: #32cd32;
+    box-shadow: 0 0 0 3px rgba(50, 205, 50, 0.1);
+    outline: none;
+}
+
+.form-signup .form-control {
+    padding: 12px 20px;
+    border-left: 3px solid #32cd32;
+    height: auto;
+    font-size: 14px;
+    font-weight: 400;
+    border-radius: 8px;
+    border-top: 1px solid #e0e0e0;
+    border-right: 1px solid #e0e0e0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.form-signup .form-control:focus {
+    border: 1px 1px 1px 1px;
+    border-color: #32cd32;
+    box-shadow: 0 0 0 3px rgba(50, 205, 50, 0.1);
+    outline: none;
+}
+
+.form-signup .btn {
+    padding: 12px 20px;
+    transition: all 0.2s;
+}
+
+select.form-control {
+    padding: 12px 20px;
+    height: 51px !important;
+}
+
+.custom-control-label:before {
+    background: #cccccc;
+    border-radius: 50% !important;
+}
+
+.custom-control {
+    display: inline-block;
+}
+
+.btn-register {
+    text-align: center;
+    display: block;
+    color: #222222;
+    font-size: 16px !important;
+}
+
+.btn-register:hover {
+    color: #222222;
+    text-decoration: underline;
+}
+
+.btn-register:active,
+.btn-register:focus {
+    border: none;
+    box-shadow: none;
+    outline: none;
+}
+
+.btn-dark {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-dark:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+}
+
+.btn-dark.btn-block {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-dark.btn-block:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+}
+
+.btn-link {
+    color: #32cd32;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.btn-link:hover {
+    color: #28a428;
+    text-decoration: underline;
+}
+
+/* Ensure all primary buttons use lime green theme */
+.btn-primary.btn-block,
+.btn-primary.btn-login,
+.btn-primary {
+    color: #fff !important;
+    background-color: #32cd32 !important;
+    border-color: #32cd32 !important;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary.btn-block:hover,
+.btn-primary.btn-login:hover,
+.btn-primary:hover {
+    background-color: #28a428 !important;
+    border-color: #28a428 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(50, 205, 50, 0.3);
+}
+
+.btn-primary.btn-block:active,
+.btn-primary.btn-login:active,
+.btn-primary:active,
+.btn-primary.btn-block:focus,
+.btn-primary.btn-login:focus,
+.btn-primary:focus {
+    background-color: #28a428 !important;
+    border-color: #28a428 !important;
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(50, 205, 50, 0.2);
+}
+
+.alert-success {
+    color: #2d5a2d;
+    background-color: #e8f8e8;
+    border-color: #32cd32;
+    border-radius: 8px;
+    border-left: 4px solid #32cd32;
+}
+
+.btn-primary {
+    color: #fff;
+    background-color: #32cd32;
+    border-color: #32cd32;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: #28a428;
+    border-color: #28a428;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(50, 205, 50, 0.3);
+}
+
+.btn-primary:active,
+.btn-primary:focus {
+    background-color: #28a428;
+    border-color: #28a428;
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(50, 205, 50, 0.2);
+}
+
+.tenant-link {
+    color: #000000;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+.tenant-link:hover {
+    text-decoration: none;
+    color: #32cd32;
+}
+
+select.form-control {
+    margin: 0;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Ctitle%3Edown-arrow%3C%2Ftitle%3E%3Cg%20fill%3D%22%23000000%22%3E%3Cpath%20d%3D%22M10.293%2C3.293%2C6%2C7.586%2C1.707%2C3.293A1%2C1%2C0%2C0%2C0%2C.293%2C4.707l5%2C5a1%2C1%2C0%2C0%2C0%2C1.414%2C0l5-5a1%2C1%2C0%2C1%2C0-1.414-1.414Z%22%20fill%3D%22%23000000%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem top 50%;
+    background-size: 0.65rem auto;
+}
+
+.parent-box:focus-within {
+    color: #495057;
+    background-color: #fff;
+    border: 1px 1px 1px 1px;
+    border-color: #32cd32;
+}
+
+.parent-box .form-control {
+    border: none;
+    padding-left: 1px;
+    font-weight: bold;
+}
+
+.parent-box .form-control:focus {
+    border: none;
+}
+
+.iti {width: 100%;}
+
+.fs-14 {
+    font-size: 14px;
+}
+
+.two-factor-alert {
+    background: #fff;
+    text-align: left;
+    position: relative;
+    font-size: 15px;
+    width: 100%;
+    margin: 0px auto 40px auto;
+    padding: 14px 16px;
+    text-align: left;
+    border-radius: 8px;
+    border-width: 0 0 0 3px;
+    border-style: solid;
+    box-shadow: 0 8px 16px 0px rgba(50, 205, 50, 0.08),
+        0px 8px 64px 0px rgba(50, 205, 50, 0.12);
+    border-color: #32cd32;
+}
+
+.gradient-text{
+    background: linear-gradient(to right, #32cd32, #28a428, #32cd32);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Override any Bootstrap or other CSS that might interfere with button styling */
+.card-signin .btn-primary,
+.form-signin .btn-primary,
+.form-signup .btn-primary {
+    color: #fff !important;
+    background-color: #32cd32 !important;
+    border-color: #32cd32 !important;
+}
+
+.card-signin .btn-primary:hover,
+.form-signin .btn-primary:hover,
+.form-signup .btn-primary:hover {
+    background-color: #28a428 !important;
+    border-color: #28a428 !important;
+}
+
+/* Ensure button text is white and visible */
+.btn-primary * {
+    color: #fff !important;
+}
