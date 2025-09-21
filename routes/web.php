@@ -328,6 +328,7 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('legal_templates', [App\Http\Controllers\AdvancedLoanManagementController::class, 'indexLegalTemplates'])->name('legal_templates.index');
                 Route::get('legal_templates/{id}/edit', [App\Http\Controllers\AdvancedLoanManagementController::class, 'editLegalTemplate'])->name('legal_templates.edit');
                 Route::put('legal_templates/{id}', [App\Http\Controllers\AdvancedLoanManagementController::class, 'updateLegalTemplate'])->name('legal_templates.update');
+                
 
                 //Expense Categories
                 Route::resource('expense_categories', ExpenseCategoryController::class)->except('show');
