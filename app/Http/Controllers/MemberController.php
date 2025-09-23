@@ -227,7 +227,7 @@ class MemberController extends Controller
         $member->member_no     = get_tenant_option('starting_member_no', $request->input('member_no'));
         $member->gender        = $request->input('gender');
         $member->city          = $request->input('city');
-        $member->state         = $request->input('state');
+        $member->county        = $request->input('county');
         $member->zip           = $request->input('zip');
         $member->address       = $request->input('address');
         $member->credit_source = $request->input('credit_source');
@@ -454,7 +454,7 @@ class MemberController extends Controller
         $member->member_no     = $request->input('member_no');
         $member->gender        = $request->input('gender');
         $member->city          = $request->input('city');
-        $member->state         = $request->input('state');
+        $member->county        = $request->input('county');
         $member->zip           = $request->input('zip');
         $member->address       = $request->input('address');
         $member->credit_source = $request->input('credit_source');
@@ -688,6 +688,21 @@ class MemberController extends Controller
 
     private function generateAccounts($member_id)
     {
+        $tenant = app('tenant');
+        
+        // Check if VSLA is enabled and auto-create member accounts is enabled
+        $shouldCreateAccounts = true;
+        if ($tenant->isVslaEnabled()) {
+            $vslaSettings = $tenant->vslaSettings;
+            if ($vslaSettings && !$vslaSettings->auto_create_member_accounts) {
+                $shouldCreateAccounts = false;
+            }
+        }
+        
+        if (!$shouldCreateAccounts) {
+            return;
+        }
+        
         $accountsTypes = SavingsProduct::where('auto_create', 1)->get();
         foreach ($accountsTypes as $accountType) {
             $savingsaccount                     = new SavingsAccount();

@@ -31,20 +31,61 @@ class WithdrawController extends Controller {
 	public function manual_methods() {
 		$alert_col = 'col-lg-8 offset-lg-2';
 		$withdraw_methods = WithdrawMethod::where('status', 1)->get();
-		return view('backend.customer.withdraw.manual_methods', compact('withdraw_methods', 'alert_col'));
+		
+		// Get tenant-specific withdrawal methods from connected bank accounts
+		$tenantPaymentMethods = \App\Models\BankAccount::withPaymentMethods()
+			->where('tenant_id', request()->tenant->id)
+			->where('is_active', true)
+			->get()
+			->map(function ($account) {
+				return [
+					'id' => 'payment_' . $account->id,
+					'name' => $account->bank_name . ' - ' . $account->account_name . ' (' . ucfirst($account->payment_method_type) . ')',
+					'type' => 'payment_method',
+					'bank_account' => $account,
+					'currency' => $account->currency->name ?? 'KES',
+					'available_balance' => $account->available_balance
+				];
+			});
+		
+		return view('backend.customer.withdraw.manual_methods', compact('withdraw_methods', 'tenantPaymentMethods', 'alert_col'));
 	}
 
-	public function manual_withdraw(Request $request,$teant, $methodId, $otp = '') {
+	public function manual_withdraw(Request $request, $tenant, $methodId, $otp = '') {
 		if ($request->isMethod('get')) {
 			$alert_col = 'col-lg-8 offset-lg-2';
-			$withdraw_method = WithdrawMethod::find($methodId);
-			$accounts = SavingsAccount::with('savings_type')
-				->whereHas('savings_type', function (Builder $query) {
-					$query->where('allow_withdraw', 1);
-				})
-				->where('member_id', auth()->user()->member->id)
-				->get();
-			return view('backend.customer.withdraw.manual_withdraw', compact('withdraw_method', 'accounts', 'alert_col'));
+			
+			// Check if it's a tenant payment method
+			if (str_starts_with($methodId, 'payment_')) {
+				$bankAccountId = str_replace('payment_', '', $methodId);
+				$bankAccount = \App\Models\BankAccount::withPaymentMethods()
+					->where('id', $bankAccountId)
+					->where('tenant_id', request()->tenant->id)
+					->first();
+				
+				if (!$bankAccount) {
+					return redirect()->route('withdraw.manual_methods')->with('error', 'Payment method not found');
+				}
+				
+				$accounts = SavingsAccount::with('savings_type')
+					->whereHas('savings_type', function (Builder $query) {
+						$query->where('allow_withdraw', 1);
+					})
+					->where('member_id', auth()->user()->member->id)
+					->get();
+				
+				return view('backend.customer.withdraw.payment_method_withdraw', compact('bankAccount', 'accounts', 'alert_col'));
+			} else {
+				// Traditional withdrawal method
+				$withdraw_method = WithdrawMethod::find($methodId);
+				$accounts = SavingsAccount::with('savings_type')
+					->whereHas('savings_type', function (Builder $query) {
+						$query->where('allow_withdraw', 1);
+					})
+					->where('member_id', auth()->user()->member->id)
+					->get();
+				return view('backend.customer.withdraw.manual_withdraw', compact('withdraw_method', 'accounts', 'alert_col'));
+			}
 		} else if ($request->isMethod('post')) {
 
 			//Initial validation
@@ -53,6 +94,12 @@ class WithdrawController extends Controller {
 			]);
 
 			$member_id = auth()->user()->member->id;
+			
+			// Check if it's a tenant payment method
+			if (str_starts_with($methodId, 'payment_')) {
+				return $this->processPaymentMethodWithdrawal($request, $methodId, $member_id);
+			}
+			
 			$withdraw_method = WithdrawMethod::find($methodId);
 
 			$account = SavingsAccount::where('id', $request->debit_account)
@@ -184,6 +231,104 @@ class WithdrawController extends Controller {
 	}
 
 	/**
+	 * Process payment method withdrawal
+	 */
+	private function processPaymentMethodWithdrawal($request, $methodId, $member_id)
+	{
+		$bankAccountId = str_replace('payment_', '', $methodId);
+		$bankAccount = \App\Models\BankAccount::withPaymentMethods()
+			->where('id', $bankAccountId)
+			->where('tenant_id', request()->tenant->id)
+			->first();
+
+		if (!$bankAccount) {
+			return back()->with('error', 'Payment method not found');
+		}
+
+		// Validate payment method specific fields
+		$validator = Validator::make($request->all(), [
+			'debit_account' => 'required|exists:savings_accounts,id',
+			'amount' => 'required|numeric|min:1',
+			'description' => 'nullable|string|max:255',
+			'recipient_name' => 'required|string|max:255',
+			'recipient_mobile' => 'required|string|max:20',
+			'recipient_account' => 'required|string|max:50',
+			'recipient_bank_code' => 'nullable|string|max:10'
+		]);
+
+		if ($validator->fails()) {
+			return back()->withErrors($validator)->withInput();
+		}
+
+		$account = SavingsAccount::where('id', $request->debit_account)
+			->where('member_id', $member_id)
+			->first();
+
+		if (!$account) {
+			return back()->with('error', 'Invalid account selected');
+		}
+
+		// Check available balance
+		$availableBalance = get_account_balance($request->debit_account, $member_id);
+		if ($availableBalance < $request->amount) {
+			return back()->with('error', 'Insufficient balance for withdrawal');
+		}
+
+		DB::beginTransaction();
+
+		try {
+			// Create withdraw request
+			$withdrawRequest = new WithdrawRequest();
+			$withdrawRequest->member_id = $member_id;
+			$withdrawRequest->method_id = null; // No traditional method for payment method withdrawals
+			$withdrawRequest->debit_account_id = $request->debit_account;
+			$withdrawRequest->amount = $request->amount;
+			$withdrawRequest->converted_amount = $request->amount;
+			$withdrawRequest->description = $request->description;
+			$withdrawRequest->requirements = json_encode([
+				'payment_method_id' => $bankAccount->id,
+				'payment_method_type' => $bankAccount->payment_method_type,
+				'recipient_details' => [
+					'name' => $request->recipient_name,
+					'mobile' => $request->recipient_mobile,
+					'account_number' => $request->recipient_account,
+					'bank_code' => $request->recipient_bank_code
+				]
+			]);
+			$withdrawRequest->status = 0; // Pending approval
+			$withdrawRequest->save();
+
+			// Create pending transaction
+			$debit = new Transaction();
+			$debit->trans_date = now();
+			$debit->member_id = $member_id;
+			$debit->savings_account_id = $request->debit_account;
+			$debit->amount = $request->amount;
+			$debit->dr_cr = 'dr';
+			$debit->type = 'Withdraw';
+			$debit->method = ucfirst($bankAccount->payment_method_type);
+			$debit->status = 0; // Pending approval
+			$debit->created_user_id = auth()->id();
+			$debit->branch_id = auth()->user()->member->branch_id;
+			$debit->description = 'Withdrawal request via ' . ucfirst($bankAccount->payment_method_type) . ' to ' . $request->recipient_name;
+			$debit->save();
+
+			$withdrawRequest->transaction_id = $debit->id;
+			$withdrawRequest->save();
+
+			DB::commit();
+
+			return redirect()->route('withdraw.manual_methods')
+				->with('success', 'Withdrawal request submitted successfully. It will be processed after tenant approval.');
+
+		} catch (\Exception $e) {
+			DB::rollback();
+			Log::error('Payment method withdrawal error: ' . $e->getMessage());
+			return back()->with('error', 'An error occurred while processing withdrawal request: ' . $e->getMessage())->withInput();
+		}
+	}
+
+	/**
 	 * Display withdrawal history for the authenticated customer
 	 *
 	 * @return \Illuminate\Http\Response
@@ -229,18 +374,18 @@ class WithdrawController extends Controller {
 	{
 		$member = auth()->user()->member;
 		
-		$withdrawRequest = WithdrawRequest::where('id', $id)
+		$withdrawal = Transaction::where('id', $id)
 			->where('member_id', $member->id)
-			->with(['method', 'account', 'transaction'])
+			->where('type', 'Withdraw')
 			->firstOrFail();
 
 		// If it's an AJAX request, return just the modal content
 		if ($request->ajax()) {
-			return view('backend.customer.withdraw.request_details', compact('withdrawRequest'));
+			return view('backend.customer.withdraw.request_details', compact('withdrawal'));
 		}
 
 		// Otherwise return the full page
-		return view('backend.customer.withdraw.request_details_page', compact('withdrawRequest'));
+		return view('backend.customer.withdraw.details', compact('withdrawal'));
 	}
 
 }

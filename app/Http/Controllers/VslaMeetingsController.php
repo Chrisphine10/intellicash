@@ -27,13 +27,18 @@ class VslaMeetingsController extends Controller
             return redirect()->route('modules.index')->with('error', _lang('VSLA module is not enabled'));
         }
         
-        $meetings = $tenant->vslaMeetings()
-            ->with(['createdUser', 'attendance.member'])
-            ->orderBy('meeting_date', 'desc')
-            ->orderBy('meeting_time', 'desc')
-            ->paginate(20);
-        
-        return view('backend.admin.vsla.meetings.index', compact('meetings'));
+        try {
+            $meetings = $tenant->vslaMeetings()
+                ->with(['createdUser', 'attendance.member'])
+                ->orderBy('meeting_date', 'desc')
+                ->orderBy('meeting_time', 'desc')
+                ->paginate(20);
+            
+            return view('backend.admin.vsla.meetings.index', compact('meetings'));
+        } catch (\Exception $e) {
+            \Log::error('VSLA Meetings Index Error: ' . $e->getMessage());
+            return back()->with('error', _lang('An error occurred while loading meetings. Please try again.'));
+        }
     }
 
     /**
@@ -155,11 +160,16 @@ class VslaMeetingsController extends Controller
             return redirect()->route('modules.index')->with('error', _lang('VSLA module is not enabled'));
         }
         
-        $meeting = $tenant->vslaMeetings()
-            ->with(['createdUser', 'attendance.member', 'transactions.member'])
-            ->findOrFail($id);
-        
-        return view('backend.admin.vsla.meetings.show', compact('meeting'));
+        try {
+            $meeting = $tenant->vslaMeetings()
+                ->with(['createdUser', 'attendance.member', 'transactions.member'])
+                ->findOrFail($id);
+            
+            return view('backend.admin.vsla.meetings.show', compact('meeting'));
+        } catch (\Exception $e) {
+            \Log::error('VSLA Meeting Show Error: ' . $e->getMessage());
+            return back()->with('error', _lang('An error occurred while loading the meeting. Please try again.'));
+        }
     }
 
     /**

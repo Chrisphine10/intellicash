@@ -11,24 +11,24 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        @if(get_option('pwa_enabled', 1))
-        <!-- PWA Meta Tags -->
-        <meta name="theme-color" content="{{ get_option('pwa_theme_color', get_option('primary_color', '#007bff')) }}">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="default">
-        <meta name="apple-mobile-web-app-title" content="{{ get_option('pwa_short_name', get_option('company_name', 'IntelliCash')) }}">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="application-name" content="{{ get_option('pwa_short_name', get_option('company_name', 'IntelliCash')) }}">
-        
-        <!-- PWA Manifest -->
-        <link rel="manifest" href="{{ route('pwa.manifest') }}">
-        
-        <!-- PWA Icons -->
-        <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('public/uploads/media/pwa-icon-180x180.png') }}">
-        <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('public/uploads/media/pwa-icon-32x32.png') }}">
-        <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('public/uploads/media/pwa-icon-16x16.png') }}">
-        <link rel="mask-icon" href="{{ asset('public/uploads/media/pwa-icon.svg') }}" color="{{ get_option('pwa_theme_color', get_option('primary_color', '#007bff')) }}">
-        @endif
+		@if(get_tenant_option('pwa_enabled', 1))
+		<!-- PWA Meta Tags -->
+		<meta name="theme-color" content="{{ get_tenant_option('pwa_theme_color', get_tenant_option('primary_color', '#007bff')) }}">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="default">
+		<meta name="apple-mobile-web-app-title" content="{{ get_tenant_option('pwa_short_name', get_tenant_option('business_name', 'IntelliCash')) }}">
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="application-name" content="{{ get_tenant_option('pwa_short_name', get_tenant_option('business_name', 'IntelliCash')) }}">
+		
+		<!-- PWA Manifest -->
+		<link rel="manifest" href="{{ route('pwa.manifest') }}">
+		
+		<!-- PWA Icons -->
+		<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('public/uploads/media/pwa-icon-180x180.png') }}">
+		<link rel="icon" type="image/png" sizes="32x32" href="{{ asset('public/uploads/media/pwa-icon-32x32.png') }}">
+		<link rel="icon" type="image/png" sizes="16x16" href="{{ asset('public/uploads/media/pwa-icon-16x16.png') }}">
+		<link rel="mask-icon" href="{{ asset('public/uploads/media/pwa-icon.svg') }}" color="{{ get_tenant_option('pwa_theme_color', get_tenant_option('primary_color', '#007bff')) }}">
+		@endif
 
 		<!-- App favicon -->
         <link rel="shortcut icon" href="{{ get_favicon() }}">
@@ -333,7 +333,7 @@
         <!-- Chart.js for Security Dashboard -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-        @if(get_option('pwa_enabled', 1))
+        @if(get_tenant_option('pwa_enabled', 1))
         <!-- PWA Service Worker Registration -->
         <script>
             if ('serviceWorker' in navigator) {
@@ -347,6 +347,96 @@
                         });
                 });
             }
+
+            // PWA Install Prompt for Members
+            @if(auth()->check() && auth()->user()->user_type == 'customer' && !isset($_COOKIE['pwa_dismissed']))
+            let deferredPrompt;
+            
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // Show install prompt after 3 seconds
+                setTimeout(() => {
+                    showPWAInstallPrompt();
+                }, 3000);
+            });
+            
+            function showPWAInstallPrompt() {
+                // Check if already installed
+                if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+                    return;
+                }
+                
+                $.toast({
+                    heading: '{{ _lang("Install App") }}',
+                    text: '{{ _lang("Get quick access to your account with our mobile app") }}',
+                    position: 'top-center',
+                    loaderBg: '#007bff',
+                    icon: 'info',
+                    hideAfter: 8000,
+                    stack: 6,
+                    showHideTransition: 'slide',
+                    afterShown: function() {
+                        // Add install button to toast
+                        setTimeout(() => {
+                            $('.jq-toast-single').append(`
+                                <div style="margin-top: 10px;">
+                                    <button id="install-pwa-btn" class="btn btn-primary btn-sm" style="margin-right: 5px;">
+                                        <i class="fas fa-download"></i> {{ _lang("Install") }}
+                                    </button>
+                                    <button id="dismiss-pwa-btn" class="btn btn-secondary btn-sm">
+                                        {{ _lang("Later") }}
+                                    </button>
+                                </div>
+                            `);
+                            
+                            $('#install-pwa-btn').on('click', async function() {
+                                if (deferredPrompt) {
+                                    deferredPrompt.prompt();
+                                    const { outcome } = await deferredPrompt.userChoice;
+                                    
+                                    if (outcome === 'accepted') {
+                                        $.toast({
+                                            heading: '{{ _lang("Success") }}',
+                                            text: '{{ _lang("App installation started!") }}',
+                                            position: 'top-right',
+                                            loaderBg: '#28a745',
+                                            icon: 'success',
+                                            hideAfter: 3000,
+                                            stack: 6
+                                        });
+                                    }
+                                    
+                                    deferredPrompt = null;
+                                } else {
+                                    window.location.href = '{{ route("pwa.install-prompt") }}';
+                                }
+                                $('.jq-toast-single').remove();
+                            });
+                            
+                            $('#dismiss-pwa-btn').on('click', function() {
+                                document.cookie = "pwa_dismissed=true; expires=" + new Date(Date.now() + 7*24*60*60*1000).toUTCString() + "; path=/";
+                                $('.jq-toast-single').remove();
+                            });
+                        }, 500);
+                    }
+                });
+            }
+            
+            // Listen for app installed event
+            window.addEventListener('appinstalled', () => {
+                $.toast({
+                    heading: '{{ _lang("App Installed") }}',
+                    text: '{{ _lang("App installed successfully! You can now access it from your home screen.") }}',
+                    position: 'top-right',
+                    loaderBg: '#28a745',
+                    icon: 'success',
+                    hideAfter: 5000,
+                    stack: 6
+                });
+            });
+            @endif
         </script>
         @endif
 

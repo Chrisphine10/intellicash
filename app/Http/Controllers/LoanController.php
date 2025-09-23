@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomField;
 use App\Models\Guarantor;
+use App\Models\GuarantorRequest;
 use App\Models\Loan;
 use App\Models\LoanCollateral;
 use App\Models\LoanPayment;
@@ -228,6 +229,8 @@ class LoanController extends Controller {
             $repayments = $calculator->get_one_time();
         } else if ($loan->loan_product->interest_type == 'reducing_amount') {
             $repayments = $calculator->get_reducing_amount();
+        } else if ($loan->loan_product->interest_type == 'compound') {
+            $repayments = $calculator->get_compound();
         }
 
         $loan->total_payable = $calculator->payable_amount;
@@ -282,10 +285,13 @@ class LoanController extends Controller {
         $repayments = LoanRepayment::where('loan_id', $loan->id)->orderBy('id', 'asc')->get();
 
         $guarantors = Guarantor::where('loan_id', $loan->id)->get();
+        $guarantorRequests = GuarantorRequest::where('loan_id', $loan->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $payments = LoanPayment::where('loan_id', $loan->id)->orderBy('id', 'desc')->get();
 
-        return view('backend.admin.loan.view', compact('loan', 'loancollaterals', 'repayments', 'payments', 'guarantors', 'customFields', 'assets'));
+        return view('backend.admin.loan.view', compact('loan', 'loancollaterals', 'repayments', 'payments', 'guarantors', 'guarantorRequests', 'customFields', 'assets'));
     }
 
     /**
@@ -295,6 +301,8 @@ class LoanController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function approve(Request $request, $tenant, $id) {
+        \Log::info('Loan approval method called', ['method' => $request->method(), 'id' => $id]);
+        
         if ($request->isMethod('get')) {
             $alert_col = 'col-lg-6 offset-lg-3';
             $loan      = Loan::find($id);
@@ -307,24 +315,51 @@ class LoanController extends Controller {
                 abort(403);
             }
 
-            if ($loan->loan_id == NULL || $loan->release_date == NULL) {
-                return back()->with('error', _lang('Loan ID and Release date must required !'));
-            }
-
             return view('backend.admin.loan.approve', compact('loan', 'accounts', 'alert_col'));
         }
 
-        DB::beginTransaction();
+        \Log::info('Processing loan approval POST', ['request_data' => $request->all()]);
+        
+        // Validate required fields
+        $validator = Validator::make($request->all(), [
+            'loan_id' => 'required|string|max:30|unique:loans,loan_id,' . $id,
+            'release_date' => 'required|date',
+            'first_payment_date' => 'required|date|after:release_date',
+            'account_id' => 'required',
+        ], [
+            'loan_id.required' => 'Loan ID is required',
+            'loan_id.unique' => 'This Loan ID is already taken',
+            'release_date.required' => 'Release Date is required',
+            'release_date.date' => 'Release Date must be a valid date',
+            'first_payment_date.required' => 'First Payment Date is required',
+            'first_payment_date.date' => 'First Payment Date must be a valid date',
+            'first_payment_date.after' => 'First Payment Date must be after Release Date',
+            'account_id.required' => 'Credit Account is required',
+        ]);
 
-        $loan = Loan::find($id);
-
-        if ($loan->status == 1) {
-            abort(403);
+        if ($validator->fails()) {
+            \Log::error('Loan approval validation failed', ['errors' => $validator->errors()]);
+            return back()->withErrors($validator)->withInput();
         }
 
-        if ($loan->loan_id == NULL || $loan->release_date == NULL) {
-            return back()->with('error', _lang('Loan ID and Release date must required !'));
-        }
+        try {
+            DB::beginTransaction();
+
+            $loan = Loan::find($id);
+
+            if (!$loan) {
+                return back()->with('error', _lang('Loan not found'));
+            }
+
+            if ($loan->status == 1) {
+                return back()->with('error', _lang('Loan has already been approved'));
+            }
+
+            // Update loan with new values
+            $loan->loan_id = $request->loan_id;
+            $loan->release_date = $request->release_date;
+            $loan->first_payment_date = $request->first_payment_date;
+            $loan->save();
 
         //Deduct Loan Processing Fee
         $account = SavingsAccount::where('id', $loan->debit_account_id)
@@ -393,6 +428,8 @@ class LoanController extends Controller {
             $repayments = $calculator->get_one_time();
         } else if ($interest_type == 'reducing_amount') {
             $repayments = $calculator->get_reducing_amount();
+        } else if ($interest_type == 'compound') {
+            $repayments = $calculator->get_compound();
         }
 
         $loan->total_payable = $calculator->payable_amount;
@@ -427,13 +464,21 @@ class LoanController extends Controller {
             $transaction->save();
         }
 
-        DB::commit();
+            DB::commit();
 
-        try {
-            $loan->borrower->notify(new ApprovedLoanRequest($loan));
-        } catch (\Exception $e) {}
+            try {
+                $loan->borrower->notify(new ApprovedLoanRequest($loan));
+            } catch (\Exception $e) {
+                \Log::error('Failed to send loan approval notification', ['error' => $e->getMessage()]);
+            }
 
-        return redirect()->route('loans.show', $loan->id)->with('success', _lang('Loan Request Approved'));
+            return redirect()->route('loans.show', $loan->id)->with('success', _lang('Loan Request Approved'));
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            \Log::error('Loan approval failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return back()->with('error', _lang('An error occurred while approving the loan. Please try again.'));
+        }
 
     }
 
@@ -443,20 +488,34 @@ class LoanController extends Controller {
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function reject(Request $request,$tenant, $id) {
-        $loan = Loan::find($id);
-        /** If not pending */
-        if ($loan->status != 0) {
-            abort(403);
-        }
-        $loan->status = 3; //Cancelled
-        $loan->save();
-
+    public function reject(Request $request, $tenant, $id) {
         try {
-            $loan->borrower->notify(new RejectLoanRequest($loan));
-        } catch (\Exception $e) {}
+            $loan = Loan::find($id);
+            
+            if (!$loan) {
+                return back()->with('error', _lang('Loan not found'));
+            }
+            
+            /** If not pending */
+            if ($loan->status != 0) {
+                return back()->with('error', _lang('Only pending loans can be rejected'));
+            }
+            
+            $loan->status = 3; //Cancelled
+            $loan->save();
 
-        return back()->with('success', _lang('Loan Request Rejected'));
+            try {
+                $loan->borrower->notify(new RejectLoanRequest($loan));
+            } catch (\Exception $e) {
+                \Log::error('Failed to send loan rejection notification', ['error' => $e->getMessage()]);
+            }
+
+            return back()->with('success', _lang('Loan Request Rejected'));
+            
+        } catch (\Exception $e) {
+            \Log::error('Loan rejection failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return back()->with('error', _lang('An error occurred while rejecting the loan. Please try again.'));
+        }
     }
 
     /**
@@ -594,6 +653,8 @@ class LoanController extends Controller {
             $repayments = $calculator->get_one_time();
         } else if ($loan->loan_product->interest_type == 'reducing_amount') {
             $repayments = $calculator->get_reducing_amount();
+        } else if ($loan->loan_product->interest_type == 'compound') {
+            $repayments = $calculator->get_compound();
         }
 
         $loan->total_payable = $calculator->payable_amount;
@@ -720,6 +781,12 @@ class LoanController extends Controller {
 
             $calculator             = new Calculator($apply_amount, $first_payment_date, $interest_rate, $term, $term_period, $late_payment_penalties);
             $table_data             = $calculator->get_reducing_amount();
+            $data['payable_amount'] = $calculator->payable_amount;
+
+        } else if ($interest_type == 'compound') {
+
+            $calculator             = new Calculator($apply_amount, $first_payment_date, $interest_rate, $term, $term_period, $late_payment_penalties);
+            $table_data             = $calculator->get_compound();
             $data['payable_amount'] = $calculator->payable_amount;
 
         }

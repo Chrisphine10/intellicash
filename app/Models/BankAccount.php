@@ -24,6 +24,10 @@ class BankAccount extends Model
         'currency_id',
         'account_name',
         'account_number',
+        'payment_method_type',
+        'payment_method_config',
+        'is_payment_enabled',
+        'payment_reference',
         'opening_balance',
         'current_balance',
         'blocked_balance',
@@ -44,6 +48,8 @@ class BankAccount extends Model
         'maximum_balance' => 'decimal:2',
         'is_active' => 'boolean',
         'allow_negative_balance' => 'boolean',
+        'is_payment_enabled' => 'boolean',
+        'payment_method_config' => 'array',
         'last_balance_update' => 'datetime',
     ];
 
@@ -189,5 +195,77 @@ class BankAccount extends Model
             ->where('status', 1)
             ->orderBy('trans_date')
             ->get();
+    }
+
+    /**
+     * Check if bank account has payment method connected
+     */
+    public function hasPaymentMethod()
+    {
+        return !empty($this->payment_method_type) && $this->is_payment_enabled;
+    }
+
+    /**
+     * Get payment method configuration
+     */
+    public function getPaymentConfig($key = null)
+    {
+        if ($key) {
+            return $this->payment_method_config[$key] ?? null;
+        }
+        return $this->payment_method_config ?? [];
+    }
+
+    /**
+     * Set payment method configuration
+     */
+    public function setPaymentConfig($config)
+    {
+        $this->payment_method_config = $config;
+        $this->save();
+    }
+
+    /**
+     * Connect to payment method
+     */
+    public function connectPaymentMethod($type, $config = [], $reference = null)
+    {
+        $this->update([
+            'payment_method_type' => $type,
+            'payment_method_config' => $config,
+            'is_payment_enabled' => true,
+            'payment_reference' => $reference
+        ]);
+    }
+
+    /**
+     * Disconnect payment method
+     */
+    public function disconnectPaymentMethod()
+    {
+        $this->update([
+            'payment_method_type' => null,
+            'payment_method_config' => null,
+            'is_payment_enabled' => false,
+            'payment_reference' => null
+        ]);
+    }
+
+    /**
+     * Scope for accounts with payment methods
+     */
+    public function scopeWithPaymentMethods(Builder $query)
+    {
+        return $query->where('is_payment_enabled', true)
+                    ->whereNotNull('payment_method_type');
+    }
+
+    /**
+     * Scope for specific payment method type
+     */
+    public function scopeByPaymentMethod(Builder $query, $type)
+    {
+        return $query->where('payment_method_type', $type)
+                    ->where('is_payment_enabled', true);
     }
 }

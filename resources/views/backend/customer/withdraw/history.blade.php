@@ -31,38 +31,58 @@
                             </thead>
                             <tbody>
                                 @foreach($withdrawals as $withdrawal)
+                                @php
+                                    $savingsAccount = \App\Models\SavingsAccount::with('savings_type.currency')->find($withdrawal->savings_account_id);
+                                    $paymentMethodType = $withdrawal->method ?? 'Manual';
+                                @endphp
                                 <tr>
-                                    <td>{{ $withdrawal->trans_date }}</td>
+                                    <td>{{ \Carbon\Carbon::parse($withdrawal->trans_date)->format('M d, Y H:i') }}</td>
                                     <td>
-                                        <strong>{{ $withdrawal->account->account_number }}</strong><br>
-                                        <small class="text-muted">{{ $withdrawal->account->savings_type->name }}</small>
+                                        @if($savingsAccount)
+                                            <strong>{{ $savingsAccount->account_number }}</strong><br>
+                                            <small class="text-muted">{{ $savingsAccount->savings_type->name }}</small>
+                                        @else
+                                            <span class="text-muted">{{ _lang('Account not found') }}</span>
+                                        @endif
                                     </td>
                                     <td class="text-right">
-                                        {{ decimalPlace($withdrawal->amount + ($withdrawal->charge ?? 0), currency($withdrawal->account->savings_type->currency->name)) }}
+                                        @if($savingsAccount)
+                                            {{ decimalPlace($withdrawal->amount, currency($savingsAccount->savings_type->currency->name)) }}
+                                        @else
+                                            {{ decimalPlace($withdrawal->amount, currency('KES')) }}
+                                        @endif
                                     </td>
                                     <td class="text-right">
-                                        {{ decimalPlace($withdrawal->charge ?? 0, currency($withdrawal->account->savings_type->currency->name)) }}
+                                        @if($savingsAccount)
+                                            {{ decimalPlace($withdrawal->charge ?? 0, currency($savingsAccount->savings_type->currency->name)) }}
+                                        @else
+                                            {{ decimalPlace($withdrawal->charge ?? 0, currency('KES')) }}
+                                        @endif
                                     </td>
                                     <td class="text-right font-weight-bold">
-                                        {{ decimalPlace($withdrawal->amount, currency($withdrawal->account->savings_type->currency->name)) }}
+                                        @if($savingsAccount)
+                                            {{ decimalPlace($withdrawal->amount - ($withdrawal->charge ?? 0), currency($savingsAccount->savings_type->currency->name)) }}
+                                        @else
+                                            {{ decimalPlace($withdrawal->amount - ($withdrawal->charge ?? 0), currency('KES')) }}
+                                        @endif
                                     </td>
                                     <td>
-                                        <span class="badge badge-info">{{ $withdrawal->method }}</span>
+                                        <span class="badge badge-info">{{ ucfirst($paymentMethodType) }}</span>
                                     </td>
                                     <td>
                                         @if($withdrawal->status == 0)
-                                            <span class="badge badge-warning">{{ _lang('Pending') }}</span>
+                                            <span class="badge badge-warning">{{ _lang('Pending Approval') }}</span>
                                         @elseif($withdrawal->status == 1)
-                                            <span class="badge badge-info">{{ _lang('Processing') }}</span>
+                                            <span class="badge badge-success">{{ _lang('Approved') }}</span>
                                         @elseif($withdrawal->status == 2)
-                                            <span class="badge badge-success">{{ _lang('Completed') }}</span>
+                                            <span class="badge badge-danger">{{ _lang('Rejected') }}</span>
                                         @else
-                                            <span class="badge badge-danger">{{ _lang('Cancelled') }}</span>
+                                            <span class="badge badge-secondary">{{ _lang('Unknown') }}</span>
                                         @endif
                                     </td>
                                     <td>{{ $withdrawal->description ?: '-' }}</td>
                                     <td>
-                                        <a href="{{ route('trasnactions.details', $withdrawal->id) }}" class="btn btn-info btn-xs" target="_blank">
+                                        <a href="{{ route('withdraw.request_details', $withdrawal->id) }}" class="btn btn-info btn-xs">
                                             <i class="fas fa-eye"></i> {{ _lang('View') }}
                                         </a>
                                     </td>

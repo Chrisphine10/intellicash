@@ -19,8 +19,6 @@
 	<ul class="nav-second-level" aria-expanded="false">
         <li class="nav-item"><a class="nav-link" href="{{ route('transfer.own_account_transfer') }}">{{ _lang('Own Account Transfer') }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ route('transfer.other_account_transfer') }}">{{ _lang('Others Account Transfer') }}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ route('funds_transfer.form') }}">{{ _lang('Funds Transfer') }}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ route('funds_transfer.history') }}">{{ _lang('Transfer History') }}</a></li>
 	</ul>
 </li>
 
@@ -37,7 +35,6 @@
 	<a href="javascript: void(0);"><i class="fas fa-money-check"></i><span>{{ _lang('Withdraw Money') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
 	<ul class="nav-second-level" aria-expanded="false">
         <li class="nav-item"><a class="nav-link" href="{{ route('withdraw.manual_methods') }}">{{ _lang('Withdraw Options') }}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ route('withdraw.buni.form') }}">{{ _lang('KCB Buni Withdraw') }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ route('withdraw.history') }}">{{ _lang('Withdrawal History') }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ route('withdraw.requests') }}">{{ _lang('Withdrawal Requests') }}</a></li>
 	</ul>
@@ -51,6 +48,23 @@
         <li class="nav-item"><a class="nav-link" href="{{ route('customer_reports.account_balances') }}">{{ _lang('Account Balance') }}</a></li>
     </ul>
 </li>
+
+@if(app('tenant')->isVslaEnabled())
+<li>
+	<a href="javascript: void(0);"><i class="fas fa-chart-pie"></i><span>{{ _lang('VSLA Cycles') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+	<ul class="nav-second-level" aria-expanded="false">
+        <li class="nav-item"><a class="nav-link" href="{{ route('customer.vsla.cycle.index') }}">{{ _lang('VSLA Cycles') }}</a></li>
+	</ul>
+</li>
+
+<li>
+	<a href="javascript: void(0);"><i class="fas fa-vote-yea"></i><span>{{ _lang('Voting & Elections') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+	<ul class="nav-second-level" aria-expanded="false">
+        <li class="nav-item"><a class="nav-link" href="{{ route('voting.elections.index') }}">{{ _lang('Active Elections') }}</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ route('voting.elections.index') }}?status=closed">{{ _lang('Election Results') }}</a></li>
+	</ul>
+</li>
+@endif
 
 <li>
 	<a href="{{ route('audit.index') }}"><i class="fas fa-history"></i><span>{{ _lang('My Activity Log') }}</span></a>

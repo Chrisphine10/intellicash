@@ -6,20 +6,20 @@
 		<div class="card">
 			<div class="card-header">
 				<span class="panel-title">{{ _lang('Apply New Loan') }}</span>
-				<p class="mb-0 mt-2 text-muted">Complete the comprehensive loan application form below</p>
+				<p class="mb-0 mt-2 text-muted">Complete the loan application form below</p>
 			</div>
 			<div class="card-body">
-				<form method="post" class="validate" autocomplete="off" action="{{ route('loans.apply_loan') }}" enctype="multipart/form-data" id="comprehensiveLoanForm">
+				<form method="post" class="validate" autocomplete="off" action="{{ route('loans.apply_loan') }}" enctype="multipart/form-data" id="loanForm">
 					@csrf
 					
 					<!-- Basic Loan Information -->
 					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-clipboard-list"></i> Basic Loan Information</h5>
+						<h5 class="section-title text-primary"><i class="fas fa-clipboard-list"></i> Loan Information</h5>
 						<div class="row">
 
 							<div class="col-lg-6">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Loan Product') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('Loan Product') }}</label>
 									<select class="form-control auto-select select2" data-selected="{{ request()->product ?? old('loan_product_id') }}" name="loan_product_id" required>
 										<option value="">{{ _lang('Select One') }}</option>
 										@foreach(\App\Models\LoanProduct::active()->get() as $loanProduct)
@@ -31,7 +31,7 @@
 
 							<div class="col-lg-6">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Currency') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('Currency') }}</label>
 									<select class="form-control auto-select" data-selected="{{ old('currency_id') }}" name="currency_id" required>
 										<option value="">{{ _lang('Select One') }}</option>
 										@foreach(\App\Models\Currency::where('status', 1)->get() as $currency)
@@ -43,321 +43,87 @@
 
 							<div class="col-lg-6">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('First Payment Date') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('First Payment Date') }}</label>
 									<input type="text" class="form-control datepicker" name="first_payment_date" value="{{ old('first_payment_date') }}" required>
 								</div>
 							</div>
 
 							<div class="col-lg-6">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Applied Amount') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('Applied Amount') }}</label>
 									<input type="text" class="form-control float-field" name="applied_amount" value="{{ old('applied_amount') }}" required>
 								</div>
 							</div>
 
 							<div class="col-12">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Purpose of Loan') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('Purpose of Loan') }}</label>
 									<textarea class="form-control" name="loan_purpose" rows="3" placeholder="Describe how you plan to use the loan funds" required>{{ old('loan_purpose') }}</textarea>
 								</div>
 							</div>
 						</div>
 					</div>
 
-					<!-- Business Information -->
-					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-store"></i> Business Information</h5>
-						<div class="row">
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Name') }}</label>
-									<input type="text" class="form-control" name="business_name" value="{{ old('business_name') }}" placeholder="Enter business name">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Type') }}</label>
-									<select class="form-control" name="business_type">
-										<option value="">{{ _lang('Select business type') }}</option>
-										<option value="retail" {{ old('business_type') == 'retail' ? 'selected' : '' }}>Retail</option>
-										<option value="manufacturing" {{ old('business_type') == 'manufacturing' ? 'selected' : '' }}>Manufacturing</option>
-										<option value="service" {{ old('business_type') == 'service' ? 'selected' : '' }}>Service</option>
-										<option value="agriculture" {{ old('business_type') == 'agriculture' ? 'selected' : '' }}>Agriculture</option>
-										<option value="technology" {{ old('business_type') == 'technology' ? 'selected' : '' }}>Technology</option>
-										<option value="construction" {{ old('business_type') == 'construction' ? 'selected' : '' }}>Construction</option>
-										<option value="hospitality" {{ old('business_type') == 'hospitality' ? 'selected' : '' }}>Hospitality</option>
-										<option value="transport" {{ old('business_type') == 'transport' ? 'selected' : '' }}>Transport</option>
-										<option value="other" {{ old('business_type') == 'other' ? 'selected' : '' }}>Other</option>
-									</select>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Registration Number') }}</label>
-									<input type="text" class="form-control" name="business_registration_number" value="{{ old('business_registration_number') }}" placeholder="Enter registration number">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Start Date') }}</label>
-									<input type="date" class="form-control" name="business_start_date" value="{{ old('business_start_date') }}">
-								</div>
-							</div>
-
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Number of Employees') }}</label>
-									<input type="number" class="form-control" name="number_of_employees" value="{{ old('number_of_employees') }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Monthly Revenue') }} ({{ currency_symbol() }})</label>
-									<input type="number" class="form-control" name="monthly_revenue" value="{{ old('monthly_revenue') }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Monthly Expenses') }} ({{ currency_symbol() }})</label>
-									<input type="number" class="form-control" name="monthly_expenses" value="{{ old('monthly_expenses') }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-12">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Description') }}</label>
-									<textarea class="form-control" name="business_description" rows="4" placeholder="Describe your business, products/services, and target market">{{ old('business_description') }}</textarea>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Personal Information -->
-					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-user"></i> Personal Information</h5>
-						<div class="row">
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Full Name') }} <span class="text-danger">*</span></label>
-									<input type="text" class="form-control" name="applicant_name" value="{{ old('applicant_name', auth()->user()->name) }}" required>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Email Address') }} <span class="text-danger">*</span></label>
-									<input type="email" class="form-control" name="applicant_email" value="{{ old('applicant_email', auth()->user()->email) }}" required>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Phone Number') }} <span class="text-danger">*</span></label>
-									<input type="tel" class="form-control" name="applicant_phone" value="{{ old('applicant_phone', auth()->user()->mobile) }}" required>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('ID Number') }}</label>
-									<input type="text" class="form-control" name="applicant_id_number" value="{{ old('applicant_id_number') }}" placeholder="Enter your ID number">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Date of Birth') }}</label>
-									<input type="date" class="form-control" name="applicant_dob" value="{{ old('applicant_dob') }}">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Marital Status') }}</label>
-									<select class="form-control" name="applicant_marital_status">
-										<option value="">{{ _lang('Select marital status') }}</option>
-										<option value="single" {{ old('applicant_marital_status') == 'single' ? 'selected' : '' }}>Single</option>
-										<option value="married" {{ old('applicant_marital_status') == 'married' ? 'selected' : '' }}>Married</option>
-										<option value="divorced" {{ old('applicant_marital_status') == 'divorced' ? 'selected' : '' }}>Divorced</option>
-										<option value="widowed" {{ old('applicant_marital_status') == 'widowed' ? 'selected' : '' }}>Widowed</option>
-									</select>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Number of Dependents') }}</label>
-									<input type="number" class="form-control" name="applicant_dependents" value="{{ old('applicant_dependents', 0) }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Employment Status') }}</label>
-									<select class="form-control" name="employment_status">
-										<option value="">{{ _lang('Select employment status') }}</option>
-										<option value="self_employed" {{ old('employment_status') == 'self_employed' ? 'selected' : '' }}>Self Employed</option>
-										<option value="employed" {{ old('employment_status') == 'employed' ? 'selected' : '' }}>Employed</option>
-										<option value="unemployed" {{ old('employment_status') == 'unemployed' ? 'selected' : '' }}>Unemployed</option>
-										<option value="student" {{ old('employment_status') == 'student' ? 'selected' : '' }}>Student</option>
-										<option value="retired" {{ old('employment_status') == 'retired' ? 'selected' : '' }}>Retired</option>
-									</select>
-								</div>
-							</div>
-
-							<div class="col-lg-6" id="employment_details" style="display: none;">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Employer Name') }}</label>
-									<input type="text" class="form-control" name="employer_name" value="{{ old('employer_name') }}" placeholder="Enter employer name">
-								</div>
-							</div>
-
-							<div class="col-lg-6" id="employment_details2" style="display: none;">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Job Title') }}</label>
-									<input type="text" class="form-control" name="job_title" value="{{ old('job_title') }}" placeholder="Enter job title">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Monthly Income') }} ({{ currency_symbol() }})</label>
-									<input type="number" class="form-control" name="monthly_income" value="{{ old('monthly_income') }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-12">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Address') }} <span class="text-danger">*</span></label>
-									<textarea class="form-control" name="applicant_address" rows="3" placeholder="Enter your full address" required>{{ old('applicant_address') }}</textarea>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Collateral Information -->
-					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-shield-alt"></i> Collateral Information</h5>
-						<div class="row">
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Collateral Type') }}</label>
-									<select class="form-control" name="collateral_type">
-										<option value="">{{ _lang('Select collateral type') }}</option>
-										<option value="bank_statement" {{ old('collateral_type') == 'bank_statement' ? 'selected' : '' }}>Bank Statement</option>
-										<option value="payroll" {{ old('collateral_type') == 'payroll' ? 'selected' : '' }}>Payroll</option>
-										<option value="property" {{ old('collateral_type') == 'property' ? 'selected' : '' }}>Property</option>
-										<option value="vehicle" {{ old('collateral_type') == 'vehicle' ? 'selected' : '' }}>Vehicle</option>
-										<option value="equipment" {{ old('collateral_type') == 'equipment' ? 'selected' : '' }}>Equipment</option>
-										<option value="inventory" {{ old('collateral_type') == 'inventory' ? 'selected' : '' }}>Inventory</option>
-										<option value="guarantor" {{ old('collateral_type') == 'guarantor' ? 'selected' : '' }}>Guarantor</option>
-									</select>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Collateral Value') }} ({{ currency_symbol() }})</label>
-									<input type="number" class="form-control" name="collateral_value" value="{{ old('collateral_value') }}" placeholder="0" min="0">
-								</div>
-							</div>
-
-							<div class="col-12">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Collateral Description') }}</label>
-									<textarea class="form-control" name="collateral_description" rows="3" placeholder="Describe the collateral in detail">{{ old('collateral_description') }}</textarea>
-								</div>
-							</div>
-						</div>
-					</div>
-
 					<!-- Guarantor Information -->
-					<div class="form-section mb-4" id="guarantor_section" style="display: none;">
+					<div class="form-section mb-4">
 						<h5 class="section-title text-primary"><i class="fas fa-user-friends"></i> Guarantor Information</h5>
 						<div class="row">
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Guarantor Name') }}</label>
-									<input type="text" class="form-control" name="guarantor_name" value="{{ old('guarantor_name') }}" placeholder="Enter guarantor's full name">
+							<div class="col-12">
+								<div class="form-check mb-3">
+									<input type="checkbox" class="form-check-input" name="require_guarantor" id="require_guarantor" value="1" {{ old('require_guarantor') ? 'checked' : '' }}>
+									<label class="form-check-label" for="require_guarantor">
+										<strong>{{ _lang('I need a guarantor for this loan') }}</strong>
+									</label>
 								</div>
 							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Guarantor Phone') }}</label>
-									<input type="tel" class="form-control" name="guarantor_phone" value="{{ old('guarantor_phone') }}" placeholder="Enter guarantor's phone number">
-								</div>
-							</div>
-
-							<div class="col-lg-6">
+						</div>
+						
+						<div id="guarantor_details" style="display: none;">
+							<div class="row">
+								<div class="col-lg-6">
 								<div class="form-group">
 									<label class="control-label">{{ _lang('Guarantor Email') }}</label>
-									<input type="email" class="form-control" name="guarantor_email" value="{{ old('guarantor_email') }}" placeholder="Enter guarantor's email">
+									<input type="email" class="form-control" name="guarantor_email" value="{{ old('guarantor_email') }}" placeholder="Enter guarantor's email address">
+									<small class="form-text text-muted">
+										<i class="fas fa-info-circle"></i> {{ _lang('Guarantor must be a member of the same organization') }}. 
+										{{ _lang('The system will verify this before sending the invitation') }}.
+									</small>
 								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Relationship') }}</label>
-									<input type="text" class="form-control" name="guarantor_relationship" value="{{ old('guarantor_relationship') }}" placeholder="e.g., Friend, Family, Business Partner">
 								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Guarantor Monthly Income') }} ({{ currency_symbol() }})</label>
-									<input type="number" class="form-control" name="guarantor_income" value="{{ old('guarantor_income') }}" placeholder="0" min="0">
+								
+								<div class="col-lg-6">
+									<div class="form-group">
+										<label class="control-label">{{ _lang('Guarantor Name') }}</label>
+										<input type="text" class="form-control" name="guarantor_name" value="{{ old('guarantor_name') }}" placeholder="Enter guarantor's full name">
+									</div>
+								</div>
+								
+								<div class="col-12">
+									<div class="form-group">
+										<label class="control-label">{{ _lang('Guarantor Message') }}</label>
+										<textarea class="form-control" name="guarantor_message" rows="3" placeholder="Personal message to your guarantor">{{ old('guarantor_message', 'I would like to request you to be my guarantor for this loan application. Your support would be greatly appreciated.') }}</textarea>
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
 
-					<!-- Document Upload -->
+					<!-- Additional Information -->
 					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-file-upload"></i> Required Documents</h5>
+						<h5 class="section-title text-primary"><i class="fas fa-info-circle"></i> Additional Information</h5>
 						<div class="row">
-							<div class="col-lg-6">
+							<div class="col-12">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Business Documents') }}</label>
-									<input type="file" class="form-control" name="business_documents[]" multiple accept=".pdf,.jpg,.jpeg,.png">
-									<small class="form-text text-muted">Business registration, permits, etc. (PDF, JPG, PNG - Max 5MB each)</small>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Financial Documents') }}</label>
-									<input type="file" class="form-control" name="financial_documents[]" multiple accept=".pdf,.jpg,.jpeg,.png">
-									<small class="form-text text-muted">Bank statements, financial statements (PDF, JPG, PNG - Max 5MB each)</small>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Personal Documents') }}</label>
-									<input type="file" class="form-control" name="personal_documents[]" multiple accept=".pdf,.jpg,.jpeg,.png">
-									<small class="form-text text-muted">ID, proof of address, etc. (PDF, JPG, PNG - Max 5MB each)</small>
-								</div>
-							</div>
-
-							<div class="col-lg-6">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Collateral Documents') }}</label>
-									<input type="file" class="form-control" name="collateral_documents[]" multiple accept=".pdf,.jpg,.jpeg,.png">
-									<small class="form-text text-muted">Property deeds, vehicle logbook, etc. (PDF, JPG, PNG - Max 5MB each)</small>
+									<label class="control-label">{{ _lang('Description') }}</label>
+									<textarea class="form-control" name="description" rows="3" placeholder="Additional information about your loan application">{{ old('description') }}</textarea>
 								</div>
 							</div>
 						</div>
 					</div>
 
-					<!-- Existing Fields -->
+					<!-- Account and Documents -->
 					<div class="form-section mb-4">
-						<h5 class="section-title text-primary"><i class="fas fa-cogs"></i> Additional Information</h5>
+						<h5 class="section-title text-primary"><i class="fas fa-cogs"></i> Account & Documents</h5>
 						<div class="row">
 
 							<!--Custom Fields-->
@@ -372,9 +138,10 @@
 								@endforeach
 	                        @endif
 
+							@if($accounts->count() > 1)
 							<div class="col-lg-12">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Fee Deduct Account') }} <span class="text-danger">*</span></label>
+									<label class="control-label">{{ _lang('Fee Deduct Account') }}</label>
 									<select class="form-control auto-select select2" data-selected="{{ old('debit_account_id') }}" name="debit_account_id" required>
 										<option value="">{{ _lang('Select One') }}</option>
 										@foreach($accounts as $account)
@@ -383,26 +150,33 @@
 									</select>
 								</div>
 							</div>
+							@elseif($accounts->count() == 1)
+							<!-- Single account - automatically selected -->
+							<div class="col-lg-12">
+								<div class="alert alert-info">
+									<i class="fas fa-info-circle"></i>
+									<strong>{{ _lang('Fee Deduct Account') }}:</strong> 
+									{{ $accounts->first()->account_number }} ({{ $accounts->first()->savings_type->name }} - {{ $accounts->first()->savings_type->currency->name }})
+									<small class="d-block text-muted mt-1">{{ _lang('Fees will be deducted from your only account') }}</small>
+								</div>
+								<input type="hidden" name="debit_account_id" value="{{ $accounts->first()->id }}">
+							</div>
+							@else
+							<!-- No accounts available -->
+							<div class="col-lg-12">
+								<div class="alert alert-warning">
+									<i class="fas fa-exclamation-triangle"></i>
+									<strong>{{ _lang('No Accounts Available') }}</strong>
+									<p class="mb-0">{{ _lang('You need at least one savings account to apply for a loan. Please create a savings account first.') }}</p>
+								</div>
+							</div>
+							@endif
 
 							<div class="col-lg-12">
 								<div class="form-group">
-									<label class="control-label">{{ _lang('Additional Attachment') }}</label>
+									<label class="control-label">{{ _lang('Supporting Documents') }}</label>
 									<input type="file" class="file-uploader" name="attachment">
-									<small class="form-text text-muted">Any additional supporting documents (PDF, JPG, PNG - Max 8MB)</small>
-								</div>
-							</div>
-
-							<div class="col-lg-12">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Description') }}</label>
-									<textarea class="form-control" name="description" rows="3" placeholder="Additional information about your loan application">{{ old('description') }}</textarea>
-								</div>
-							</div>
-
-							<div class="col-lg-12">
-								<div class="form-group">
-									<label class="control-label">{{ _lang('Remarks') }}</label>
-									<textarea class="form-control" name="remarks" rows="3" placeholder="Any additional remarks or special requests">{{ old('remarks') }}</textarea>
+									<small class="form-text text-muted">Any supporting documents (PDF, JPG, PNG - Max 8MB)</small>
 								</div>
 							</div>
 						</div>
@@ -537,17 +311,18 @@
 .form-section {
     margin-bottom: 2rem;
     padding: 1.5rem;
-    border: 1px solid #e9ecef;
+    border: 1px solid #d4edda;
     border-radius: 8px;
-    background: #f8f9fa;
+    background: #f8fff8;
 }
 
 .section-title {
-    color: #007bff;
-    border-bottom: 2px solid #007bff;
+    color: #28a745;
+    border-bottom: 2px solid #28a745;
     padding-bottom: 0.5rem;
     margin-bottom: 1.5rem;
     font-weight: 600;
+    font-size: 1.1rem;
 }
 
 .form-group label {
@@ -556,37 +331,94 @@
 }
 
 .form-control:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
 }
 
 .btn-primary {
-    background: linear-gradient(45deg, #007bff, #0056b3);
+    background: linear-gradient(45deg, #28a745, #20c997);
     border: none;
     padding: 12px 30px;
     font-weight: 500;
 }
 
 .btn-primary:hover {
-    background: linear-gradient(45deg, #0056b3, #004085);
+    background: linear-gradient(45deg, #20c997, #17a2b8);
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
 }
 
 .card {
     border: none;
     border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .card-header {
     border-radius: 15px 15px 0 0 !important;
-    background: linear-gradient(45deg, #007bff, #0056b3) !important;
+    background: linear-gradient(45deg, #28a745, #20c997) !important;
     color: white !important;
+    padding: 1.5rem !important;
+}
+
+.card-header .panel-title {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.card-header p {
+    font-size: 1rem !important;
+    opacity: 0.95 !important;
+    margin-top: 0.5rem !important;
 }
 
 .alert {
     border-radius: 8px;
     border: none;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    border-left: 4px solid #28a745;
+    color: #0c5460;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    color: #856404;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    border-left: 4px solid #28a745;
+    color: #155724;
+}
+
+/* Form validation styling */
+.is-invalid {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+}
+
+/* Terms and conditions styling */
+.form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.form-check-input:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+}
+
+/* Submit button area */
+.form-section.text-center {
+    background: linear-gradient(135deg, #f8fff8, #e8f5e8);
+    border: 2px solid #28a745;
+    border-radius: 12px;
+    padding: 2rem;
 }
 
 @media (max-width: 768px) {
@@ -597,43 +429,44 @@
     .section-title {
         font-size: 1.1rem;
     }
+    
+    .card-header .panel-title {
+        font-size: 1.3rem !important;
+    }
 }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const employmentStatusSelect = document.querySelector('select[name="employment_status"]');
-    const employmentDetailsDiv = document.getElementById('employment_details');
-    const employmentDetailsDiv2 = document.getElementById('employment_details2');
-    const guarantorSection = document.getElementById('guarantor_section');
-    const collateralTypeSelect = document.querySelector('select[name="collateral_type"]');
-
-    // Show/hide employment details
-    if (employmentStatusSelect) {
-        employmentStatusSelect.addEventListener('change', function() {
-            if (this.value === 'employed') {
-                employmentDetailsDiv.style.display = 'block';
-                employmentDetailsDiv2.style.display = 'block';
+    // Guarantor checkbox toggle
+    const guarantorCheckbox = document.getElementById('require_guarantor');
+    const guarantorDetails = document.getElementById('guarantor_details');
+    
+    if (guarantorCheckbox && guarantorDetails) {
+        guarantorCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                guarantorDetails.style.display = 'block';
+                // Make guarantor fields required when checked
+                document.querySelector('input[name="guarantor_email"]').setAttribute('required', 'required');
+                document.querySelector('input[name="guarantor_name"]').setAttribute('required', 'required');
             } else {
-                employmentDetailsDiv.style.display = 'none';
-                employmentDetailsDiv2.style.display = 'none';
+                guarantorDetails.style.display = 'none';
+                // Remove required attribute when unchecked
+                document.querySelector('input[name="guarantor_email"]').removeAttribute('required');
+                document.querySelector('input[name="guarantor_name"]').removeAttribute('required');
             }
         });
-    }
-
-    // Show/hide guarantor section based on collateral type
-    if (collateralTypeSelect) {
-        collateralTypeSelect.addEventListener('change', function() {
-            if (this.value === 'guarantor') {
-                guarantorSection.style.display = 'block';
-            } else {
-                guarantorSection.style.display = 'none';
-            }
-        });
+        
+        // Check if checkbox was already checked on page load
+        if (guarantorCheckbox.checked) {
+            guarantorDetails.style.display = 'block';
+            document.querySelector('input[name="guarantor_email"]').setAttribute('required', 'required');
+            document.querySelector('input[name="guarantor_name"]').setAttribute('required', 'required');
+        }
     }
 
     // Form validation
-    const form = document.getElementById('comprehensiveLoanForm');
+    const form = document.getElementById('loanForm');
     if (form) {
         form.addEventListener('submit', function(e) {
             const requiredFields = form.querySelectorAll('[required]');

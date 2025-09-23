@@ -159,11 +159,16 @@
                         <div class="form-group row">
 
                             <div class="col-lg-6 mb-3 mb-lg-0">
-                                <input id="state" type="text" placeholder="{{ _lang('State') }}" class="form-control{{ $errors->has('state') ? ' is-invalid' : '' }}" name="state" value="{{ old('state') }}" required>
+                                <select id="county" class="form-control{{ $errors->has('county') ? ' is-invalid' : '' }}" name="county" required>
+                                    <option value="">{{ _lang('Select County') }}</option>
+                                    @foreach(get_kenyan_counties() as $key => $value)
+                                    <option value="{{ $value }}" {{ old('county') == $value ? 'selected' : '' }}>{{ $value }}</option>
+                                    @endforeach
+                                </select>
 
-                                @if ($errors->has('state'))
+                                @if ($errors->has('county'))
                                     <span class="invalid-feedback">
-                                        <strong>{{ $errors->first('state') }}</strong>
+                                        <strong>{{ $errors->first('county') }}</strong>
                                     </span>
                                 @endif
                             </div>
@@ -195,7 +200,12 @@
                         <div class="form-group row">
 
                             <div class="col-lg-12">
-                                <input id="credit_source" type="text" placeholder="{{ _lang('Credit source') }}" class="form-control{{ $errors->has('credit_source') ? ' is-invalid' : '' }}" name="credit_source" value="{{ old('credit_source') }}" required>
+                                <select id="credit_source" class="form-control{{ $errors->has('credit_source') ? ' is-invalid' : '' }}" name="credit_source" required>
+                                    <option value="">{{ _lang('Select Credit Source') }}</option>
+                                    @foreach(get_credit_source_options() as $key => $value)
+                                    <option value="{{ $value }}" {{ old('credit_source') == $value ? 'selected' : '' }}>{{ $value }}</option>
+                                    @endforeach
+                                </select>
 
                                 @if ($errors->has('credit_source'))
                                     <span class="invalid-feedback">

@@ -1,5 +1,5 @@
 // Service Worker for IntelliCash PWA
-const CACHE_NAME = 'intellicash-pwa-v1';
+const CACHE_NAME = 'intellicash-pwa-v2';
 const OFFLINE_URL = '/offline';
 
 // Assets to cache on install
@@ -11,6 +11,9 @@ const STATIC_CACHE_URLS = [
     '/public/backend/assets/js/vendor/jquery-3.7.1.min.js',
     '/public/backend/plugins/bootstrap/css/bootstrap.min.css',
     '/public/backend/plugins/bootstrap/js/bootstrap.min.js',
+    '/public/backend/plugins/jquery-toast-plugin/jquery.toast.min.css',
+    '/public/backend/plugins/jquery-toast-plugin/jquery.toast.min.js',
+    '/public/backend/assets/css/fontawesome.css',
     '/public/uploads/media/pwa-icon-192x192.png',
     '/public/uploads/media/pwa-icon-512x512.png',
     '/offline'
@@ -20,7 +23,10 @@ const STATIC_CACHE_URLS = [
 const API_CACHE_PATTERNS = [
     /\/api\/dashboard/,
     /\/api\/transactions/,
-    /\/api\/profile/
+    /\/api\/profile/,
+    /\/dashboard/,
+    /\/loans\/my_loans/,
+    /\/deposit\/automatic_methods/
 ];
 
 // Install event - cache static assets

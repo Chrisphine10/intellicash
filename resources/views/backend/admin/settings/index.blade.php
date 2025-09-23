@@ -703,9 +703,9 @@
 									<div class="form-group">
 										<div class="custom-control custom-switch">
 											<input type="checkbox" class="custom-control-input" id="pwa_enabled" name="pwa_enabled" value="1" {{ get_setting($settings, 'pwa_enabled') == '1' ? 'checked' : '' }}>
-											<label class="custom-control-label" for="pwa_enabled">{{ _lang('Enable PWA') }}</label>
+											<label class="custom-control-label" for="pwa_enabled">{{ _lang('Enable PWA for Members') }}</label>
 										</div>
-										<small class="form-text text-muted">{{ _lang('Enable Progressive Web App functionality for mobile users') }}</small>
+										<small class="form-text text-muted">{{ _lang('Enable Progressive Web App functionality for member mobile access') }}</small>
 									</div>
 								</div>
 							</div>
@@ -727,6 +727,102 @@
 									</div>
 								</div>
 							</div>
+
+							<div class="row">
+								<div class="col-md-12">
+									<div class="form-group">
+										<label class="control-label">{{ _lang('App Description') }}</label>
+										<textarea class="form-control" name="pwa_description" rows="3">{{ get_setting($settings, 'pwa_description', 'Mobile banking app for managing your finances') }}</textarea>
+										<small class="form-text text-muted">{{ _lang('Description of your PWA app') }}</small>
+									</div>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-6">
+									<div class="form-group">
+										<label class="control-label">{{ _lang('Theme Color') }}</label>
+										<input type="color" class="form-control" name="pwa_theme_color" value="{{ get_setting($settings, 'pwa_theme_color', get_setting($settings, 'primary_color', '#007bff')) }}">
+										<small class="form-text text-muted">{{ _lang('Theme color for the PWA') }}</small>
+									</div>
+								</div>
+
+								<div class="col-md-6">
+									<div class="form-group">
+										<label class="control-label">{{ _lang('Background Color') }}</label>
+										<input type="color" class="form-control" name="pwa_background_color" value="{{ get_setting($settings, 'pwa_background_color', '#ffffff') }}">
+										<small class="form-text text-muted">{{ _lang('Background color for the PWA') }}</small>
+									</div>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-12">
+									<h6 class="mt-4 mb-3">{{ _lang('Mobile App Shortcuts') }}</h6>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-4">
+									<div class="form-group">
+										<div class="custom-control custom-switch">
+											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_dashboard" name="pwa_shortcut_dashboard" value="1" {{ get_setting($settings, 'pwa_shortcut_dashboard') == '1' ? 'checked' : '' }}>
+											<label class="custom-control-label" for="pwa_shortcut_dashboard">{{ _lang('Dashboard Shortcut') }}</label>
+										</div>
+									</div>
+								</div>
+
+								<div class="col-md-4">
+									<div class="form-group">
+										<div class="custom-control custom-switch">
+											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_transactions" name="pwa_shortcut_transactions" value="1" {{ get_setting($settings, 'pwa_shortcut_transactions') == '1' ? 'checked' : '' }}>
+											<label class="custom-control-label" for="pwa_shortcut_transactions">{{ _lang('Transactions Shortcut') }}</label>
+										</div>
+									</div>
+								</div>
+
+								<div class="col-md-4">
+									<div class="form-group">
+										<div class="custom-control custom-switch">
+											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_loans" name="pwa_shortcut_loans" value="1" {{ get_setting($settings, 'pwa_shortcut_loans') == '1' ? 'checked' : '' }}>
+											<label class="custom-control-label" for="pwa_shortcut_loans">{{ _lang('Loans Shortcut') }}</label>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-4">
+									<div class="form-group">
+										<div class="custom-control custom-switch">
+											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_deposit" name="pwa_shortcut_deposit" value="1" {{ get_setting($settings, 'pwa_shortcut_deposit') == '1' ? 'checked' : '' }}>
+											<label class="custom-control-label" for="pwa_shortcut_deposit">{{ _lang('Deposit Shortcut') }}</label>
+										</div>
+									</div>
+								</div>
+
+								<div class="col-md-4">
+									<div class="form-group">
+										<div class="custom-control custom-switch">
+											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_profile" name="pwa_shortcut_profile" value="1" {{ get_setting($settings, 'pwa_shortcut_profile') == '1' ? 'checked' : '' }}>
+											<label class="custom-control-label" for="pwa_shortcut_profile">{{ _lang('Profile Shortcut') }}</label>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-12">
+									<div class="form-group">
+										<button type="submit" class="btn btn-primary">{{ _lang('Save Settings') }}</button>
+										<a href="{{ route('pwa.install-prompt') }}" target="_blank" class="btn btn-info ml-2">{{ _lang('Test PWA') }}</a>
+									</div>
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
 
 							<div class="row">
 								<div class="col-md-12">

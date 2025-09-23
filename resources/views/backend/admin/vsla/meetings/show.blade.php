@@ -115,9 +115,13 @@
                             @foreach($meeting->attendance as $attendance)
                             <tr>
                                 <td>
-                                    <strong>{{ $attendance->member->first_name }} {{ $attendance->member->last_name }}</strong>
-                                    <br>
-                                    <small class="text-muted">{{ $attendance->member->member_no ?? 'N/A' }}</small>
+                                    @if($attendance->member)
+                                        <strong>{{ $attendance->member->first_name }} {{ $attendance->member->last_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ $attendance->member->member_no ?? 'N/A' }}</small>
+                                    @else
+                                        <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                    @endif
                                 </td>
                                 <td>
                                     @if($attendance->present)
@@ -194,9 +198,13 @@
                                     @endswitch
                                 </td>
                                 <td>
-                                    <strong>{{ $transaction->member->first_name }} {{ $transaction->member->last_name }}</strong>
-                                    <br>
-                                    <small class="text-muted">{{ $transaction->member->member_no ?? 'N/A' }}</small>
+                                    @if($transaction->member)
+                                        <strong>{{ $transaction->member->first_name }} {{ $transaction->member->last_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ $transaction->member->member_no ?? 'N/A' }}</small>
+                                    @else
+                                        <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                    @endif
                                 </td>
                                 <td>
                                     <strong>{{ number_format($transaction->amount, 2) }}</strong>

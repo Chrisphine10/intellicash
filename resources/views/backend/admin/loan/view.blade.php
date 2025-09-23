@@ -1,6 +1,31 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+.badge {
+    font-size: 0.75em;
+    padding: 0.375rem 0.75rem;
+}
+.badge-info {
+    background-color: #17a2b8;
+}
+.badge-success {
+    background-color: #28a745;
+}
+.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+.badge-danger {
+    background-color: #dc3545;
+}
+.badge-secondary {
+    background-color: #6c757d;
+}
+.table-info {
+    background-color: #d1ecf1;
+}
+</style>
 <div class="row">
     <div class="col-lg-12">
         <div class="card">
@@ -10,7 +35,7 @@
                 <div>
                 <a class="btn btn-primary btn-xs" href="{{ route('loans.approve', $loan['id']) }}">
                     <i class="fas fa-check-circle mr-1"></i>{{ _lang('Click to Approve') }}</a>
-                <a class="btn btn-danger btn-xs confirm-alert" data-message="{{ _lang('Are you sure you want to reject this loan application?') }}" href="#">
+                <a class="btn btn-danger btn-xs confirm-alert" data-message="{{ _lang('Are you sure you want to reject this loan application?') }}" href="{{ route('loans.reject', $loan['id']) }}">
                     <i class="fas fa-times-circle mr-1"></i>{{ _lang('Click to Reject') }}
                 </a>
                 </div>
@@ -191,9 +216,73 @@
                         </table>
                     </div>
                     <div class="tab-pane fade mt-4" id="guarantor">
+                        <!-- Guarantor Requests Section -->
+                        @if(isset($guarantorRequests) && $guarantorRequests->count() > 0)
+                        <div class="card mb-4">
+                            <div class="card-header border">
+                                <h5 class="mb-0"><i class="fas fa-user-friends"></i> {{ _lang('Guarantor Requests') }}</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th class="pl-4">{{ _lang('Guarantor Name') }}</th>
+                                                <th>{{ _lang('Email') }}</th>
+                                                <th>{{ _lang('Status') }}</th>
+                                                <th>{{ _lang('Requested Date') }}</th>
+                                                <th>{{ _lang('Response Date') }}</th>
+                                                <th>{{ _lang('Message') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($guarantorRequests as $request)
+                                            <tr>
+                                                <td class="pl-4">{{ $request->guarantor_name }}</td>
+                                                <td>{{ $request->guarantor_email }}</td>
+                                                <td>
+                                                    @if($request->status == 'pending')
+                                                        @if($request->isExpired())
+                                                            <span class="badge badge-warning">{{ _lang('Expired') }}</span>
+                                                        @else
+                                                            <span class="badge badge-info">{{ _lang('Pending') }}</span>
+                                                        @endif
+                                                    @elseif($request->status == 'accepted')
+                                                        <span class="badge badge-success">{{ _lang('Accepted') }}</span>
+                                                    @elseif($request->status == 'declined')
+                                                        <span class="badge badge-danger">{{ _lang('Declined') }}</span>
+                                                    @else
+                                                        <span class="badge badge-secondary">{{ ucfirst($request->status) }}</span>
+                                                    @endif
+                                                </td>
+                                                <td>{{ $request->created_at->format(get_date_format()) }}</td>
+                                                <td>
+                                                    @if($request->responded_at)
+                                                        {{ $request->responded_at->format(get_date_format()) }}
+                                                    @else
+                                                        <span class="text-muted">{{ _lang('Not responded') }}</span>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if($request->guarantor_message)
+                                                        <small class="text-muted">{{ Str::limit($request->guarantor_message, 50) }}</small>
+                                                    @else
+                                                        <span class="text-muted">{{ _lang('No message') }}</span>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
+                        <!-- Confirmed Guarantors Section -->
                         <div class="card">
                             <div class="card-header border d-flex align-items-center">
-                                <span>{{ _lang("Guarantors") }}</span>
+                                <span><i class="fas fa-shield-alt"></i> {{ _lang("Confirmed Guarantors") }}</span>
                                 <a
                                 class="btn btn-primary btn-xs ml-auto ajax-modal"
                                 href="{{ route('guarantors.create') }}" data-title="{{ _lang('Add Guarantor') }}"
@@ -206,24 +295,33 @@
                                     <table id="guarantors_table" class="table table-bordered mb-0">
                                         <thead>
                                             <tr>
-                                                <th class="pl-4">{{ _lang('Loan ID') }}</th>
-                                                <th>{{ _lang('Guarantor') }}</th>
+                                                <th class="pl-4">{{ _lang('Guarantor Name') }}</th>
                                                 <th>{{ _lang('Amount') }}</th>
+                                                <th>{{ _lang('Status') }}</th>
                                                 <th class="text-center">{{ _lang('Action') }}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             @if($guarantors->count() == 0)
                                             <tr>
-                                                <td colspan="4" class="text-center">{{ _lang('No Guarantor Found !') }}</td>
+                                                <td colspan="4" class="text-center text-muted">
+                                                    <i class="fas fa-info-circle"></i> {{ _lang('No confirmed guarantors yet') }}
+                                                </td>
                                             </tr>
                                             @endif
 
                                             @foreach($guarantors as $guarantor)
                                             <tr data-id="row_{{ $guarantor->id }}">
-                                                <td class='pl-4 loan_id'>{{ $guarantor->loan->loan_id }}</td>
-                                                <td class='member_id'>{{ $guarantor->member->name }}</td>
-                                                <td class='amount'>{{ decimalPlace($guarantor->amount, currency($loan->currency->name)) }}</td>
+                                                <td class='pl-4 member_id'>
+                                                    <i class="fas fa-user"></i> {{ $guarantor->member->first_name }} {{ $guarantor->member->last_name }}
+                                                    <br><small class="text-muted">{{ $guarantor->member->email }}</small>
+                                                </td>
+                                                <td class='amount'>
+                                                    <strong>{{ decimalPlace($guarantor->amount, currency($loan->currency->name)) }}</strong>
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-success">{{ _lang('Confirmed') }}</span>
+                                                </td>
                                                 <td class="text-center">
                                                 <span class="dropdown">
                                                     <button class="btn btn-primary dropdown-toggle btn-xs" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -243,9 +341,11 @@
                                             @endforeach
 
                                             @if($guarantors->count() > 0)
-                                            <tr>
-                                                <td class="pl-4" colspan="2"><b>{{ _lang('Grand Total') }}</b></td>
-                                                <td colspan="2"><b>{{ decimalPlace($guarantors->sum('amount'), currency($loan->currency->name)) }}</b></td>
+                                            <tr class="table-info">
+                                                <td class="pl-4"><strong>{{ _lang('Total Guarantee Amount') }}</strong></td>
+                                                <td><strong>{{ decimalPlace($guarantors->sum('amount'), currency($loan->currency->name)) }}</strong></td>
+                                                <td></td>
+                                                <td></td>
                                             </tr>
                                             @endif
                                         </tbody>

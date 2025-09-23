@@ -222,6 +222,22 @@ $permissions = permission_list();
 	</ul>
 </li>
 
+        @if(app('tenant')->isAssetManagementEnabled())
+        <li>
+            <a href="javascript: void(0);"><i class="fas fa-building"></i><span>{{ _lang('Asset Management') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+            <ul class="nav-second-level" aria-expanded="false">
+                @if (in_array('asset.view',$permissions))
+                <li class="nav-item"><a class="nav-link" href="{{ route('asset-management.dashboard') }}">{{ _lang('Dashboard') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('assets.index') }}">{{ _lang('Assets') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('asset-categories.index') }}">{{ _lang('Categories') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('asset-leases.index') }}">{{ _lang('Leases') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('asset-maintenance.index') }}">{{ _lang('Maintenance') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('asset-reports.index') }}">{{ _lang('Reports') }}</a></li>
+                @endif
+            </ul>
+        </li>
+        @endif
+
 @if (in_array('audit.index',$permissions))
 <li>
 	<a href="{{ route('audit.index') }}"><i class="fas fa-clipboard-list"></i><span>{{ _lang('Audit Trail') }}</span></a>

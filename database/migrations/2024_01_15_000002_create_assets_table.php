@@ -1,0 +1,48 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('assets', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('tenant_id');
+            $table->unsignedBigInteger('category_id');
+            $table->string('name');
+            $table->string('asset_code')->unique();
+            $table->text('description')->nullable();
+            $table->decimal('purchase_price', 15, 2);
+            $table->decimal('current_value', 15, 2)->nullable();
+            $table->date('purchase_date');
+            $table->date('warranty_expiry')->nullable();
+            $table->string('location')->nullable();
+            $table->string('status')->default('active'); // active, inactive, maintenance, disposed
+            $table->boolean('is_leasable')->default(false);
+            $table->decimal('lease_rate', 10, 2)->nullable(); // daily rate for leasable assets
+            $table->string('lease_rate_type')->default('daily'); // daily, weekly, monthly
+            $table->text('notes')->nullable();
+            $table->json('metadata')->nullable(); // for storing additional asset-specific data
+            $table->timestamps();
+
+            $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            $table->foreign('category_id')->references('id')->on('asset_categories')->onDelete('cascade');
+            $table->index(['tenant_id', 'status']);
+            $table->index(['tenant_id', 'is_leasable']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('assets');
+    }
+};

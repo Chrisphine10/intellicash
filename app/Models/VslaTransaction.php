@@ -13,10 +13,12 @@ class VslaTransaction extends Model
 
     protected $fillable = [
         'tenant_id',
+        'cycle_id',
         'meeting_id',
         'member_id',
         'transaction_type',
         'amount',
+        'shares',
         'description',
         'transaction_id',
         'loan_id',
@@ -30,9 +32,51 @@ class VslaTransaction extends Model
         'amount' => 'decimal:2',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Ensure transaction is assigned to the correct cycle based on date
+        static::creating(function ($transaction) {
+            static::assignToCorrectCycle($transaction);
+        });
+
+        static::updating(function ($transaction) {
+            if ($transaction->isDirty('created_at') || $transaction->isDirty('cycle_id')) {
+                static::assignToCorrectCycle($transaction);
+            }
+        });
+    }
+
+    /**
+     * Assign transaction to the correct cycle based on creation date
+     */
+    protected static function assignToCorrectCycle($transaction)
+    {
+        if (!$transaction->cycle_id) {
+            // Find the active cycle for this tenant that contains the transaction date
+            $cycle = VslaCycle::where('tenant_id', $transaction->tenant_id)
+                ->where('status', 'active')
+                ->where('start_date', '<=', $transaction->created_at ?? now())
+                ->where('end_date', '>=', $transaction->created_at ?? now())
+                ->first();
+
+            if ($cycle) {
+                $transaction->cycle_id = $cycle->id;
+            } else {
+                throw new \Exception('No active cycle found for the transaction date. Please ensure there is an active cycle covering this period.');
+            }
+        }
+    }
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function cycle()
+    {
+        return $this->belongsTo(VslaCycle::class, 'cycle_id');
     }
 
     public function meeting()

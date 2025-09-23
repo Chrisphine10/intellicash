@@ -265,6 +265,30 @@
 		$(this).html(label);
 	});
 
+	$(document).on('click', '.confirm-alert', function(e) {
+		e.preventDefault();
+		var link = $(this).attr('href');
+		var message = $(this).data("message");
+		
+		//Sweet Alert for confirmation action
+		Swal.fire({
+			title: $lang_alert_title,
+			text: message ?? $lang_alert_message,
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonColor: '#3085d6',
+			cancelButtonColor: '#d33',
+			confirmButtonText: $lang_confirm_button_text,
+			cancelButtonText: $lang_cancel_button_text
+		}).then((result) => {
+			if (result.value) {
+				window.location.href = link;
+			}
+		});
+
+		return false;
+	});
+
 	if ($(".select2").length) {
         $(".select2").each(function (i, obj) {
             $(this).select2({

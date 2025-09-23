@@ -2,6 +2,9 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use App\Models\ESignatureDocument;
+use App\Policies\ESignatureDocumentPolicy;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -18,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-
+        // Register E-Signature policies
+        Gate::policy(ESignatureDocument::class, ESignatureDocumentPolicy::class);
     }
 }

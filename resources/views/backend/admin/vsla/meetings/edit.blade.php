@@ -88,7 +88,13 @@
                         <tbody>
                             @foreach($meeting->attendance as $attendance)
                             <tr>
-                                <td>{{ $attendance->member->first_name }} {{ $attendance->member->last_name }}</td>
+                                <td>
+                                    @if($attendance->member)
+                                        {{ $attendance->member->first_name }} {{ $attendance->member->last_name }}
+                                    @else
+                                        <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                    @endif
+                                </td>
                                 <td>
                                     @if($attendance->present)
                                         <span class="badge badge-success">{{ _lang('Present') }}</span>
@@ -148,7 +154,13 @@
                                             <span class="badge badge-secondary">{{ ucfirst(str_replace('_', ' ', $transaction->transaction_type)) }}</span>
                                     @endswitch
                                 </td>
-                                <td>{{ $transaction->member->first_name }} {{ $transaction->member->last_name }}</td>
+                                <td>
+                                    @if($transaction->member)
+                                        {{ $transaction->member->first_name }} {{ $transaction->member->last_name }}
+                                    @else
+                                        <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                    @endif
+                                </td>
                                 <td>{{ number_format($transaction->amount, 2) }}</td>
                                 <td>{{ $transaction->description }}</td>
                                 <td>

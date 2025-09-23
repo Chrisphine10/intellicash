@@ -52,6 +52,9 @@ class VslaSettingsController extends Controller
         
         $validator = Validator::make($request->all(), [
             'share_amount' => 'required|numeric|min:0',
+            'min_shares_per_member' => 'required|integer|min:1',
+            'max_shares_per_member' => 'required|integer|min:1',
+            'max_shares_per_meeting' => 'required|integer|min:1',
             'penalty_amount' => 'required|numeric|min:0',
             'welfare_amount' => 'required|numeric|min:0',
             'meeting_frequency' => 'required|in:weekly,monthly,custom',
@@ -65,6 +68,9 @@ class VslaSettingsController extends Controller
         ], [
             'meeting_days.*.in' => 'Invalid meeting day selected.',
             'meeting_frequency.in' => 'Invalid meeting frequency selected.',
+            'min_shares_per_member.min' => 'Minimum shares per member must be at least 1.',
+            'max_shares_per_member.min' => 'Maximum shares per member must be at least 1.',
+            'max_shares_per_meeting.min' => 'Maximum shares per meeting must be at least 1.',
         ]);
 
         if ($validator->fails()) {
@@ -72,6 +78,29 @@ class VslaSettingsController extends Controller
                 return response()->json(['result' => 'error', 'message' => $validator->errors()->all()]);
             } else {
                 return back()->withErrors($validator)->withInput();
+            }
+        }
+
+        // Additional validation for share limits
+        $minShares = (int) $request->input('min_shares_per_member');
+        $maxShares = (int) $request->input('max_shares_per_member');
+        $maxPerMeeting = (int) $request->input('max_shares_per_meeting');
+
+        if ($maxShares < $minShares) {
+            $error = _lang('Maximum shares per member must be greater than or equal to minimum shares per member.');
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => [$error]]);
+            } else {
+                return back()->with('error', $error)->withInput();
+            }
+        }
+
+        if ($maxPerMeeting > $maxShares) {
+            $error = _lang('Maximum shares per meeting cannot exceed maximum shares per member.');
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => [$error]]);
+            } else {
+                return back()->with('error', $error)->withInput();
             }
         }
 
@@ -210,6 +239,9 @@ class VslaSettingsController extends Controller
                 ->first();
 
             if (!$existingProduct) {
+                // VSLA Shares should not allow withdrawals (share purchases are permanent until shareout)
+                $allowWithdraw = ($productData['name'] === 'VSLA Shares') ? 0 : 1;
+                
                 \App\Models\SavingsProduct::create([
                     'tenant_id' => $tenant->id,
                     'name' => $productData['name'],
@@ -218,13 +250,16 @@ class VslaSettingsController extends Controller
                     'currency_id' => $baseCurrencyId,
                     'interest_rate' => 0,
                     'interest_method' => 'none',
-                    'allow_withdraw' => 1,
+                    'allow_withdraw' => $allowWithdraw,
                     'minimum_account_balance' => 0,
                     'minimum_deposit_amount' => 10,
                     'maintenance_fee' => 0,
                     'auto_create' => 1,
                     'status' => 1,
                 ]);
+            } elseif ($productData['name'] === 'VSLA Shares' && $existingProduct->allow_withdraw == 1) {
+                // Update existing VSLA Shares product to disallow withdrawals
+                $existingProduct->update(['allow_withdraw' => 0]);
             }
         }
     }
@@ -247,9 +282,12 @@ class VslaSettingsController extends Controller
         if (!$settings) {
             $settings = VslaSetting::create([
                 'tenant_id' => $tenant->id,
-                'share_amount' => 0,
-                'penalty_amount' => 0,
-                'welfare_amount' => 0,
+                'share_amount' => 100, // Default share amount
+                'min_shares_per_member' => 1,
+                'max_shares_per_member' => 5,
+                'max_shares_per_meeting' => 3,
+                'penalty_amount' => 50,
+                'welfare_amount' => 20,
                 'meeting_frequency' => 'weekly',
                 'meeting_day_of_week' => null,
                 'meeting_days' => null,
@@ -257,21 +295,29 @@ class VslaSettingsController extends Controller
                 'auto_approve_loans' => false,
                 'max_loan_amount' => null,
                 'max_loan_duration_days' => null,
+                'create_default_loan_product' => true,
+                'create_default_savings_products' => true,
+                'create_default_bank_accounts' => true,
+                'create_default_expense_categories' => true,
+                'auto_create_member_accounts' => true,
             ]);
         }
 
-        // Always ensure VSLA savings products exist
-        $this->createVslaSavingsProducts($tenant);
+        // Create default items based on settings
+        if ($settings->create_default_savings_products) {
+            $this->createVslaSavingsProducts($tenant);
+        }
         
-        // Ensure VSLA savings products exist
-        $vslaProducts = \App\Models\SavingsProduct::where('tenant_id', $tenant->id)
-            ->where('name', 'VSLA Member Account')
-            ->get();
-
-        if ($vslaProducts->isEmpty()) {
+        if ($settings->create_default_bank_accounts) {
             $this->createDefaultVslaAccounts($tenant);
-            $this->createDefaultVslaSavingsProducts($tenant);
+        }
+        
+        if ($settings->create_default_loan_product) {
             $this->createDefaultVslaLoanProduct($tenant);
+        }
+        
+        if ($settings->create_default_expense_categories) {
+            $this->createDefaultExpenseCategories($tenant);
         }
 
         return $settings;

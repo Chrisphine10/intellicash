@@ -26,16 +26,47 @@
                 <form method="post" action="{{ route('vsla.settings.update') }}" class="settings-submit">
                     @csrf
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="form-group">
                                 <label class="control-label">{{ _lang('Share Amount') }}</label>
                                 <input type="number" class="form-control" name="share_amount" value="{{ $settings->share_amount }}" step="0.01" min="0" required>
+                                <small class="form-text text-muted">{{ _lang('Cost per share') }}</small>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="control-label">{{ _lang('Min Shares Per Member') }}</label>
+                                <input type="number" class="form-control" name="min_shares_per_member" value="{{ $settings->min_shares_per_member ?? 1 }}" min="1" required>
+                                <small class="form-text text-muted">{{ _lang('Minimum shares a member must hold') }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="control-label">{{ _lang('Max Shares Per Member') }}</label>
+                                <input type="number" class="form-control" name="max_shares_per_member" value="{{ $settings->max_shares_per_member ?? 5 }}" min="1" required>
+                                <small class="form-text text-muted">{{ _lang('Maximum shares a member can hold') }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="control-label">{{ _lang('Max Shares Per Meeting') }}</label>
+                                <input type="number" class="form-control" name="max_shares_per_meeting" value="{{ $settings->max_shares_per_meeting ?? 3 }}" min="1" required>
+                                <small class="form-text text-muted">{{ _lang('Maximum shares a member can buy in one meeting') }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
                             <div class="form-group">
                                 <label class="control-label">{{ _lang('Penalty Amount') }}</label>
                                 <input type="number" class="form-control" name="penalty_amount" value="{{ $settings->penalty_amount }}" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="control-label">{{ _lang('Welfare Amount') }}</label>
+                                <input type="number" class="form-control" name="welfare_amount" value="{{ $settings->welfare_amount }}" step="0.01" min="0" required>
                             </div>
                         </div>
                     </div>
@@ -43,15 +74,16 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="control-label">{{ _lang('Welfare Amount') }}</label>
-                                <input type="number" class="form-control" name="welfare_amount" value="{{ $settings->welfare_amount }}" step="0.01" min="0" required>
+                                <label class="control-label">{{ _lang('Max Loan Amount') }}</label>
+                                <input type="number" class="form-control" name="max_loan_amount" value="{{ $settings->max_loan_amount }}" step="0.01" min="0">
+                                <small class="form-text text-muted">{{ _lang('Leave empty for no limit') }}</small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="control-label">{{ _lang('Max Loan Amount') }}</label>
-                                <input type="number" class="form-control" name="max_loan_amount" value="{{ $settings->max_loan_amount }}" step="0.01" min="0">
-                                <small class="form-text text-muted">{{ _lang('Leave empty for no limit') }}</small>
+                                <label class="control-label">{{ _lang('Max Loan Duration (Days)') }}</label>
+                                <input type="number" class="form-control" name="max_loan_duration_days" value="{{ $settings->max_loan_duration_days }}" min="1">
+                                <small class="form-text text-muted">{{ _lang('Maximum loan duration in days') }}</small>
                             </div>
                         </div>
                     </div>
@@ -149,18 +181,73 @@
                         </div>
                     </div>
                     
+                    <hr>
+                    <h5 class="mb-3">{{ _lang('Default Item Creation Settings') }}</h5>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>{{ _lang('Note:') }}</strong> {{ _lang('These settings control whether default VSLA items are automatically created when the VSLA module is enabled or when accessing VSLA settings. You can disable any of these options if you prefer to create items manually.') }}
+                    </div>
+                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="control-label">{{ _lang('Max Loan Duration (Days)') }}</label>
-                                <input type="number" class="form-control" name="max_loan_duration_days" value="{{ $settings->max_loan_duration_days }}" min="1">
-                                <small class="form-text text-muted">{{ _lang('Maximum loan duration in days') }}</small>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="create_default_loan_product" value="1" {{ $settings->create_default_loan_product ? 'checked' : '' }}>
+                                    <label class="form-check-label">{{ _lang('Create Default Loan Product') }}</label>
+                                    <small class="form-text text-muted">{{ _lang('Automatically create "VSLA Default Loan Product" when VSLA is enabled') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="create_default_savings_products" value="1" {{ $settings->create_default_savings_products ? 'checked' : '' }}>
+                                    <label class="form-check-label">{{ _lang('Create Default Savings Products') }}</label>
+                                    <small class="form-text text-muted">{{ _lang('Automatically create VSLA savings products (Projects, Welfare, Shares, Others, Loan Fund)') }}</small>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="create_default_bank_accounts" value="1" {{ $settings->create_default_bank_accounts ? 'checked' : '' }}>
+                                    <label class="form-check-label">{{ _lang('Create Default Bank Accounts') }}</label>
+                                    <small class="form-text text-muted">{{ _lang('Automatically create VSLA bank accounts for fund management') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="create_default_expense_categories" value="1" {{ $settings->create_default_expense_categories ? 'checked' : '' }}>
+                                    <label class="form-check-label">{{ _lang('Create Default Expense Categories') }}</label>
+                                    <small class="form-text text-muted">{{ _lang('Automatically create expense categories for SACCO/Cooperative operations') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="auto_create_member_accounts" value="1" {{ $settings->auto_create_member_accounts ? 'checked' : '' }}>
+                                    <label class="form-check-label">{{ _lang('Auto-Create Member Accounts') }}</label>
+                                    <small class="form-text text-muted">{{ _lang('Automatically create savings accounts for new members based on auto-create savings products') }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
                     <div class="form-group">
                         <button type="submit" class="btn btn-primary">{{ _lang('Update Settings') }}</button>
+                        <a href="{{ route('vsla.meetings.index') }}" class="btn btn-success ml-2">
+                            <i class="fas fa-cogs"></i> {{ _lang('Manage VSLA') }}
+                        </a>
                     </div>
                 </form>
                 
@@ -450,6 +537,25 @@
 #custom_days_required {
     font-weight: bold;
 }
+
+.share-limits-error {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.is-invalid {
+    border-color: #dc3545 !important;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 20%, 40%, 60%, 80% { transform: translateX(0); }
+    10%, 30%, 50%, 70% { transform: translateX(-2px); }
+}
 </style>
 <script>
 $(document).ready(function() {
@@ -551,6 +657,80 @@ $(document).ready(function() {
             $(this).closest('.form-check').removeClass('bg-light');
         }
     );
+    
+    // Share limits validation
+    function validateShareLimits() {
+        var minShares = parseInt($('input[name="min_shares_per_member"]').val()) || 0;
+        var maxShares = parseInt($('input[name="max_shares_per_member"]').val()) || 0;
+        var maxPerMeeting = parseInt($('input[name="max_shares_per_meeting"]').val()) || 0;
+        
+        var isValid = true;
+        var errorMessages = [];
+        
+        if (maxShares < minShares) {
+            errorMessages.push('{{ _lang("Maximum shares per member must be greater than or equal to minimum shares per member.") }}');
+            isValid = false;
+        }
+        
+        if (maxPerMeeting > maxShares) {
+            errorMessages.push('{{ _lang("Maximum shares per meeting cannot exceed maximum shares per member.") }}');
+            isValid = false;
+        }
+        
+        // Clear previous error styling
+        $('input[name="min_shares_per_member"], input[name="max_shares_per_member"], input[name="max_shares_per_meeting"]')
+            .removeClass('is-invalid');
+        $('.share-limits-error').remove();
+        
+        if (!isValid) {
+            // Add error styling
+            $('input[name="min_shares_per_member"], input[name="max_shares_per_member"], input[name="max_shares_per_meeting"]')
+                .addClass('is-invalid');
+            
+            // Show error message
+            var errorHtml = '<div class="alert alert-danger share-limits-error mt-2"><ul class="mb-0">';
+            errorMessages.forEach(function(message) {
+                errorHtml += '<li>' + message + '</li>';
+            });
+            errorHtml += '</ul></div>';
+            
+            $('input[name="max_shares_per_meeting"]').closest('.form-group').after(errorHtml);
+        }
+        
+        return isValid;
+    }
+    
+    // Bind validation to share limit fields
+    $('input[name="min_shares_per_member"], input[name="max_shares_per_member"], input[name="max_shares_per_meeting"]')
+        .on('input change', function() {
+            setTimeout(validateShareLimits, 100); // Small delay to ensure value is updated
+        });
+    
+    // Add share limits validation to form submission
+    var originalFormHandler = $('form.settings-submit').data('events') && $('form.settings-submit').data('events').submit;
+    $('form.settings-submit').off('submit').on('submit', function(e) {
+        var frequency = $('#meeting_frequency').val();
+        
+        // Meeting days validation
+        if (frequency === 'custom') {
+            var isValid = validateMeetingDays();
+            if (!isValid) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                alert('{{ _lang("Please select at least one meeting day for custom frequency.") }}');
+                return false;
+            }
+        }
+        
+        // Share limits validation
+        if (!validateShareLimits()) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return false;
+        }
+        
+        // Don't prevent default - let the AJAX handler take over
+    });
 });
 </script>
 @endsection

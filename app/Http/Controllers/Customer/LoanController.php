@@ -3,6 +3,8 @@ namespace App\Http\Controllers\Customer;
 
 use App\Http\Controllers\Controller;
 use App\Models\CustomField;
+use App\Models\Guarantor;
+use App\Models\GuarantorRequest;
 use App\Models\Loan;
 use App\Models\LoanPayment;
 use App\Models\LoanProduct;
@@ -11,11 +13,13 @@ use App\Models\SavingsAccount;
 use App\Models\Transaction;
 use App\Notifications\LoanPaymentReceived;
 use App\Utilities\LoanCalculator as Calculator;
+use App\Mail\GuarantorInvitation;
 use DateTime;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class LoanController extends Controller {
@@ -51,8 +55,15 @@ class LoanController extends Controller {
             ->where('status', 1)
             ->orderBy("id", "asc")
             ->get();
+            
+        // Load guarantors and guarantor requests
+        $guarantors = Guarantor::where('loan_id', $loan_id)->get();
+        $guarantorRequests = GuarantorRequest::where('loan_id', $loan_id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
         if ($loan) {
-            return view('backend.customer.loan.loan_details', compact('loan', 'customFields', 'assets'));
+            return view('backend.customer.loan.loan_details', compact('loan', 'customFields', 'assets', 'guarantors', 'guarantorRequests'));
         }
     }
 
@@ -94,6 +105,11 @@ class LoanController extends Controller {
             $term_period            = $request->term_period;
             $late_payment_penalties = $request->late_payment_penalties;
 
+            // Convert term_period format for calculator (e.g., "days" -> "+1 day", "months" -> "+1 month")
+            if (!str_starts_with($term_period, '+')) {
+                $term_period = '+1 ' . $term_period;
+            }
+
             $data       = [];
             $table_data = [];
 
@@ -125,6 +141,12 @@ class LoanController extends Controller {
 
                 $calculator             = new Calculator($apply_amount, $first_payment_date, $interest_rate, $term, $term_period, $late_payment_penalties);
                 $table_data             = $calculator->get_reducing_amount();
+                $data['payable_amount'] = $calculator->payable_amount;
+
+            } else if ($interest_type == 'compound') {
+
+                $calculator             = new Calculator($apply_amount, $first_payment_date, $interest_rate, $term, $term_period, $late_payment_penalties);
+                $table_data             = $calculator->get_compound();
                 $data['payable_amount'] = $calculator->payable_amount;
 
             }
@@ -159,33 +181,25 @@ class LoanController extends Controller {
                 ->where('member_id', auth()->user()->member->id)
                 ->get();
             
-            // Get terms and privacy policy based on loan product or default
+            // Check if user has at least one account
+            if ($accounts->isEmpty()) {
+                return redirect()->route('loans.my_loans')->with('error', _lang('You need at least one savings account to apply for a loan. Please create a savings account first.'));
+            }
+            
+            // Get terms and privacy policy from document management system
             $defaultTerms = null;
-            $selectedProductId = $request->get('product');
+            $tenant = app('tenant');
             
-            if ($selectedProductId) {
-                // Try to get product-specific terms first
-                $defaultTerms = \App\Models\LoanTermsAndPrivacy::getLatestForTenantAndProduct(app('tenant')->id, $selectedProductId);
-            }
+            // Try to get latest terms and conditions document
+            $termsDoc = \App\Models\Document::getLatestForCategory($tenant->id, 'terms_and_conditions');
+            $privacyDoc = \App\Models\Document::getLatestForCategory($tenant->id, 'privacy_policy');
             
-            // If no product-specific terms, get general default terms
-            if (!$defaultTerms) {
-                $defaultTerms = \App\Models\LoanTermsAndPrivacy::getDefaultForTenant(app('tenant')->id);
-            }
-            
-            // If still no terms, get from legal templates as fallback
-            if (!$defaultTerms) {
-                $legalTemplate = \App\Models\LegalTemplate::active()
-                    ->where('country_code', 'KEN') // Default to Kenya
-                    ->first();
-                
-                if ($legalTemplate) {
-                    $defaultTerms = (object) [
-                        'terms_and_conditions' => $legalTemplate->terms_and_conditions,
-                        'privacy_policy' => $legalTemplate->privacy_policy,
-                        'title' => $legalTemplate->template_name
-                    ];
-                }
+            if ($termsDoc || $privacyDoc) {
+                $defaultTerms = (object) [
+                    'terms_and_conditions' => $termsDoc ? $termsDoc->getFileContent() : '',
+                    'privacy_policy' => $privacyDoc ? $privacyDoc->getFileContent() : '',
+                    'title' => $termsDoc ? $termsDoc->title : 'Terms and Conditions'
+                ];
             }
             
             return view('backend.customer.loan.apply_loan', compact('alert_col', 'customFields', 'accounts', 'defaultTerms'));
@@ -213,14 +227,11 @@ class LoanController extends Controller {
                 'loan_purpose'       => 'required|string|max:1000',
                 'attachment'         => 'nullable|mimes:jpeg,png,jpg,doc,pdf,docx,zip|max:8192', //8MB = 8192KB
                 'debit_account_id'   => 'required',
-                'applicant_name'     => 'required|string|max:255',
-                'applicant_email'    => 'required|email|max:255',
-                'applicant_phone'    => 'required|string|max:50',
-                'applicant_address'  => 'required|string|max:1000',
-                'business_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'financial_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'personal_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'collateral_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'description'        => 'nullable|string|max:1000',
+                'require_guarantor'  => 'nullable|boolean',
+                'guarantor_email'    => 'required_if:require_guarantor,1|email|max:255',
+                'guarantor_name'     => 'required_if:require_guarantor,1|string|max:255',
+                'guarantor_message'  => 'nullable|string|max:1000',
                 'terms_accepted'     => 'required|accepted',
             ];
 
@@ -263,23 +274,13 @@ class LoanController extends Controller {
                 $file->move(public_path() . "/uploads/media/", $attachment);
             }
 
-            // Handle comprehensive loan application files
-            $businessDocuments = $this->handleFileUploads($request, 'business_documents', 'loan_applications/business');
-            $financialDocuments = $this->handleFileUploads($request, 'financial_documents', 'loan_applications/financial');
-            $personalDocuments = $this->handleFileUploads($request, 'personal_documents', 'loan_applications/personal');
-            $collateralDocuments = $this->handleFileUploads($request, 'collateral_documents', 'loan_applications/collateral');
-
-            // Prepare guarantor details
-            $guarantorDetails = null;
-            if ($request->guarantor_name) {
-                $guarantorDetails = [
-                    'name' => $request->guarantor_name,
-                    'phone' => $request->guarantor_phone,
-                    'email' => $request->guarantor_email,
-                    'relationship' => $request->guarantor_relationship,
-                    'income' => $request->guarantor_income,
-                ];
-            }
+            // Prepare simplified loan application data
+            $comprehensiveData = [
+                'loan_purpose' => $request->loan_purpose,
+                'applicant_name' => auth()->user()->name,
+                'applicant_email' => auth()->user()->email,
+                'applicant_phone' => auth()->user()->mobile,
+            ];
 
             DB::beginTransaction();
 
@@ -299,54 +300,24 @@ class LoanController extends Controller {
             $loan->late_payment_penalties = 0;
             $loan->attachment             = $attachment;
             $loan->description            = $request->input('description');
-            $loan->remarks                = $request->input('remarks');
             $loan->created_user_id        = auth()->id();
             $loan->custom_fields          = json_encode($customFieldsData);
             $loan->debit_account_id       = $request->debit_account_id;
-            
-            // Store comprehensive loan application data
-            $comprehensiveData = [
-                'loan_purpose' => $request->loan_purpose,
-                'business_name' => $request->business_name,
-                'business_type' => $request->business_type,
-                'business_registration_number' => $request->business_registration_number,
-                'business_start_date' => $request->business_start_date,
-                'number_of_employees' => $request->number_of_employees,
-                'monthly_revenue' => $request->monthly_revenue,
-                'monthly_expenses' => $request->monthly_expenses,
-                'business_description' => $request->business_description,
-                'applicant_name' => $request->applicant_name,
-                'applicant_email' => $request->applicant_email,
-                'applicant_phone' => $request->applicant_phone,
-                'applicant_address' => $request->applicant_address,
-                'applicant_id_number' => $request->applicant_id_number,
-                'applicant_dob' => $request->applicant_dob,
-                'applicant_marital_status' => $request->applicant_marital_status,
-                'applicant_dependents' => $request->applicant_dependents,
-                'employment_status' => $request->employment_status,
-                'employer_name' => $request->employer_name,
-                'job_title' => $request->job_title,
-                'monthly_income' => $request->monthly_income,
-                'employment_years' => $request->employment_years,
-                'collateral_type' => $request->collateral_type,
-                'collateral_description' => $request->collateral_description,
-                'collateral_value' => $request->collateral_value,
-                'collateral_documents' => $collateralDocuments,
-                'guarantor_details' => $guarantorDetails,
-                'business_documents' => $businessDocuments,
-                'financial_documents' => $financialDocuments,
-                'personal_documents' => $personalDocuments,
-            ];
-            
-            $loan->comprehensive_data = json_encode($comprehensiveData);
+            $loan->comprehensive_data     = json_encode($comprehensiveData);
 
             // Create Loan Repayments
+            // Convert term_period format for calculator (e.g., "days" -> "+1 day", "months" -> "+1 month")
+            $termPeriod = $loan->loan_product->term_period;
+            if (!str_starts_with($termPeriod, '+')) {
+                $termPeriod = '+1 ' . $termPeriod;
+            }
+            
             $calculator = new Calculator(
                 $loan->applied_amount,
                 $request->first_payment_date,
                 $loan->loan_product->interest_rate,
                 $loan->loan_product->term,
-                $loan->loan_product->term_period,
+                $termPeriod,
                 $loan->late_payment_penalties
             );
 
@@ -360,6 +331,8 @@ class LoanController extends Controller {
                 $repayments = $calculator->get_one_time();
             } else if ($loan->loan_product->interest_type == 'reducing_amount') {
                 $repayments = $calculator->get_reducing_amount();
+            } else if ($loan->loan_product->interest_type == 'compound') {
+                $repayments = $calculator->get_compound();
             }
 
             $loan->total_payable = $calculator->payable_amount;
@@ -384,10 +357,53 @@ class LoanController extends Controller {
                 $loanProduct->increment('starting_loan_id');
             }
 
+            // Handle guarantor request if required
+            if ($request->require_guarantor && $request->guarantor_email) {
+                try {
+                    // Check if guarantor is a member of the same tenant
+                    $guarantor = \App\Models\Member::where('email', $request->guarantor_email)
+                        ->where('tenant_id', app('tenant')->id)
+                        ->first();
+
+                    if (!$guarantor) {
+                        // Log warning but don't fail the loan application
+                        \Log::warning('Guarantor email not found in system: ' . $request->guarantor_email);
+                        // Continue with loan application but don't send invitation
+                    } else {
+                        $guarantorRequest = GuarantorRequest::createRequest(
+                            $loan->id,
+                            auth()->user()->member->id,
+                            $request->guarantor_email,
+                            $request->guarantor_name,
+                            $request->guarantor_message
+                        );
+
+                        // Send guarantor invitation email
+                        Mail::to($request->guarantor_email)->send(new GuarantorInvitation($guarantorRequest));
+                    }
+                } catch (Exception $e) {
+                    // Log error but don't fail the loan application
+                    \Log::error('Guarantor request failed: ' . $e->getMessage());
+                }
+            }
+
             DB::commit();
 
             if ($loan->id > 0) {
-                return redirect()->route('loans.my_loans')->with('success', _lang('Your Loan application submitted sucessfully and your application is now under review'));
+                $message = _lang('Your Loan application submitted successfully and your application is now under review');
+                if ($request->require_guarantor) {
+                    // Check if guarantor was found and invitation sent
+                    $guarantor = \App\Models\Member::where('email', $request->guarantor_email)
+                        ->where('tenant_id', app('tenant')->id)
+                        ->first();
+                    
+                    if ($guarantor) {
+                        $message .= '. A guarantor invitation has been sent to ' . $request->guarantor_email;
+                    } else {
+                        $message .= '. Note: The guarantor email ' . $request->guarantor_email . ' was not found in our system. Please ensure the guarantor is a member of this organization.';
+                    }
+                }
+                return redirect()->route('loans.my_loans')->with('success', $message);
             }
         }
 
@@ -520,12 +536,17 @@ class LoanController extends Controller {
 
                     // Create Loan Repayments
                     $interest_type = $loan->loan_product->interest_type;
+                    $termPeriod = $loan->loan_product->term_period;
+                    if (!str_starts_with($termPeriod, '+')) {
+                        $termPeriod = '+1 ' . $termPeriod;
+                    }
+                    
                     $calculator    = new Calculator(
                         $loan->applied_amount - $loan->total_paid,
                         $upCommingRepayments[0]->repayment_date,
                         $loan->loan_product->interest_rate,
                         $upCommingRepayments->count(),
-                        $loan->loan_product->term_period,
+                        $termPeriod,
                         $loan->late_payment_penalties,
                         $loan->applied_amount
                     );
@@ -540,6 +561,8 @@ class LoanController extends Controller {
                         $repayments = $calculator->get_one_time();
                     } else if ($interest_type == 'reducing_amount') {
                         $repayments = $calculator->get_reducing_amount();
+                    } else if ($interest_type == 'compound') {
+                        $repayments = $calculator->get_compound();
                     }
 
                     $index = 0;
@@ -610,54 +633,5 @@ class LoanController extends Controller {
         return null;
     }
 
-    /**
-     * Handle file uploads for comprehensive loan application
-     */
-    private function handleFileUploads(Request $request, $fieldName, $directory)
-    {
-        if (!$request->hasFile($fieldName)) {
-            return null;
-        }
-
-        $files = [];
-        $uploadedFiles = $request->file($fieldName);
-
-        // Ensure it's always an array
-        if (!is_array($uploadedFiles)) {
-            $uploadedFiles = [$uploadedFiles];
-        }
-
-        foreach ($uploadedFiles as $file) {
-            if ($file && $file->isValid()) {
-                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $path = $file->storeAs($directory, $filename, 'public');
-                $files[] = [
-                    'original_name' => $file->getClientOriginalName(),
-                    'filename' => $filename,
-                    'path' => $path,
-                    'size' => $file->getSize(),
-                    'mime_type' => $file->getMimeType(),
-                ];
-            }
-        }
-
-        return !empty($files) ? $files : null;
-    }
-
-    /**
-     * Clean up uploaded files
-     */
-    private function cleanupUploadedFiles(array $fileArrays)
-    {
-        foreach ($fileArrays as $files) {
-            if ($files) {
-                foreach ($files as $file) {
-                    if (isset($file['path']) && \Storage::disk('public')->exists($file['path'])) {
-                        \Storage::disk('public')->delete($file['path']);
-                    }
-                }
-            }
-        }
-    }
 
 }

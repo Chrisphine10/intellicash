@@ -21,15 +21,16 @@ class VslaTransactionsController extends Controller
      */
     public function index(Request $request)
     {
-        // Check permission - admin has full access
-        if (!is_admin()) {
-            return back()->with('error', _lang('Permission denied!'));
-        }
-        
         $tenant = app('tenant');
         
+        // Check if VSLA module is enabled
         if (!$tenant->isVslaEnabled()) {
             return redirect()->route('modules.index')->with('error', _lang('VSLA module is not enabled'));
+        }
+        
+        // Check authorization with tenant-specific permissions
+        if (!$this->canAccessVslaTransactions($tenant)) {
+            return back()->with('error', _lang('Permission denied! You do not have access to VSLA transactions.'));
         }
         
         $query = $tenant->vslaTransactions()
@@ -71,15 +72,14 @@ class VslaTransactionsController extends Controller
      */
     public function create(Request $request)
     {
-        // Check permission - admin has full access
-        if (!is_admin()) {
-            return back()->with('error', _lang('Permission denied!'));
-        }
-        
         $tenant = app('tenant');
         
         if (!$tenant->isVslaEnabled()) {
             return redirect()->route('modules.index')->with('error', _lang('VSLA module is not enabled'));
+        }
+        
+        if (!$this->canEditTransactions()) {
+            return back()->with('error', _lang('Permission denied! You do not have permission to create transactions.'));
         }
         
         $meetings = $tenant->vslaMeetings()
@@ -247,28 +247,62 @@ class VslaTransactionsController extends Controller
     }
 
     /**
-     * Process VSLA transaction based on type
+     * Process VSLA transaction based on type with proper locking
      */
     private function processVslaTransaction($vslaTransaction, $tenant)
     {
-        // Ensure VSLA accounts exist before processing
-        $this->ensureVslaAccountsExist($tenant);
+        // Use database lock to prevent race conditions
+        return DB::transaction(function () use ($vslaTransaction, $tenant) {
+            // Lock the VSLA transaction record to prevent concurrent processing
+            $lockedTransaction = VslaTransaction::where('id', $vslaTransaction->id)
+                ->lockForUpdate()
+                ->first();
+            
+            if (!$lockedTransaction) {
+                throw new \Exception('Transaction not found or already processed');
+            }
+            
+            // Check if transaction is already processed
+            if ($lockedTransaction->status !== 'pending') {
+                throw new \Exception('Transaction has already been processed');
+            }
+            
+            // Ensure VSLA accounts exist before processing
+            $this->ensureVslaAccountsExist($tenant);
 
-        switch ($vslaTransaction->transaction_type) {
-            case 'share_purchase':
-                $this->processSharePurchase($vslaTransaction, $tenant);
-                break;
-            case 'loan_issuance':
-                $this->processLoanIssuance($vslaTransaction, $tenant);
-                break;
-            case 'loan_repayment':
-                $this->processLoanRepayment($vslaTransaction, $tenant);
-                break;
-            case 'penalty_fine':
-            case 'welfare_contribution':
-                $this->processWelfareContribution($vslaTransaction, $tenant);
-                break;
-        }
+            try {
+                switch ($lockedTransaction->transaction_type) {
+                    case 'share_purchase':
+                        $this->processSharePurchase($lockedTransaction, $tenant);
+                        break;
+                    case 'loan_issuance':
+                        $this->processLoanIssuance($lockedTransaction, $tenant);
+                        break;
+                    case 'loan_repayment':
+                        $this->processLoanRepayment($lockedTransaction, $tenant);
+                        break;
+                    case 'penalty_fine':
+                    case 'welfare_contribution':
+                        $this->processWelfareContribution($lockedTransaction, $tenant);
+                        break;
+                    default:
+                        throw new \Exception('Invalid transaction type: ' . $lockedTransaction->transaction_type);
+                }
+                
+                return $lockedTransaction;
+            } catch (\Exception $e) {
+                // Log the error for debugging
+                \Log::error('VSLA Transaction Processing Error: ' . $e->getMessage(), [
+                    'transaction_id' => $lockedTransaction->id,
+                    'transaction_type' => $lockedTransaction->transaction_type,
+                    'member_id' => $lockedTransaction->member_id,
+                    'amount' => $lockedTransaction->amount,
+                    'error' => $e->getTraceAsString()
+                ]);
+                
+                throw $e;
+            }
+        });
     }
 
     /**
@@ -723,6 +757,16 @@ class VslaTransactionsController extends Controller
         
         $vslaSettings = $tenant->vslaSettings()->first();
         
+        // Ensure VSLA settings have the new share limit fields
+        if ($vslaSettings && !isset($vslaSettings->min_shares_per_member)) {
+            $vslaSettings->update([
+                'min_shares_per_member' => 1,
+                'max_shares_per_member' => 5,
+                'max_shares_per_meeting' => 3,
+            ]);
+            $vslaSettings->refresh();
+        }
+        
         return view('backend.admin.vsla.transactions.bulk_create', compact('meeting', 'members', 'vslaSettings'));
     }
 
@@ -748,6 +792,7 @@ class VslaTransactionsController extends Controller
             'transactions.*.member_id' => 'required|exists:members,id',
             'transactions.*.transaction_type' => 'required|in:share_purchase,loan_issuance,loan_repayment,penalty_fine,welfare_contribution',
             'transactions.*.amount' => 'required|numeric|min:0.01',
+            'transactions.*.shares' => 'nullable|integer|min:0',
             'transactions.*.description' => 'nullable|string|max:1000',
         ]);
 
@@ -765,14 +810,27 @@ class VslaTransactionsController extends Controller
             $createdTransactions = [];
             $errors = [];
 
+            $vslaSettings = $tenant->vslaSettings()->first();
+            
             foreach ($request->transactions as $index => $transactionData) {
                 try {
+                    // Validate share limits for share purchases
+                    if ($transactionData['transaction_type'] === 'share_purchase') {
+                        $shares = $transactionData['shares'] ?? 0;
+                        $shareValidation = $this->validateShareLimits($transactionData['member_id'], $shares, $request->meeting_id, $vslaSettings, $tenant);
+                        if (!$shareValidation['valid']) {
+                            $errors[] = "Transaction " . ($index + 1) . ": " . $shareValidation['message'];
+                            continue;
+                        }
+                    }
+                    
                     $vslaTransaction = VslaTransaction::create([
                         'tenant_id' => $tenant->id,
                         'meeting_id' => $request->meeting_id,
                         'member_id' => $transactionData['member_id'],
                         'transaction_type' => $transactionData['transaction_type'],
                         'amount' => $transactionData['amount'],
+                        'shares' => $transactionData['shares'] ?? 0,
                         'description' => $transactionData['description'] ?? '',
                         'status' => 'pending',
                         'created_user_id' => auth()->id(),
@@ -1023,11 +1081,47 @@ class VslaTransactionsController extends Controller
     }
 
     /**
+     * Check if current user can access VSLA transactions
+     */
+    private function canAccessVslaTransactions($tenant)
+    {
+        $user = auth()->user();
+        
+        // Verify user belongs to the same tenant
+        if ($user->tenant_id !== $tenant->id) {
+            return false;
+        }
+        
+        // Super admin and tenant admin always have access
+        if ($user->user_type === 'superadmin' || $user->user_type === 'admin') {
+            return true;
+        }
+        
+        // Check if user has VSLA User role with appropriate permissions
+        if ($user->role && $user->role->name === 'VSLA User' && has_permission('vsla.transactions.view')) {
+            return true;
+        }
+        
+        // Check if user is a treasurer
+        if (is_vsla_treasurer()) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
      * Check if current user can edit VSLA transactions
      */
     private function canEditTransactions()
     {
         $user = auth()->user();
+        $tenant = app('tenant');
+        
+        // Verify user belongs to the same tenant
+        if ($user->tenant_id !== $tenant->id) {
+            return false;
+        }
         
         // Super admin and tenant admin always have access
         if ($user->user_type === 'superadmin' || $user->user_type === 'admin') {
@@ -1047,6 +1141,84 @@ class VslaTransactionsController extends Controller
         return false;
     }
 
+
+    /**
+     * Validate share limits for share purchase transactions with enhanced validation
+     */
+    private function validateShareLimits($memberId, $shares, $meetingId, $vslaSettings, $tenant)
+    {
+        // Validate input parameters
+        if (!is_numeric($shares) || $shares < 0) {
+            return [
+                'valid' => false,
+                'message' => "Invalid shares value: {$shares}. Must be a positive number."
+            ];
+        }
+
+        if ($shares > 1000) { // Reasonable upper limit
+            return [
+                'valid' => false,
+                'message' => "Shares value too high: {$shares}. Maximum allowed: 1000."
+            ];
+        }
+
+        // Get VSLA settings with defaults
+        $minSharesPerMember = $vslaSettings->min_shares_per_member ?? 1;
+        $maxSharesPerMember = $vslaSettings->max_shares_per_member ?? 5;
+        $maxSharesPerMeeting = $vslaSettings->max_shares_per_meeting ?? 3;
+        
+        // Validate minimum shares
+        if ($shares < $minSharesPerMember) {
+            return [
+                'valid' => false,
+                'message' => "Minimum shares required: {$minSharesPerMember}, attempted: {$shares}"
+            ];
+        }
+        
+        // Validate maximum shares per meeting
+        if ($shares > $maxSharesPerMeeting) {
+            return [
+                'valid' => false,
+                'message' => "Maximum shares per meeting: {$maxSharesPerMeeting}, attempted: {$shares}"
+            ];
+        }
+        
+        // Get member's total shares (from all approved transactions in current cycle)
+        $currentCycle = VslaCycle::getActiveCycleForTenant($tenant->id);
+        $currentMemberShares = 0;
+        
+        if ($currentCycle) {
+            $currentMemberShares = VslaTransaction::where('tenant_id', $tenant->id)
+                ->where('member_id', $memberId)
+                ->where('cycle_id', $currentCycle->id)
+                ->where('transaction_type', 'share_purchase')
+                ->where('status', 'approved')
+                ->sum('shares');
+        }
+        
+        // Check if adding these shares would exceed the member's maximum
+        if (($currentMemberShares + $shares) > $maxSharesPerMember) {
+            return [
+                'valid' => false,
+                'message' => "Member would exceed maximum shares limit. Current: {$currentMemberShares}, Maximum: {$maxSharesPerMember}, Attempting to add: {$shares}"
+            ];
+        }
+
+        // Validate member exists and is active
+        $member = Member::where('tenant_id', $tenant->id)
+            ->where('id', $memberId)
+            ->where('status', 1)
+            ->first();
+
+        if (!$member) {
+            return [
+                'valid' => false,
+                'message' => "Member not found or inactive."
+            ];
+        }
+        
+        return ['valid' => true];
+    }
 
     /**
      * Reverse a VSLA transaction (for editing approved transactions)

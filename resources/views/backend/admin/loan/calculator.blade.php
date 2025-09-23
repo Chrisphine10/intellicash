@@ -40,6 +40,7 @@
 									<option value="fixed_rate">{{ _lang('Fixed Rate') }}</option>
 									<option value="mortgage">{{ _lang('Mortgage amortization') }}</option>
 									<option value="reducing_amount">{{ _lang('Reducing Amount') }}</option>
+									<option value="compound">{{ _lang('Compound Interest') }}</option>
 									<option value="one_time">{{ _lang('One-time payment') }}</option>
 								</select>
 							</div>

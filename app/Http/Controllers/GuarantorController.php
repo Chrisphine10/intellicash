@@ -2,9 +2,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Guarantor;
+use App\Models\GuarantorRequest;
 use App\Models\Loan;
+use App\Models\Member;
 use App\Models\SavingsAccount;
+use App\Mail\GuarantorInvitation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class GuarantorController extends Controller {
@@ -195,5 +199,84 @@ class GuarantorController extends Controller {
         $guarantor = Guarantor::find($id);
         $guarantor->delete();
         return back()->with('success', _lang('Deleted Successfully'));
+    }
+
+    /**
+     * Show guarantor invitation page
+     */
+    public function showInvitation($token) {
+        $guarantorRequest = GuarantorRequest::where('token', $token)
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$guarantorRequest) {
+            return view('guarantor.expired');
+        }
+
+        return view('guarantor.invitation', compact('guarantorRequest'));
+    }
+
+    /**
+     * Accept guarantor invitation
+     */
+    public function accept(Request $request, $token) {
+        $guarantorRequest = GuarantorRequest::where('token', $token)
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$guarantorRequest) {
+            return view('guarantor.expired');
+        }
+
+        // Check if guarantor is a member of the same tenant
+        $guarantor = Member::where('email', $guarantorRequest->guarantor_email)
+            ->where('tenant_id', $guarantorRequest->tenant_id)
+            ->first();
+
+        if (!$guarantor) {
+            return view('guarantor.not-member', compact('guarantorRequest'));
+        }
+
+        // Update guarantor request status
+        $guarantorRequest->update([
+            'status' => 'accepted',
+            'responded_at' => now(),
+            'response_message' => $request->response_message,
+        ]);
+
+        // Create guarantor record
+        $guarantorRecord = new Guarantor();
+        $guarantorRecord->loan_id = $guarantorRequest->loan_id;
+        $guarantorRecord->member_id = $guarantor->id;
+        $guarantorRecord->savings_account_id = $guarantor->savings_accounts()->first()->id ?? null;
+        $guarantorRecord->amount = $guarantorRequest->loan->applied_amount; // Full loan amount as guarantee
+        $guarantorRecord->save();
+
+        return view('guarantor.accepted', compact('guarantorRequest'));
+    }
+
+    /**
+     * Decline guarantor invitation
+     */
+    public function decline(Request $request, $token) {
+        $guarantorRequest = GuarantorRequest::where('token', $token)
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$guarantorRequest) {
+            return view('guarantor.expired');
+        }
+
+        // Update guarantor request status
+        $guarantorRequest->update([
+            'status' => 'declined',
+            'responded_at' => now(),
+            'response_message' => $request->response_message,
+        ]);
+
+        return view('guarantor.declined', compact('guarantorRequest'));
     }
 }

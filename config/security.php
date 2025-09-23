@@ -3,262 +3,209 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Military-Grade Security Configuration
+    | Security Configuration
     |--------------------------------------------------------------------------
     |
-    | This configuration implements banking-level security standards
-    | and military-grade protection protocols for the IntelliCash system.
+    | This file contains security-related configuration settings for the
+    | IntelliCash application to ensure maximum security compliance.
     |
     */
-
-    /*
-    |--------------------------------------------------------------------------
-    | Security Headers Configuration
-    |--------------------------------------------------------------------------
-    */
-    'headers' => [
-        'content_security_policy' => [
-            'default-src' => "'self'",
-            'script-src' => "'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
-            'style-src' => "'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
-            'font-src' => "'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
-            'img-src' => "'self' data: https:",
-            'connect-src' => "'self' https:",
-            'frame-ancestors' => "'none'",
-            'base-uri' => "'self'",
-            'form-action' => "'self'",
-            'object-src' => "'none'",
-            'media-src' => "'self'",
-            'manifest-src' => "'self'",
-        ],
-        
-        'hsts' => [
-            'max_age' => 31536000, // 1 year
-            'include_subdomains' => true,
-            'preload' => true,
-        ],
-        
-        'x_frame_options' => 'DENY',
-        'x_content_type_options' => 'nosniff',
-        'x_xss_protection' => '1; mode=block',
-        'referrer_policy' => 'strict-origin-when-cross-origin',
-        'permissions_policy' => 'geolocation=(), microphone=(), camera=()',
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Rate Limiting Configuration
-    |--------------------------------------------------------------------------
-    */
-    'rate_limiting' => [
-        'global' => [
-            'max_attempts' => 1000,
-            'decay_minutes' => 60,
-        ],
-        
-        'per_ip' => [
-            'max_attempts' => 100,
-            'decay_minutes' => 60,
-        ],
-        
-        'per_user' => [
-            'max_attempts' => 200,
-            'decay_minutes' => 60,
-        ],
-        
-        'endpoints' => [
-            'login' => ['max_attempts' => 5, 'decay_minutes' => 60],
-            'password_reset' => ['max_attempts' => 3, 'decay_minutes' => 60],
-            'api' => ['max_attempts' => 50, 'decay_minutes' => 60],
-            'admin' => ['max_attempts' => 30, 'decay_minutes' => 60],
-            'upload' => ['max_attempts' => 10, 'decay_minutes' => 60],
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | File Upload Security
-    |--------------------------------------------------------------------------
-    */
-    'file_upload' => [
-        'allowed_mime_types' => [
-            'image/jpeg' => ['jpg', 'jpeg'],
-            'image/png' => ['png'],
-            'image/gif' => ['gif'],
-            'image/webp' => ['webp'],
-            'application/pdf' => ['pdf'],
-            'application/msword' => ['doc'],
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
-            'application/vnd.ms-excel' => ['xls'],
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => ['xlsx'],
-            'text/plain' => ['txt'],
-            'application/zip' => ['zip'],
-        ],
-        
-        'max_file_sizes' => [
-            'image' => 5 * 1024 * 1024,      // 5MB
-            'document' => 10 * 1024 * 1024,  // 10MB
-            'archive' => 20 * 1024 * 1024,   // 20MB
-        ],
-        
-        'dangerous_extensions' => [
-            'php', 'php3', 'php4', 'php5', 'phtml', 'pht',
-            'asp', 'aspx', 'jsp', 'jspx',
-            'exe', 'bat', 'cmd', 'com', 'scr', 'pif',
-            'sh', 'bash', 'csh', 'ksh', 'zsh',
-            'py', 'pl', 'rb', 'js', 'vbs', 'wsf',
-            'jar', 'war', 'ear', 'class',
-        ],
-        
-        'scan_for_malware' => true,
-        'remove_exif_data' => true,
-        'max_image_dimensions' => ['width' => 2048, 'height' => 2048],
-    ],
 
     /*
     |--------------------------------------------------------------------------
     | Session Security
     |--------------------------------------------------------------------------
+    |
+    | Configure session security settings for maximum protection
+    |
     */
     'session' => [
-        'encrypt' => true,
-        'lifetime' => 120, // 2 hours
-        'expire_on_close' => true,
+        'encrypt' => env('SESSION_ENCRYPT', true),
         'secure' => env('SESSION_SECURE_COOKIE', true),
-        'http_only' => true,
-        'same_site' => 'strict',
-        'regenerate_on_login' => true,
-        'regenerate_frequency' => 30, // minutes
+        'http_only' => env('SESSION_HTTP_ONLY', true),
+        'same_site' => env('SESSION_SAME_SITE', 'strict'),
+        'lifetime' => env('SESSION_LIFETIME', 120),
+        'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | CSRF Protection
+    |--------------------------------------------------------------------------
+    |
+    | Configure CSRF protection settings
+    |
+    */
+    'csrf' => [
+        'enabled' => env('CSRF_ENABLED', true),
+        'exclude_uris' => [
+            '*/callback/instamojo',
+            'subscription_callback/instamojo',
+            'api/*',
+        ],
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Password Security
     |--------------------------------------------------------------------------
+    |
+    | Configure password security requirements
+    |
     */
     'password' => [
-        'min_length' => 12,
-        'require_uppercase' => true,
-        'require_lowercase' => true,
-        'require_numbers' => true,
-        'require_symbols' => true,
-        'max_age_days' => 90,
-        'history_count' => 5,
-        'lockout_attempts' => 5,
-        'lockout_duration' => 15, // minutes
+        'min_length' => env('PASSWORD_MIN_LENGTH', 8),
+        'require_uppercase' => env('PASSWORD_REQUIRE_UPPERCASE', true),
+        'require_lowercase' => env('PASSWORD_REQUIRE_LOWERCASE', true),
+        'require_numbers' => env('PASSWORD_REQUIRE_NUMBERS', true),
+        'require_symbols' => env('PASSWORD_REQUIRE_SYMBOLS', true),
+        'max_age_days' => env('PASSWORD_MAX_AGE_DAYS', 90),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Database Security
+    | Two-Factor Authentication
     |--------------------------------------------------------------------------
+    |
+    | Configure 2FA security settings
+    |
     */
-    'database' => [
-        'encrypt_at_rest' => true,
-        'audit_all_queries' => true,
-        'parameterized_queries_only' => true,
-        'connection_timeout' => 30,
-        'query_timeout' => 10,
+    '2fa' => [
+        'enabled' => env('2FA_ENABLED', true),
+        'issuer' => env('2FA_ISSUER', 'IntelliCash'),
+        'window' => env('2FA_WINDOW', 1),
+        'recovery_codes_count' => env('2FA_RECOVERY_CODES_COUNT', 8),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | API Security
+    | Rate Limiting
     |--------------------------------------------------------------------------
+    |
+    | Configure rate limiting for security
+    |
     */
-    'api' => [
-        'require_https' => true,
-        'rate_limit_per_minute' => 60,
-        'require_authentication' => true,
-        'log_all_requests' => true,
-        'validate_origin' => true,
-        'allowed_origins' => [
-            env('APP_URL'),
-        ],
+    'rate_limiting' => [
+        'login_attempts' => env('RATE_LIMIT_LOGIN_ATTEMPTS', 5),
+        'login_decay_minutes' => env('RATE_LIMIT_LOGIN_DECAY', 15),
+        'api_requests' => env('RATE_LIMIT_API_REQUESTS', 60),
+        'api_decay_minutes' => env('RATE_LIMIT_API_DECAY', 1),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Threat Detection
+    | File Upload Security
     |--------------------------------------------------------------------------
+    |
+    | Configure file upload security settings
+    |
     */
-    'threat_detection' => [
-        'enabled' => true,
-        'suspicious_patterns' => [
-            '/<script/i',
-            '/javascript:/i',
-            '/vbscript:/i',
-            '/onload=/i',
-            '/onerror=/i',
-            '/union\s+select/i',
-            '/drop\s+table/i',
-            '/insert\s+into/i',
-            '/delete\s+from/i',
-            '/update\s+set/i',
-            '/exec\s*\(/i',
-            '/eval\s*\(/i',
-            '/system\s*\(/i',
-            '/shell_exec/i',
-            '/passthru/i',
-            '/proc_open/i',
-            '/popen/i',
+    'file_upload' => [
+        'max_size' => env('FILE_UPLOAD_MAX_SIZE', 10240), // KB
+        'allowed_types' => [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'application/pdf',
+            'text/plain',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel',
         ],
-        
-        'sql_injection_patterns' => [
-            '/\'\s*or\s*1\s*=\s*1/i',
-            '/\'\s*or\s*\'1\'\s*=\s*\'1/i',
-            '/\'\s*union\s+select/i',
-            '/\'\s*drop\s+table/i',
-            '/\'\s*insert\s+into/i',
-            '/\'\s*delete\s+from/i',
-            '/\'\s*update\s+set/i',
-        ],
-        
-        'response_time_threshold' => 5000, // milliseconds
-        'concurrent_requests_threshold' => 50,
+        'scan_uploads' => env('FILE_UPLOAD_SCAN', true),
+        'quarantine_suspicious' => env('FILE_UPLOAD_QUARANTINE', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Encryption
+    |--------------------------------------------------------------------------
+    |
+    | Configure encryption settings
+    |
+    */
+    'encryption' => [
+        'key_length' => env('ENCRYPTION_KEY_LENGTH', 32),
+        'cipher' => env('ENCRYPTION_CIPHER', 'AES-256-CBC'),
+        'hash_algorithm' => env('HASH_ALGORITHM', 'sha256'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Security Headers
+    |--------------------------------------------------------------------------
+    |
+    | Configure security headers
+    |
+    */
+    'headers' => [
+        'x_frame_options' => env('X_FRAME_OPTIONS', 'DENY'),
+        'x_content_type_options' => env('X_CONTENT_TYPE_OPTIONS', 'nosniff'),
+        'x_xss_protection' => env('X_XSS_PROTECTION', '1; mode=block'),
+        'referrer_policy' => env('REFERRER_POLICY', 'strict-origin-when-cross-origin'),
+        'content_security_policy' => env('CONTENT_SECURITY_POLICY', "default-src 'self'"),
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Audit Logging
     |--------------------------------------------------------------------------
+    |
+    | Configure audit logging settings
+    |
     */
     'audit' => [
-        'enabled' => true,
-        'log_level' => 'info',
-        'retention_days' => 365,
-        'encrypt_logs' => true,
-        'log_sensitive_data' => false,
-        'real_time_alerts' => true,
+        'enabled' => env('AUDIT_ENABLED', true),
+        'log_level' => env('AUDIT_LOG_LEVEL', 'info'),
+        'retention_days' => env('AUDIT_RETENTION_DAYS', 365),
+        'log_failed_attempts' => env('AUDIT_LOG_FAILED_ATTEMPTS', true),
+        'log_successful_logins' => env('AUDIT_LOG_SUCCESSFUL_LOGINS', true),
+        'log_admin_actions' => env('AUDIT_LOG_ADMIN_ACTIONS', true),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Encryption Configuration
+    | IP Security
     |--------------------------------------------------------------------------
+    |
+    | Configure IP-based security settings
+    |
     */
-    'encryption' => [
-        'algorithm' => 'AES-256-GCM',
-        'key_rotation_days' => 90,
-        'encrypt_sensitive_fields' => [
-            'password',
-            'api_key',
-            'secret',
-            'token',
-            'ssn',
-            'credit_card',
-        ],
+    'ip_security' => [
+        'whitelist' => explode(',', env('IP_WHITELIST', '')),
+        'blacklist' => explode(',', env('IP_BLACKLIST', '')),
+        'geo_blocking' => env('IP_GEO_BLOCKING', false),
+        'allowed_countries' => explode(',', env('IP_ALLOWED_COUNTRIES', '')),
+        'blocked_countries' => explode(',', env('IP_BLOCKED_COUNTRIES', '')),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Debug Security
+    | Database Security
     |--------------------------------------------------------------------------
+    |
+    | Configure database security settings
+    |
     */
-    'debug' => [
-        'allowed_ips' => explode(',', env('DEBUG_ALLOWED_IPS', '127.0.0.1,::1')),
-        'require_superadmin' => true,
-        'rate_limit' => ['max_attempts' => 5, 'decay_minutes' => 1],
-        'log_access' => true,
+    'database' => [
+        'encrypt_connections' => env('DB_ENCRYPT_CONNECTIONS', true),
+        'ssl_verify' => env('DB_SSL_VERIFY', true),
+        'query_logging' => env('DB_QUERY_LOGGING', false),
+        'slow_query_threshold' => env('DB_SLOW_QUERY_THRESHOLD', 2000), // ms
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Security
+    |--------------------------------------------------------------------------
+    |
+    | Configure API security settings
+    |
+    */
+    'api' => [
+        'rate_limit' => env('API_RATE_LIMIT', 60),
+        'throttle_requests' => env('API_THROTTLE_REQUESTS', 100),
+        'require_https' => env('API_REQUIRE_HTTPS', true),
+        'cors_enabled' => env('API_CORS_ENABLED', true),
+        'cors_origins' => explode(',', env('API_CORS_ORIGINS', '*')),
     ],
 ];

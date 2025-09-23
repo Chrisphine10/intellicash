@@ -12111,7 +12111,7 @@ html {
   20. Start Footer CSS
 ===============================*/
 .footer{
-  background: #32cd32;
+  background: var(--bs-primary);
 }
 .footer a{
   text-decoration: none;
@@ -12119,6 +12119,19 @@ html {
 .footer .footer-top{
   padding-top: 50px;
   padding-bottom: 50px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+.footer .footer-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 3px;
+  background: var(--bs-primary);
+  border-radius: 2px;
 }
 .footer .about {
   padding-right: 50px;
@@ -12127,12 +12140,20 @@ html {
 .footer .single-footer h4 {
   font-size: 20px;
   font-weight: 800;
-  color: #fff;
+  color: #ffffff;
   margin-bottom: 30px;
   margin-top: 30px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .footer .about .logo{
   margin-bottom:20px;
+}
+.footer .about .logo h4{
+  color: #ffffff;
+  transition: color 0.3s ease;
+}
+.footer .about .logo h4:hover{
+  color: var(--bs-primary);
 }
 .footer .about .text{
   color: #ffffff;
@@ -12167,8 +12188,10 @@ html {
 .footer .links ul li a{
   color: #ffffff;
   text-decoration: none;
+  transition: color 0.3s ease;
 }
 .footer .links ul li a:hover{
+  color: var(--bs-primary);
   text-decoration: underline;
 }
 .footer .social .contact ul li {

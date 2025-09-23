@@ -48,6 +48,8 @@ use App\Http\Controllers\AuditController;
 use App\Http\Controllers\ApiModuleController;
 use App\Http\Controllers\Member\AuditController as MemberAuditController;
 use App\Http\Controllers\SystemAdmin\AuditController as SystemAdminAuditController;
+use App\Http\Controllers\VotingController;
+use App\Http\Controllers\VotingPositionController;
 use App\Http\Controllers\Install\InstallController;
 use App\Http\Controllers\SuperAdmin\PageController;
 use App\Http\Controllers\SuperAdmin\PostController;
@@ -107,6 +109,7 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
     // PWA Routes (no auth required)
     Route::get('/manifest.json', [PWAController::class, 'manifest'])->name('pwa.manifest');
     Route::get('/pwa/status', [PWAController::class, 'getStatus'])->name('pwa.status');
+    Route::get('/pwa/install-prompt', [PWAController::class, 'showInstallPrompt'])->name('pwa.install-prompt');
     Route::get('/offline', function() {
         return response()->file(public_path('offline'));
     })->name('pwa.offline');
@@ -262,6 +265,26 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
         Route::prefix('{tenant}')->middleware(['tenant', 'tenant.global'])->group(function () {
             Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 
+            //E-Signature Management
+            Route::prefix('esignature')->name('esignature.')->group(function () {
+                // Test route
+                Route::get('test', function() {
+                    return 'E-Signature test route works!';
+                })->name('test');
+                
+                // Documents - Following the same pattern as regular documents
+                Route::get('esignature-documents/statistics', [App\Http\Controllers\ESignatureController::class, 'statistics'])->name('esignature-documents.statistics');
+                Route::get('esignature-documents/{id}/audit-trail', [App\Http\Controllers\ESignatureController::class, 'auditTrail'])->name('esignature-documents.audit-trail');
+                Route::post('esignature-documents/{id}/send', [App\Http\Controllers\ESignatureController::class, 'send'])->name('esignature-documents.send');
+                Route::post('esignature-documents/{id}/cancel', [App\Http\Controllers\ESignatureController::class, 'cancel'])->name('esignature-documents.cancel');
+                Route::get('esignature-documents/{id}/download', [App\Http\Controllers\ESignatureController::class, 'download'])->name('esignature-documents.download');
+                Route::get('esignature-documents/{id}/download-signed', [App\Http\Controllers\ESignatureController::class, 'downloadSigned'])->name('esignature-documents.download-signed');
+                Route::resource('esignature-documents', App\Http\Controllers\ESignatureController::class);
+                
+                // Fields
+                Route::resource('fields', App\Http\Controllers\ESignatureFieldController::class);
+            });
+
             // Receipt QR Code Routes (Shared - accessible to both admin and customer)
             Route::prefix('receipt')->group(function () {
                 Route::get('/verify/{token}', [App\Http\Controllers\ReceiptVerificationController::class, 'verify'])->name('receipt.verify');
@@ -292,8 +315,8 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
             Route::post('/messages/reply/{id}', [MessageController::class, 'sendReply'])->name('messages.sendReply');
             Route::get('/messages/{id}/download_attachment', [MessageController::class, 'download_attachment'])->name('messages.download_attachment');
 
-            //Ajax Select2 Controller
-            Route::get('ajax/get_table_data', [Select2Controller::class, 'get_table_data']);
+                //Ajax Select2 Controller
+                Route::get('ajax/get_table_data', [Select2Controller::class, 'get_table_data']);
 
             /** Tenant Admin Only Routes **/
             Route::middleware('tenant.admin')->group(function () {
@@ -312,22 +335,41 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::resource('loan_products', LoanProductController::class)->except('show');
 
                 //Loan Terms and Privacy Policy
-                Route::resource('loan_terms', App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class);
-                Route::post('loan_terms/{id}/set_default', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'setDefault'])->name('loan_terms.set_default');
-                Route::post('loan_terms/{id}/toggle_active', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'toggleActive'])->name('loan_terms.toggle_active');
+                // Route::resource('loan_terms', App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class);
+                // Route::post('loan_terms/{id}/set_default', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'setDefault'])->name('loan_terms.set_default');
+
+                //Voting Management
+                Route::prefix('voting')->name('voting.')->group(function () {
+                    // Positions
+                    Route::resource('positions', VotingPositionController::class);
+                    Route::post('positions/{position}/toggle', [VotingPositionController::class, 'toggleActive'])->name('positions.toggle');
+                    
+                    // Elections
+                    Route::resource('elections', VotingController::class);
+                    Route::post('elections/{election}/start', [VotingController::class, 'start'])->name('elections.start');
+                    Route::post('elections/{election}/close', [VotingController::class, 'close'])->name('elections.close');
+                    Route::get('elections/{election}/results', [VotingController::class, 'results'])->name('elections.results');
+                    
+                    // Candidates
+                    Route::get('elections/{election}/candidates', [VotingController::class, 'manageCandidates'])->name('candidates.manage');
+                    Route::post('elections/{election}/candidates', [VotingController::class, 'addCandidate'])->name('candidates.add');
+                    Route::delete('candidates/{candidate}', [VotingController::class, 'removeCandidate'])->name('candidates.remove');
+                });
+
+                // Route::post('loan_terms/{id}/toggle_active', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'toggleActive'])->name('loan_terms.toggle_active');
                 Route::get('loan_terms/get_terms_for_product', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getTermsForProduct'])->name('loan_terms.get_terms_for_product');
-                Route::get('loan_terms/get_template_details', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getTemplateDetails'])->name('loan_terms.get_template_details');
-                Route::get('loan_terms/get_available_countries', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getAvailableCountries'])->name('loan_terms.get_available_countries');
-                Route::get('loan_terms/get_template_types_for_country', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getTemplateTypesForCountry'])->name('loan_terms.get_template_types_for_country');
+                // Route::get('loan_terms/get_template_details', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getTemplateDetails'])->name('loan_terms.get_template_details');
+                // Route::get('loan_terms/get_available_countries', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getAvailableCountries'])->name('loan_terms.get_available_countries');
+                // Route::get('loan_terms/get_template_types_for_country', [App\Http\Controllers\Admin\LoanTermsAndPrivacyController::class, 'getTemplateTypesForCountry'])->name('loan_terms.get_template_types_for_country');
 
                 //Template-based Loan Terms Creation
-                Route::get('loan_terms/create_from_template', [App\Http\Controllers\AdvancedLoanManagementController::class, 'createLoanTermsFromTemplate'])->name('loan_terms.create_from_template');
-                Route::post('loan_terms/store_from_template', [App\Http\Controllers\AdvancedLoanManagementController::class, 'storeLoanTermsFromTemplate'])->name('loan_terms.store_from_template');
+                // Route::get('loan_terms/create_from_template', [App\Http\Controllers\AdvancedLoanManagementController::class, 'createLoanTermsFromTemplate'])->name('loan_terms.create_from_template');
+                // Route::post('loan_terms/store_from_template', [App\Http\Controllers\AdvancedLoanManagementController::class, 'storeLoanTermsFromTemplate'])->name('loan_terms.store_from_template');
                 
                 //Legal Template Management
-                Route::get('legal_templates', [App\Http\Controllers\AdvancedLoanManagementController::class, 'indexLegalTemplates'])->name('legal_templates.index');
-                Route::get('legal_templates/{id}/edit', [App\Http\Controllers\AdvancedLoanManagementController::class, 'editLegalTemplate'])->name('legal_templates.edit');
-                Route::put('legal_templates/{id}', [App\Http\Controllers\AdvancedLoanManagementController::class, 'updateLegalTemplate'])->name('legal_templates.update');
+                // Route::get('legal_templates', [App\Http\Controllers\AdvancedLoanManagementController::class, 'indexLegalTemplates'])->name('legal_templates.index');
+                // Route::get('legal_templates/{id}/edit', [App\Http\Controllers\AdvancedLoanManagementController::class, 'editLegalTemplate'])->name('legal_templates.edit');
+                // Route::put('legal_templates/{id}', [App\Http\Controllers\AdvancedLoanManagementController::class, 'updateLegalTemplate'])->name('legal_templates.update');
                 
 
                 //Expense Categories
@@ -373,13 +415,50 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::post('modules/toggle-vsla', [App\Http\Controllers\ModuleController::class, 'toggleVsla'])->name('modules.toggle_vsla');
                 Route::post('modules/toggle-api', [App\Http\Controllers\ModuleController::class, 'toggleApi'])->name('modules.toggle_api');
                 Route::post('modules/toggle-qr-code', [App\Http\Controllers\ModuleController::class, 'toggleQrCode'])->name('modules.toggle_qr_code');
-                Route::post('modules/toggle-advanced-loan-management', [App\Http\Controllers\ModuleController::class, 'toggleAdvancedLoanManagement'])->name('modules.toggle_advanced_loan_management');
+                Route::post('modules/toggle-asset-management', [App\Http\Controllers\ModuleController::class, 'toggleAssetManagement'])->name('modules.toggle_asset_management');
+                Route::post('modules/toggle-esignature', [App\Http\Controllers\ModuleController::class, 'toggleESignature'])->name('modules.toggle_esignature');
                 
                 //QR Code Module Configuration
                 Route::get('modules/qr-code/configure', [App\Http\Controllers\ModuleController::class, 'configureQrCode'])->name('modules.qr_code.configure');
                 Route::get('modules/qr-code/guide', [App\Http\Controllers\ModuleController::class, 'qrCodeGuide'])->name('modules.qr_code.guide');
                 Route::post('modules/qr-code/update', [App\Http\Controllers\ModuleController::class, 'updateQrCodeConfig'])->name('modules.qr_code.update');
                 Route::post('modules/qr-code/test-ethereum', [App\Http\Controllers\ModuleController::class, 'testEthereumConnection'])->name('modules.qr_code.test_ethereum');
+
+                // Asset Management Module Routes
+                Route::prefix('asset-management')->middleware(['asset_module'])->group(function () {
+                    // Dashboard
+                    Route::get('/', [App\Http\Controllers\AssetManagementDashboardController::class, 'index'])->name('asset-management.dashboard');
+                    // Asset Categories
+                    Route::resource('asset-categories', App\Http\Controllers\AssetCategoryController::class);
+                    Route::post('asset-categories/{id}/toggle-status', [App\Http\Controllers\AssetCategoryController::class, 'toggleStatus'])->name('asset-categories.toggle-status');
+
+                    // Assets
+                    Route::get('assets/available-for-lease', [App\Http\Controllers\AssetController::class, 'availableForLease'])->name('assets.available-for-lease');
+                    Route::get('assets/{asset}/lease-form', [App\Http\Controllers\AssetController::class, 'leaseForm'])->name('assets.lease-form');
+                    Route::post('assets/{asset}/create-lease', [App\Http\Controllers\AssetController::class, 'createLease'])->name('assets.create-lease');
+                    Route::resource('assets', App\Http\Controllers\AssetController::class);
+
+                    // Asset Leases
+                    Route::post('asset-leases/{lease}/complete', [App\Http\Controllers\AssetLeaseController::class, 'complete'])->name('asset-leases.complete');
+                    Route::post('asset-leases/{lease}/cancel', [App\Http\Controllers\AssetLeaseController::class, 'cancel'])->name('asset-leases.cancel');
+                    Route::post('asset-leases/{lease}/mark-overdue', [App\Http\Controllers\AssetLeaseController::class, 'markOverdue'])->name('asset-leases.mark-overdue');
+                    Route::resource('asset-leases', App\Http\Controllers\AssetLeaseController::class);
+
+                    // Asset Maintenance
+                    Route::get('asset-maintenance/overdue', [App\Http\Controllers\AssetMaintenanceController::class, 'overdue'])->name('asset-maintenance.overdue');
+                    Route::post('asset-maintenance/{maintenance}/mark-in-progress', [App\Http\Controllers\AssetMaintenanceController::class, 'markInProgress'])->name('asset-maintenance.mark-in-progress');
+                    Route::post('asset-maintenance/{maintenance}/complete', [App\Http\Controllers\AssetMaintenanceController::class, 'complete'])->name('asset-maintenance.complete');
+                    Route::post('asset-maintenance/{maintenance}/cancel', [App\Http\Controllers\AssetMaintenanceController::class, 'cancel'])->name('asset-maintenance.cancel');
+                    Route::resource('asset-maintenance', App\Http\Controllers\AssetMaintenanceController::class);
+
+                    // Asset Reports
+                    Route::get('reports', [App\Http\Controllers\AssetReportsController::class, 'index'])->name('asset-reports.index');
+                    Route::get('reports/valuation', [App\Http\Controllers\AssetReportsController::class, 'valuation'])->name('asset-reports.valuation');
+                    Route::get('reports/profit-loss', [App\Http\Controllers\AssetReportsController::class, 'profitLoss'])->name('asset-reports.profit-loss');
+                    Route::get('reports/lease-performance', [App\Http\Controllers\AssetReportsController::class, 'leasePerformance'])->name('asset-reports.lease-performance');
+                    Route::get('reports/maintenance', [App\Http\Controllers\AssetReportsController::class, 'maintenance'])->name('asset-reports.maintenance');
+                    Route::get('reports/utilization', [App\Http\Controllers\AssetReportsController::class, 'utilization'])->name('asset-reports.utilization');
+                });
 
                 //API Management
                 Route::prefix('api')->group(function () {
@@ -423,6 +502,16 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('dashboard/deposit_requests_widget', [DashboardController::class, 'dashboard_widget'])->name('dashboard.deposit_requests_widget');
                 Route::get('dashboard/withdraw_requests_widget', [DashboardController::class, 'dashboard_widget'])->name('dashboard.withdraw_requests_widget');
                 Route::get('dashboard/loan_requests_widget', [DashboardController::class, 'dashboard_widget'])->name('dashboard.loan_requests_widget');
+
+                //Voting for Members
+                Route::prefix('voting')->name('voting.')->group(function () {
+                    Route::get('elections', [VotingController::class, 'index'])->name('elections.index');
+                    Route::get('elections/{election}', [VotingController::class, 'show'])->name('elections.show');
+                    Route::get('elections/{election}/vote', [VotingController::class, 'vote'])->name('elections.vote');
+                    Route::post('elections/{election}/vote', [VotingController::class, 'submitVote'])->name('vote.submit');
+                    Route::get('elections/{election}/results', [VotingController::class, 'results'])->name('elections.results');
+                    Route::get('elections/{election}/security-report', [VotingController::class, 'securityReport'])->name('elections.security-report');
+                });
                 Route::get('dashboard/expense_overview_widget', [DashboardController::class, 'dashboard_widget'])->name('dashboard.expense_overview_widget');
                 Route::get('dashboard/deposit_withdraw_analytics', [DashboardController::class, 'dashboard_widget'])->name('dashboard.deposit_withdraw_analytics');
                 Route::get('dashboard/recent_transaction_widget', [DashboardController::class, 'dashboard_widget'])->name('dashboard.recent_transaction_widget');
@@ -503,45 +592,43 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
 
                 //Loan Guarantor Controller
                 Route::resource('guarantors', GuarantorController::class)->except(['show', 'index']);
+                
+                //Guarantor Request Routes (public - no authentication required)
+                Route::get('guarantor/invitation/{token}', [GuarantorController::class, 'showInvitation'])->name('guarantor.invitation');
+                Route::post('guarantor/accept/{token}', [GuarantorController::class, 'accept'])->name('guarantor.accept');
+                Route::get('guarantor/decline/{token}', [GuarantorController::class, 'decline'])->name('guarantor.decline');
 
                 //Loan Payment Controller
                 Route::get('loan_payments/get_repayment_by_loan_id/{loan_id}', [LoanPaymentController::class, 'get_repayment_by_loan_id']);
                 Route::get('loan_payments/get_table_data', [LoanPaymentController::class, 'get_table_data']);
                 Route::resource('loan_payments', LoanPaymentController::class);
 
-                //Advanced Loan Management Routes
-                Route::prefix('advanced_loan_management')->name('advanced_loan_management.')->group(function () {
-                    //Dashboard
-                    Route::get('/', [App\Http\Controllers\AdvancedLoanManagementController::class, 'index'])->name('index');
-                    
-                    //Applications
-                    Route::get('applications', [App\Http\Controllers\AdvancedLoanManagementController::class, 'applications'])->name('applications');
-                    Route::get('applications/data', [App\Http\Controllers\AdvancedLoanManagementController::class, 'getApplicationsData'])->name('applications.data');
-                    Route::get('applications/{id}', [App\Http\Controllers\AdvancedLoanManagementController::class, 'showApplication'])->name('applications.show');
-                    Route::get('applications/{id}/edit', [App\Http\Controllers\AdvancedLoanManagementController::class, 'editApplication'])->name('applications.edit');
-                    Route::put('applications/{id}', [App\Http\Controllers\AdvancedLoanManagementController::class, 'updateApplication'])->name('applications.update');
-                    Route::post('applications/{id}/approve', [App\Http\Controllers\AdvancedLoanManagementController::class, 'approveApplication'])->name('applications.approve');
-                    Route::post('applications/{id}/reject', [App\Http\Controllers\AdvancedLoanManagementController::class, 'rejectApplication'])->name('applications.reject');
-                    Route::post('applications/{id}/disburse', [App\Http\Controllers\AdvancedLoanManagementController::class, 'disburseLoan'])->name('applications.disburse');
-                    
-            //Products (redirect to existing loan products)
-            Route::get('products', function() {
-                return redirect()->route('loan_products.index');
-            })->name('products.index');
-            Route::get('products/{id}/applications', [App\Http\Controllers\AdvancedLoanProductController::class, 'applications'])->name('products.applications');
-            Route::get('products/{id}/applications/data', [App\Http\Controllers\AdvancedLoanProductController::class, 'getProductApplicationsData'])->name('products.applications.data');
-                    
-                    //Bank Accounts for disbursement
-                    Route::get('bank-accounts', function() {
-                        return \App\Models\BankAccount::where('tenant_id', auth()->user()->tenant_id)
-                            ->where('is_active', true)
-                            ->select('id', 'account_name', 'account_number')
-                            ->get();
-                    })->name('bank_accounts');
-                });
+                //Document Management Routes
+                Route::get('documents/data', [App\Http\Controllers\DocumentController::class, 'getTableData'])->name('documents.data');
+                Route::get('documents/stats', [App\Http\Controllers\DocumentController::class, 'getStats'])->name('documents.stats');
+                Route::get('documents/{id}/download', [App\Http\Controllers\DocumentController::class, 'download'])->name('documents.download');
+                Route::get('documents/{id}/view', [App\Http\Controllers\DocumentController::class, 'view'])->name('documents.view');
+                Route::get('documents/category/{category}', [App\Http\Controllers\DocumentController::class, 'getByCategory'])->name('documents.category');
+                Route::get('documents/latest/{category}', [App\Http\Controllers\DocumentController::class, 'getLatest'])->name('documents.latest');
+                Route::resource('documents', App\Http\Controllers\DocumentController::class);
+
 
                 //Bank Accounts
                 Route::resource('bank_accounts', BankAccountController::class)->middleware("demo:PUT|PATCH|DELETE");
+                
+                //Bank Account Payment Methods
+                Route::get('bank_accounts/{bankAccount}/payment/connect', [App\Http\Controllers\BankAccountPaymentController::class, 'showConnectionForm'])->name('bank_accounts.payment.connect');
+                Route::post('bank_accounts/{bankAccount}/payment/connect', [App\Http\Controllers\BankAccountPaymentController::class, 'connectPaymentMethod'])->name('bank_accounts.payment.connect');
+                Route::delete('bank_accounts/{bankAccount}/payment/disconnect', [App\Http\Controllers\BankAccountPaymentController::class, 'disconnectPaymentMethod'])->name('bank_accounts.payment.disconnect');
+                Route::get('bank_accounts/payment/config/form', [App\Http\Controllers\BankAccountPaymentController::class, 'getPaymentConfigForm'])->name('bank_accounts.payment.config.form');
+                Route::post('bank_accounts/{bankAccount}/payment/test', [App\Http\Controllers\BankAccountPaymentController::class, 'testConnection'])->name('bank_accounts.payment.test');
+                
+                //Withdrawal Request Management
+                Route::get('withdrawal_requests', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'index'])->name('admin.withdrawal_requests.index');
+                Route::get('withdrawal_requests/{id}', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'show'])->name('admin.withdrawal_requests.show');
+                Route::post('withdrawal_requests/{id}/approve', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'approve'])->name('admin.withdrawal_requests.approve');
+                Route::post('withdrawal_requests/{id}/reject', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject'])->name('admin.withdrawal_requests.reject');
+                Route::get('withdrawal_requests/statistics', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'statistics'])->name('admin.withdrawal_requests.statistics');
 
                 //Bank Transaction
                 Route::get('bank_transactions/get_table_data', [BankTransactionController::class, 'get_table_data']);
@@ -561,6 +648,15 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                     Route::post('settings/sync-accounts', [App\Http\Controllers\VslaSettingsController::class, 'syncMemberAccounts'])->name('vsla.settings.sync-accounts');
                     Route::post('settings/assign-role', [App\Http\Controllers\VslaSettingsController::class, 'assignRole'])->name('vsla.settings.assign-role');
                     Route::post('settings/remove-role', [App\Http\Controllers\VslaSettingsController::class, 'removeRole'])->name('vsla.settings.remove-role');
+                    
+                    //VSLA Cycles
+                    Route::get('cycles', [App\Http\Controllers\VslaCycleController::class, 'index'])->name('vsla.cycles.index');
+                    Route::get('cycles/create', [App\Http\Controllers\VslaCycleController::class, 'create'])->name('vsla.cycles.create');
+                    Route::post('cycles', [App\Http\Controllers\VslaCycleController::class, 'store'])->name('vsla.cycles.store');
+                    Route::get('cycles/admin-show/{id}', [App\Http\Controllers\VslaCycleController::class, 'show'])->where('id', '[0-9]+')->name('vsla.cycles.admin_show');
+                    Route::get('cycles/get-table-data', [App\Http\Controllers\VslaCycleController::class, 'getTableData'])->name('vsla.cycles.get_table_data');
+                    Route::post('cycles/{id}/update-totals', [App\Http\Controllers\VslaCycleController::class, 'updateTotals'])->name('vsla.cycles.update_totals');
+                    Route::post('cycles/{id}/end-cycle', [App\Http\Controllers\VslaCycleController::class, 'endCycle'])->name('vsla.cycles.end_cycle');
                     
                     //VSLA Meetings
                     Route::get('meetings', [App\Http\Controllers\VslaMeetingsController::class, 'index'])->name('vsla.meetings.index');
@@ -602,6 +698,17 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                     Route::get('transactions/{id}/edit', [App\Http\Controllers\VslaTransactionsController::class, 'edit'])->name('vsla.transactions.edit');
                     Route::put('transactions/{id}', [App\Http\Controllers\VslaTransactionsController::class, 'update'])->name('vsla.transactions.update');
                     Route::delete('transactions/{id}', [App\Http\Controllers\VslaTransactionsController::class, 'destroy'])->name('vsla.transactions.destroy');
+                    
+                    //VSLA Cycles Management (Admin)
+                    Route::get('cycles', [App\Http\Controllers\VslaShareOutController::class, 'index'])->name('vsla.cycles.index');
+                    Route::get('cycles/create', [App\Http\Controllers\VslaShareOutController::class, 'create'])->name('vsla.cycles.create');
+                    Route::post('cycles', [App\Http\Controllers\VslaShareOutController::class, 'store'])->name('vsla.cycles.store');
+                    Route::get('cycles/{id}', [App\Http\Controllers\VslaShareOutController::class, 'show'])->name('vsla.cycles.show');
+                    Route::post('cycles/{id}/calculate', [App\Http\Controllers\VslaShareOutController::class, 'calculate'])->name('vsla.cycles.calculate');
+                    Route::post('cycles/{id}/approve', [App\Http\Controllers\VslaShareOutController::class, 'approve'])->name('vsla.cycles.approve');
+                    Route::post('cycles/{id}/process-payout', [App\Http\Controllers\VslaShareOutController::class, 'processPayout'])->name('vsla.cycles.process_payout');
+                    Route::post('cycles/{id}/cancel', [App\Http\Controllers\VslaShareOutController::class, 'cancel'])->name('vsla.cycles.cancel');
+                    Route::get('cycles/{id}/report', [App\Http\Controllers\VslaShareOutController::class, 'exportReport'])->name('vsla.cycles.export_report');
                 });
 
                 //Report Controller
@@ -616,6 +723,56 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::match(['get', 'post'], 'reports/bank_transactions', [ReportController::class, 'bank_transactions'])->name('reports.bank_transactions');
                 Route::get('reports/bank_balances', [ReportController::class, 'bank_balances'])->name('reports.bank_balances');
                 Route::match(['get', 'post'], 'reports/revenue_report', [ReportController::class, 'revenue_report'])->name('reports.revenue_report');
+                
+                // ==================== NEW ANALYTICS AND CHARTS ROUTES ====================
+                Route::get('reports/analytics/loan-released-chart', [ReportController::class, 'loan_released_chart'])->name('reports.analytics.loan_released_chart');
+                Route::get('reports/analytics/loan-collections-chart', [ReportController::class, 'loan_collections_chart'])->name('reports.analytics.loan_collections_chart');
+                Route::get('reports/analytics/collections-vs-due-chart', [ReportController::class, 'collections_vs_due_chart'])->name('reports.analytics.collections_vs_due_chart');
+                Route::get('reports/analytics/collections-vs-released-chart', [ReportController::class, 'collections_vs_released_chart'])->name('reports.analytics.collections_vs_released_chart');
+                Route::get('reports/analytics/outstanding-loans-summary', [ReportController::class, 'outstanding_loans_summary'])->name('reports.analytics.outstanding_loans_summary');
+                Route::get('reports/analytics/due-vs-collections-breakdown', [ReportController::class, 'due_vs_collections_breakdown'])->name('reports.analytics.due_vs_collections_breakdown');
+                Route::get('reports/analytics/loan-statistics-chart', [ReportController::class, 'loan_statistics_chart'])->name('reports.analytics.loan_statistics_chart');
+                Route::get('reports/analytics/new-clients-chart', [ReportController::class, 'new_clients_chart'])->name('reports.analytics.new_clients_chart');
+                Route::get('reports/analytics/loan-status-pie-chart', [ReportController::class, 'loan_status_pie_chart'])->name('reports.analytics.loan_status_pie_chart');
+                Route::get('reports/analytics/borrower-gender-chart', [ReportController::class, 'borrower_gender_chart'])->name('reports.analytics.borrower_gender_chart');
+                Route::get('reports/analytics/recovery-rate-analysis', [ReportController::class, 'recovery_rate_analysis'])->name('reports.analytics.recovery_rate_analysis');
+                Route::get('reports/analytics/loan-tenure-analysis', [ReportController::class, 'loan_tenure_analysis'])->name('reports.analytics.loan_tenure_analysis');
+                Route::get('reports/analytics/borrower-age-analysis', [ReportController::class, 'borrower_age_analysis'])->name('reports.analytics.borrower_age_analysis');
+                
+                // ==================== NEW REPORTS ROUTES ====================
+                Route::match(['get', 'post'], 'reports/borrowers_report', [ReportController::class, 'borrowers_report'])->name('reports.borrowers_report');
+                Route::match(['get', 'post'], 'reports/loan_arrears_aging_report', [ReportController::class, 'loan_arrears_aging_report'])->name('reports.loan_arrears_aging_report');
+                Route::match(['get', 'post'], 'reports/collections_report', [ReportController::class, 'collections_report'])->name('reports.collections_report');
+                Route::match(['get', 'post'], 'reports/disbursement_report', [ReportController::class, 'disbursement_report'])->name('reports.disbursement_report');
+                Route::match(['get', 'post'], 'reports/fees_report', [ReportController::class, 'fees_report'])->name('reports.fees_report');
+                Route::match(['get', 'post'], 'reports/loan_officer_report', [ReportController::class, 'loan_officer_report'])->name('reports.loan_officer_report');
+                Route::match(['get', 'post'], 'reports/loan_products_report', [ReportController::class, 'loan_products_report'])->name('reports.loan_products_report');
+                Route::match(['get', 'post'], 'reports/monthly_report', [ReportController::class, 'monthly_report'])->name('reports.monthly_report');
+                Route::match(['get', 'post'], 'reports/outstanding_report', [ReportController::class, 'outstanding_report'])->name('reports.outstanding_report');
+                Route::match(['get', 'post'], 'reports/portfolio_at_risk_report', [ReportController::class, 'portfolio_at_risk_report'])->name('reports.portfolio_at_risk_report');
+                Route::match(['get', 'post'], 'reports/at_glance_report', [ReportController::class, 'at_glance_report'])->name('reports.at_glance_report');
+                Route::match(['get', 'post'], 'reports/balance_sheet', [ReportController::class, 'balance_sheet'])->name('reports.balance_sheet');
+                Route::match(['get', 'post'], 'reports/profit_loss_statement', [ReportController::class, 'profit_loss_statement'])->name('reports.profit_loss_statement');
+                
+                // ==================== EXPORT ROUTES ====================
+                Route::get('reports/export/borrowers_report', [App\Http\Controllers\ExportController::class, 'export_borrowers_report'])->name('reports.export.borrowers_report');
+                Route::get('reports/export/loan_arrears_aging_report', [App\Http\Controllers\ExportController::class, 'export_loan_arrears_aging_report'])->name('reports.export.loan_arrears_aging_report');
+                Route::get('reports/export/collections_report', [App\Http\Controllers\ExportController::class, 'export_collections_report'])->name('reports.export.collections_report');
+                Route::get('reports/export/disbursement_report', [App\Http\Controllers\ExportController::class, 'export_disbursement_report'])->name('reports.export.disbursement_report');
+                Route::get('reports/export/fees_report', [App\Http\Controllers\ExportController::class, 'export_fees_report'])->name('reports.export.fees_report');
+                Route::get('reports/export/outstanding_report', [App\Http\Controllers\ExportController::class, 'export_outstanding_report'])->name('reports.export.outstanding_report');
+                Route::get('reports/export/portfolio_at_risk_report', [App\Http\Controllers\ExportController::class, 'export_portfolio_at_risk_report'])->name('reports.export.portfolio_at_risk_report');
+                Route::get('reports/export/loan_officer_report', [App\Http\Controllers\ExportController::class, 'export_loan_officer_report'])->name('reports.export.loan_officer_report');
+                Route::get('reports/export/loan_products_report', [App\Http\Controllers\ExportController::class, 'export_loan_products_report'])->name('reports.export.loan_products_report');
+                
+                // ==================== PRINT ROUTES ====================
+                Route::get('print/repayment-receipt/{payment_id}', [App\Http\Controllers\PrintController::class, 'repayment_receipt'])->name('print.repayment_receipt');
+                Route::get('print/loan-statement/{loan_id}', [App\Http\Controllers\PrintController::class, 'loan_statement'])->name('print.loan_statement');
+                Route::get('print/borrower-statement/{member_id}', [App\Http\Controllers\PrintController::class, 'borrower_statement'])->name('print.borrower_statement');
+                Route::get('print/loan-schedule/{loan_id}', [App\Http\Controllers\PrintController::class, 'loan_schedule'])->name('print.loan_schedule');
+                Route::get('print/savings-statement/{account_id}', [App\Http\Controllers\PrintController::class, 'savings_statement'])->name('print.savings_statement');
+                Route::get('print/savings-transaction-receipt/{transaction_id}', [App\Http\Controllers\PrintController::class, 'savings_transaction_receipt'])->name('print.savings_transaction_receipt');
+                Route::get('print/other-income-receipt/{transaction_id}', [App\Http\Controllers\PrintController::class, 'other_income_receipt'])->name('print.other_income_receipt');
             });
 
             /** Tenant Customer Routes **/
@@ -643,12 +800,12 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('loans/my_loans', [App\Http\Controllers\Customer\LoanController::class, 'index'])->name('loans.my_loans');
 
                 //Advanced Loan Application Routes (for authenticated members only)
-                Route::get('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'showApplicationForm'])->name('loan_application.form');
-                Route::post('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'storeApplication'])->name('loan_application.store');
-                Route::get('/loan-application/success/{id}', [App\Http\Controllers\PublicLoanApplicationController::class, 'showSuccess'])->name('loan_application.success');
-                Route::get('/loan-application/status', [App\Http\Controllers\PublicLoanApplicationController::class, 'showStatus'])->name('loan_application.status');
-                Route::get('/loan-application/products', [App\Http\Controllers\PublicLoanApplicationController::class, 'getLoanProducts'])->name('loan_application.products');
-                Route::get('/loan-application/products/{id}', [App\Http\Controllers\PublicLoanApplicationController::class, 'getLoanProductDetails'])->name('loan_application.product_details');
+                // Route::get('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'showApplicationForm'])->name('loan_application.form');
+                // Route::post('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'storeApplication'])->name('loan_application.store');
+                // Route::get('/loan-application/success/{id}', [App\Http\Controllers\PublicLoanApplicationController::class, 'showSuccess'])->name('loan_application.success');
+                // Route::get('/loan-application/status', [App\Http\Controllers\PublicLoanApplicationController::class, 'showStatus'])->name('loan_application.status');
+                // Route::get('/loan-application/products', [App\Http\Controllers\PublicLoanApplicationController::class, 'getLoanProducts'])->name('loan_application.products');
+                // Route::get('/loan-application/products/{id}', [App\Http\Controllers\PublicLoanApplicationController::class, 'getLoanProductDetails'])->name('loan_application.product_details');
 
                 //Deposit Money
                 Route::match(['get', 'post'], 'deposit/manual_deposit/{id}', [App\Http\Controllers\Customer\DepositController::class, 'manual_deposit'])->name('deposit.manual_deposit');
@@ -660,22 +817,39 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('deposit/instant_methods', [App\Http\Controllers\Customer\DepositController::class, 'automatic_methods'])->name('deposit.automatic_methods');
 
                 //Withdraw Money
-                Route::match(['get', 'post'], 'withdraw/offline_withdraw/{id}/{otp?}', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_withdraw'])->name('withdraw.manual_withdraw');
                 Route::get('withdraw/offline_methods', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_methods'])->name('withdraw.manual_methods');
+                Route::match(['get', 'post'], 'withdraw/offline_withdraw/{id}/{otp?}', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_withdraw'])->name('withdraw.manual_withdraw');
                 Route::get('withdraw/history', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalHistory'])->name('withdraw.history');
                 Route::get('withdraw/requests', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalRequests'])->name('withdraw.requests');
                 Route::get('withdraw/request_details/{id}', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalRequestDetails'])->name('withdraw.request_details');
 
-                //Funds Transfer
-                Route::get('funds_transfer', [App\Http\Controllers\Customer\FundsTransferController::class, 'showTransferForm'])->name('funds_transfer.form');
-                Route::post('funds_transfer/process', [App\Http\Controllers\Customer\FundsTransferController::class, 'processTransfer'])->name('funds_transfer.process');
-                Route::get('funds_transfer/history', [App\Http\Controllers\Customer\FundsTransferController::class, 'transferHistory'])->name('funds_transfer.history');
-                Route::get('funds_transfer/details/{id}', [App\Http\Controllers\Customer\FundsTransferController::class, 'transferDetails'])->name('funds_transfer.details');
+                //Funds Transfer - REMOVED (replaced with bank account payment methods)
 
                 //Report Controller
                 Route::match(['get', 'post'], 'reports/account_statement', [App\Http\Controllers\Customer\ReportController::class, 'account_statement'])->name('customer_reports.account_statement');
                 Route::match(['get', 'post'], 'reports/transactions_report', [App\Http\Controllers\Customer\ReportController::class, 'transactions_report'])->name('customer_reports.transactions_report');
                 Route::match(['get', 'post'], 'reports/account_balances', [App\Http\Controllers\Customer\ReportController::class, 'account_balances'])->name('customer_reports.account_balances');
+
+        //VSLA Cycles (Member Access)
+        Route::get('vsla/cycles', [App\Http\Controllers\Customer\VslaCycleController::class, 'index'])->name('customer.vsla.cycle.index');
+        Route::get('vsla/cycles/show/{cycle_id}', [App\Http\Controllers\Customer\VslaCycleController::class, 'show'])->where('cycle_id', '[0-9]+')->name('customer.vsla.cycle.show');
+        Route::post('vsla/cycles/send-report/{cycle_id}', [App\Http\Controllers\Customer\VslaCycleController::class, 'sendCompleteCycleReport'])->where('cycle_id', '[0-9]+')->name('customer.vsla.cycle.send_report');
+        Route::get('vsla/notifications/preferences', [App\Http\Controllers\Customer\VslaCycleController::class, 'getNotificationPreferences'])->name('customer.vsla.notifications.preferences');
+        Route::post('vsla/notifications/preferences', [App\Http\Controllers\Customer\VslaCycleController::class, 'updateNotificationPreferences'])->name('customer.vsla.notifications.update');
+                
+                // Debug route to see what's being captured
+                Route::get('vsla/cycles/debug/{id}', function($id) {
+                    return response()->json([
+                        'id' => $id,
+                        'tenant' => app('tenant')->slug,
+                        'url' => request()->url(),
+                        'route_name' => request()->route()->getName()
+                    ]);
+                })->name('customer.vsla.cycle.debug');
+                
+                //VSLA Shareout (Member Access) - Legacy routes for backward compatibility
+                Route::get('vsla/shareouts', [App\Http\Controllers\Customer\VslaShareoutController::class, 'index'])->name('customer.vsla.cycles.index');
+                Route::get('vsla/shareouts/{cycle}', [App\Http\Controllers\Customer\VslaShareoutController::class, 'show'])->name('customer.vsla.cycles.show');
 
                 //Member Audit Trail
                 Route::get('audit/get_table_data', [MemberAuditController::class, 'getTableData'])->name('member.audit.get_table_data');
@@ -747,6 +921,19 @@ Route::prefix('admin/security')->middleware(['auth', 'superadmin'])->group(funct
     Route::post('/unblock-ip', [App\Http\Controllers\Admin\SecurityDashboardController::class, 'unblockIP'])->name('admin.security.unblock-ip');
     Route::get('/config', [App\Http\Controllers\Admin\SecurityDashboardController::class, 'getSecurityConfig'])->name('admin.security.config');
     Route::get('/export-logs', [App\Http\Controllers\Admin\SecurityDashboardController::class, 'exportLogs'])->name('admin.security.export-logs');
+    
+    // Security Testing Interface
+    Route::get('/testing', [App\Http\Controllers\SecurityDashboardTestController::class, 'index'])->name('security.testing');
+    Route::post('/testing/run', [App\Http\Controllers\SecurityDashboardTestController::class, 'runTests'])->name('security.testing.run');
+    Route::get('/testing/results', [App\Http\Controllers\SecurityDashboardTestController::class, 'getResults'])->name('security.testing.results');
+    Route::get('/testing/standards', [App\Http\Controllers\SecurityDashboardTestController::class, 'getBankingStandards'])->name('security.testing.standards');
+    Route::get('/testing/history', [App\Http\Controllers\SecurityDashboardTestController::class, 'getTestHistory'])->name('security.testing.history');
+    Route::get('/testing/detail/{id}', [App\Http\Controllers\SecurityDashboardTestController::class, 'getTestDetail'])->name('security.testing.detail');
+    Route::delete('/testing/delete/{id}', [App\Http\Controllers\SecurityDashboardTestController::class, 'deleteTestResult'])->name('security.testing.delete');
+    
+    // VSLA-specific test routes
+    Route::get('/testing/vsla', [App\Http\Controllers\SecurityDashboardTestController::class, 'runVSLATestsOnly'])->name('security.testing.vsla');
+    Route::post('/testing/vsla/run', [App\Http\Controllers\SecurityDashboardTestController::class, 'runVSLATestsOnly'])->name('security.testing.vsla.run');
 });
 
 //Subscription Payment
@@ -763,11 +950,29 @@ Route::prefix('subscription_callback')->group(function () {
     Route::post('offline_payment/{slug}', [OfflineProcessController::class, 'callback'])->name('subscription_callback.offline');
 });
 
-Route::prefix('{tenant}')->middleware(['tenant'])->group(function () {
-    //Public Loan Application Routes (accessible to anyone with tenant context)
-    // Note: These routes are now moved to authenticated section below
-    
-    Route::prefix('callback')->group(function () {
+// SIMPLE TEST ROUTE - OUTSIDE ALL GROUPS
+Route::get('test-esignature/{id}', function($id) {
+    return "E-Signature test route works! ID: " . $id;
+})->name('test.esignature');
+
+    Route::prefix('{tenant}')->middleware(['tenant'])->group(function () {
+        //Public E-Signature Routes (no authentication required)
+        Route::prefix('esignature-public')->name('esignature.public.')->group(function () {
+            Route::get('sign/{token}', [App\Http\Controllers\PublicESignatureController::class, 'showSigningPage'])->name('sign');
+            Route::post('sign/{token}', [App\Http\Controllers\PublicESignatureController::class, 'submitSignature'])->name('submit');
+            Route::get('success/{token}', [App\Http\Controllers\PublicESignatureController::class, 'success'])->name('success');
+            Route::post('decline/{token}', [App\Http\Controllers\PublicESignatureController::class, 'decline'])->name('decline');
+            Route::get('declined/{token}', [App\Http\Controllers\PublicESignatureController::class, 'declined'])->name('declined');
+            Route::get('download/{token}', [App\Http\Controllers\PublicESignatureController::class, 'downloadDocument'])->name('download-document');
+            Route::get('fields/{token}', [App\Http\Controllers\PublicESignatureController::class, 'getFields'])->name('fields');
+            Route::post('validate-field/{token}', [App\Http\Controllers\PublicESignatureController::class, 'validateField'])->name('validate-field');
+        });
+
+        
+        //Public Loan Application Routes (accessible to anyone with tenant context)
+        // Note: These routes are now moved to authenticated section below
+        
+        Route::prefix('callback')->group(function () {
         //Fiat Currency
         Route::get('paypal', [App\Http\Controllers\Gateway\PayPal\ProcessController::class, 'callback'])->name('callback.PayPal')->middleware('auth');
         Route::post('stripe', [App\Http\Controllers\Gateway\Stripe\ProcessController::class, 'callback'])->name('callback.Stripe')->middleware('auth');
@@ -1079,18 +1284,13 @@ Route::prefix('{tenant}')->middleware(['tenant'])->group(function () {
 
 //Buni Payment Initiation - moved to tenant group
 
-//Buni Withdraw Routes
+//Buni Withdraw Routes - REMOVED (integrated into enhanced withdrawal)
+//Buni Payment Initiation (kept for other uses)
 Route::prefix('{tenant}')->middleware(['tenant'])->group(function () {
     Route::middleware(['auth'])->group(function () {
-        Route::get('withdraw/buni', [App\Http\Controllers\Customer\BuniWithdrawController::class, 'showWithdrawForm'])->name('withdraw.buni.form');
-        Route::post('withdraw/buni/process', [App\Http\Controllers\Customer\BuniWithdrawController::class, 'processWithdraw'])->name('withdraw.buni.process');
-        
         //Buni Payment Initiation
         Route::post('gateway/buni/initiate', [App\Http\Controllers\Gateway\Buni\ProcessController::class, 'initiate'])->name('gateway.buni.initiate');
     });
-    
-    // Buni withdraw callback (no auth required)
-    Route::post('callback/buni/withdraw', [App\Http\Controllers\Customer\BuniWithdrawController::class, 'handleWithdrawCallback'])->name('callback.Buni.withdraw');
 });
 
 //Membership Subscription

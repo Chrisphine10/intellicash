@@ -38,7 +38,7 @@
                                 <td>
                                     {{ $meeting->attendance->where('present', true)->count() }} / {{ $meeting->attendance->count() }}
                                 </td>
-                                <td>{{ $meeting->createdUser->name }}</td>
+                                <td>{{ $meeting->createdUser ? $meeting->createdUser->name : 'N/A' }}</td>
                                 <td>
                                     <a href="{{ route('vsla.meetings.show', $meeting->id) }}" class="btn btn-info btn-sm" title="{{ _lang('View Meeting') }}">
                                         <i class="fas fa-eye"></i>

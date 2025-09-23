@@ -46,11 +46,9 @@ class LoanProduct extends Model {
         $query->where('status', 1);
     }
 
-    /**
-     * Get the advanced loan applications for this product
-     */
-    public function advancedLoanApplications()
+    public function loans()
     {
-        return $this->hasMany(AdvancedLoanApplication::class, 'loan_product_id');
+        return $this->hasMany('App\Models\Loan', 'loan_product_id');
     }
+
 }

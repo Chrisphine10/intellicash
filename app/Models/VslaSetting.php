@@ -12,6 +12,9 @@ class VslaSetting extends Model
     protected $fillable = [
         'tenant_id',
         'share_amount',
+        'min_shares_per_member',
+        'max_shares_per_member', 
+        'max_shares_per_meeting',
         'penalty_amount',
         'welfare_amount',
         'meeting_frequency',
@@ -21,6 +24,11 @@ class VslaSetting extends Model
         'auto_approve_loans',
         'max_loan_amount',
         'max_loan_duration_days',
+        'create_default_loan_product',
+        'create_default_savings_products',
+        'create_default_bank_accounts',
+        'create_default_expense_categories',
+        'auto_create_member_accounts',
     ];
 
     protected $casts = [
@@ -30,6 +38,11 @@ class VslaSetting extends Model
         'auto_approve_loans' => 'boolean',
         'max_loan_amount' => 'decimal:2',
         'meeting_days' => 'array',
+        'create_default_loan_product' => 'boolean',
+        'create_default_savings_products' => 'boolean',
+        'create_default_bank_accounts' => 'boolean',
+        'create_default_expense_categories' => 'boolean',
+        'auto_create_member_accounts' => 'boolean',
     ];
 
     public function tenant()

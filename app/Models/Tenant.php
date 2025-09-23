@@ -21,7 +21,8 @@ class Tenant extends Model {
         'vsla_enabled',
         'api_enabled',
         'qr_code_enabled',
-        'advanced_loan_management_enabled',
+        'asset_management_enabled',
+        'esignature_enabled',
     ];
 
     protected static function boot() {
@@ -99,6 +100,16 @@ class Tenant extends Model {
         return $this->hasMany(VslaTransaction::class);
     }
 
+    public function vslaCycles()
+    {
+        return $this->hasMany(VslaCycle::class);
+    }
+
+    public function vslaShareouts()
+    {
+        return $this->hasMany(VslaShareout::class);
+    }
+
     public function isVslaEnabled()
     {
         return $this->vsla_enabled;
@@ -107,6 +118,31 @@ class Tenant extends Model {
     public function isApiEnabled()
     {
         return $this->api_enabled ?? false;
+    }
+
+    public function isAssetManagementEnabled()
+    {
+        return $this->asset_management_enabled ?? false;
+    }
+
+    public function assetCategories()
+    {
+        return $this->hasMany(AssetCategory::class);
+    }
+
+    public function assets()
+    {
+        return $this->hasMany(Asset::class);
+    }
+
+    public function assetLeases()
+    {
+        return $this->hasMany(AssetLease::class);
+    }
+
+    public function assetMaintenance()
+    {
+        return $this->hasMany(AssetMaintenance::class);
     }
 
 }

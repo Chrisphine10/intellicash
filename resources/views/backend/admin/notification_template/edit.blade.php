@@ -26,6 +26,36 @@
 						</div>
 					</div>
 
+					@if(strpos($emailtemplate->name, 'VSLA') !== false)
+					<div class="col-md-12">
+						<div class="alert alert-info">
+							<h6 class="alert-heading">
+								<i class="fas fa-info-circle"></i> {{ _lang('VSLA Template Information') }}
+							</h6>
+							<p class="mb-2">{{ _lang('This template is used for VSLA (Village Savings and Loan Association) notifications.') }}</p>
+							<div class="row">
+								<div class="col-md-6">
+									<h6>{{ _lang('Available Placeholders:') }}</h6>
+									<ul class="list-unstyled">
+										<li><code>{member_name}</code> - {{ _lang('Member full name') }}</li>
+										<li><code>{cycle_name}</code> - {{ _lang('VSLA cycle name') }}</li>
+										<li><code>{cycle_status}</code> - {{ _lang('Cycle status (Active/Completed)') }}</li>
+										<li><code>{member_shares}</code> - {{ _lang('Number of shares owned') }}</li>
+									</ul>
+								</div>
+								<div class="col-md-6">
+									<h6>&nbsp;</h6>
+									<ul class="list-unstyled">
+										<li><code>{expected_return}</code> - {{ _lang('Expected return amount') }}</li>
+										<li><code>{currency}</code> - {{ _lang('Base currency') }}</li>
+										<li><code>{company_name}</code> - {{ _lang('Tenant/Company name') }}</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+					</div>
+					@endif
+
 					<div class="col-md-12">
 						<div class="form-group">
 							<label class="control-label">{{ _lang('Subject') }}</label>

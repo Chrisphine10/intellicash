@@ -54,11 +54,16 @@ class ModuleController extends Controller
                 'configured' => $qrCodeSettings ? $qrCodeSettings->isFullyConfigured() : false,
                 'ethereum_enabled' => $qrCodeSettings ? $qrCodeSettings->ethereum_enabled : false,
             ],
-            'advanced_loan_management' => [
-                'name' => 'Advanced Loan Management',
-                'description' => 'Comprehensive business loan management with collateral support',
-                'enabled' => $tenant->advanced_loan_management_enabled ?? true, // Default enabled since it's already implemented
-            ]
+            'asset_management' => [
+                'name' => 'Asset Management Module',
+                'description' => 'Comprehensive asset management including vehicles, investments, and leasable items',
+                'enabled' => $tenant->isAssetManagementEnabled(),
+            ],
+            'esignature' => [
+                'name' => 'E-Signature Module',
+                'description' => 'Electronic signature management for documents and agreements',
+                'enabled' => $tenant->esignature_enabled ?? false,
+            ],
         ];
         
         return view('backend.admin.modules.index', compact('modules'));
@@ -150,11 +155,8 @@ class ModuleController extends Controller
                 ]);
             }
             
-            // Create VSLA accounts if they don't exist
-            $this->createVslaAccounts($tenant);
-            
-            // Create default VSLA loan product if it doesn't exist
-            $this->createVslaLoanProduct($tenant);
+            // Create VSLA default items based on settings
+            $this->createVslaDefaultItems($tenant);
             
         } catch (\Exception $e) {
             \Log::error('VSLA Module Provision Error: ' . $e->getMessage());
@@ -163,6 +165,56 @@ class ModuleController extends Controller
         }
     }
     
+    /**
+     * Create VSLA default items based on settings
+     */
+    private function createVslaDefaultItems($tenant)
+    {
+        $settings = $tenant->vslaSettings;
+        
+        if (!$settings) {
+            // If no settings exist, create them with defaults
+            $settings = \App\Models\VslaSetting::create([
+                'tenant_id' => $tenant->id,
+                'share_amount' => 100,
+                'min_shares_per_member' => 1,
+                'max_shares_per_member' => 5,
+                'max_shares_per_meeting' => 3,
+                'penalty_amount' => 50,
+                'welfare_amount' => 20,
+                'meeting_frequency' => 'weekly',
+                'meeting_day_of_week' => null,
+                'meeting_days' => null,
+                'meeting_time' => '10:00:00',
+                'auto_approve_loans' => false,
+                'max_loan_amount' => null,
+                'max_loan_duration_days' => null,
+                'create_default_loan_product' => true,
+                'create_default_savings_products' => true,
+                'create_default_bank_accounts' => true,
+                'create_default_expense_categories' => true,
+                'auto_create_member_accounts' => true,
+            ]);
+        }
+        
+        // Create default items based on settings
+        if ($settings->create_default_bank_accounts) {
+            $this->createVslaAccounts($tenant);
+        }
+        
+        if ($settings->create_default_loan_product) {
+            $this->createVslaLoanProduct($tenant);
+        }
+        
+        if ($settings->create_default_savings_products) {
+            $this->createVslaSavingsProducts($tenant);
+        }
+        
+        if ($settings->create_default_expense_categories) {
+            $this->createDefaultExpenseCategories($tenant);
+        }
+    }
+
     /**
      * Create VSLA specific accounts
      */
@@ -631,9 +683,9 @@ class ModuleController extends Controller
     }
 
     /**
-     * Toggle Advanced Loan Management module status
+     * Toggle Asset Management module status
      */
-    public function toggleAdvancedLoanManagement(Request $request)
+    public function toggleAssetManagement(Request $request)
     {
         // Check permission - only admin can toggle modules
         if (!is_admin()) {
@@ -647,8 +699,8 @@ class ModuleController extends Controller
         $enabled = $request->boolean('enabled');
         
         // Check if already in the desired state
-        if (($tenant->advanced_loan_management_enabled ?? true) == $enabled) {
-            $message = $enabled ? 'Advanced Loan Management module is already enabled' : 'Advanced Loan Management module is already disabled';
+        if ($tenant->isAssetManagementEnabled() == $enabled) {
+            $message = $enabled ? 'Asset Management module is already enabled' : 'Asset Management module is already disabled';
             
             if ($request->ajax()) {
                 return response()->json(['result' => 'info', 'message' => _lang($message)]);
@@ -660,16 +712,16 @@ class ModuleController extends Controller
         DB::beginTransaction();
         
         try {
-            $tenant->advanced_loan_management_enabled = $enabled;
+            $tenant->asset_management_enabled = $enabled;
             $tenant->save();
             
             if ($enabled) {
-                $this->provisionAdvancedLoanManagementModule($tenant);
+                $this->provisionAssetManagementModule($tenant);
             }
             
             DB::commit();
             
-            $message = $enabled ? 'Advanced Loan Management module activated successfully' : 'Advanced Loan Management module deactivated successfully';
+            $message = $enabled ? 'Asset Management module activated successfully' : 'Asset Management module deactivated successfully';
             
             if ($request->ajax()) {
                 return response()->json(['result' => 'success', 'message' => _lang($message)]);
@@ -680,7 +732,7 @@ class ModuleController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             
-            \Log::error('Advanced Loan Management Module Toggle Error: ' . $e->getMessage());
+            \Log::error('Asset Management Module Toggle Error: ' . $e->getMessage());
             \Log::error('Stack trace: ' . $e->getTraceAsString());
             
             if ($request->ajax()) {
@@ -692,134 +744,339 @@ class ModuleController extends Controller
     }
     
     /**
-     * Provision Advanced Loan Management module when activated
+     * Provision Asset Management module when activated
      */
-    private function provisionAdvancedLoanManagementModule($tenant)
+    private function provisionAssetManagementModule($tenant)
     {
         try {
-            // Create default advanced loan products if they don't exist
-            $this->createDefaultAdvancedLoanProducts($tenant);
+            // Create default asset categories if they don't exist
+            $this->createDefaultAssetCategories($tenant);
             
-            // Log Advanced Loan Management module activation
-            \Log::info('Advanced Loan Management module activated for tenant: ' . $tenant->id);
+            // Log Asset Management module activation
+            \Log::info('Asset Management module activated for tenant: ' . $tenant->id);
             
         } catch (\Exception $e) {
-            \Log::error('Advanced Loan Management Module Provision Error: ' . $e->getMessage());
+            \Log::error('Asset Management Module Provision Error: ' . $e->getMessage());
             \Log::error('Stack trace: ' . $e->getTraceAsString());
             throw $e;
         }
     }
     
     /**
-     * Create default advanced loan products
+     * Create default asset categories
      */
-    private function createDefaultAdvancedLoanProducts($tenant)
+    private function createDefaultAssetCategories($tenant)
     {
-        $currency = \App\Models\Currency::where('tenant_id', $tenant->id)->first();
-        
-        if (!$currency) {
-            \Log::error('No currency found for tenant when creating advanced loan products: ' . $tenant->id);
-            throw new \Exception('No currency found for this tenant. Please add a currency first.');
-        }
-        
-        // Check if loan_products table exists
-        if (!Schema::hasTable('loan_products')) {
-            \Log::warning('Loan products table does not exist. Please run the migration first.');
-            return;
-        }
-        
-        // Create Business Loan Product
-        $businessLoanProduct = \App\Models\LoanProduct::where('tenant_id', $tenant->id)
-            ->where('name', 'Business Loan')
-            ->first();
+        $defaultCategories = [
+            [
+                'name' => 'Vehicles',
+                'description' => 'Cars, motorcycles, trucks, and other vehicles',
+                'type' => 'leasable',
+            ],
+            [
+                'name' => 'Office Equipment',
+                'description' => 'Computers, printers, furniture, and office supplies',
+                'type' => 'fixed',
+            ],
+            [
+                'name' => 'Investment Portfolio',
+                'description' => 'Stocks, bonds, mutual funds, and other investments',
+                'type' => 'investment',
+            ],
+            [
+                'name' => 'Event Equipment',
+                'description' => 'Tents, chairs, tables, and event supplies',
+                'type' => 'leasable',
+            ],
+            [
+                'name' => 'Real Estate',
+                'description' => 'Buildings, land, and property investments',
+                'type' => 'fixed',
+            ],
+            [
+                'name' => 'Agricultural Equipment',
+                'description' => 'Farming tools, tractors, and agricultural machinery',
+                'type' => 'leasable',
+            ],
+        ];
+
+        foreach ($defaultCategories as $categoryData) {
+            $existingCategory = \App\Models\AssetCategory::where('tenant_id', $tenant->id)
+                                                         ->where('name', $categoryData['name'])
+                                                         ->first();
             
-        if (!$businessLoanProduct) {
-            try {
-                \App\Models\LoanProduct::create([
+            if (!$existingCategory) {
+                \App\Models\AssetCategory::create([
                     'tenant_id' => $tenant->id,
-                    'name' => 'Business Loan',
-                    'loan_id_prefix' => 'BL',
-                    'starting_loan_id' => 1,
-                    'minimum_amount' => 10000,
-                    'maximum_amount' => 500000,
-                    'late_payment_penalties' => 500,
-                    'description' => 'General business loan for established businesses',
-                    'interest_rate' => 15.0,
-                    'interest_type' => 'fixed',
-                    'term' => 24,
-                    'term_period' => 'month',
-                    'status' => 1,
-                    'loan_application_fee' => 1000,
-                    'loan_application_fee_type' => 0,
-                    'loan_processing_fee' => 2500,
-                    'loan_processing_fee_type' => 0,
-                    'created_user_id' => 1, // System user
+                    'name' => $categoryData['name'],
+                    'description' => $categoryData['description'],
+                    'type' => $categoryData['type'],
+                    'is_active' => true,
                 ]);
-            } catch (\Exception $e) {
-                \Log::warning('Business Loan Product creation failed: ' . $e->getMessage());
-            }
-        }
-        
-        // Create Value Addition Enterprise Product
-        $valueAdditionProduct = \App\Models\LoanProduct::where('tenant_id', $tenant->id)
-            ->where('name', 'Value Addition Enterprise')
-            ->first();
-            
-        if (!$valueAdditionProduct) {
-            try {
-                \App\Models\LoanProduct::create([
-                    'tenant_id' => $tenant->id,
-                    'name' => 'Value Addition Enterprise',
-                    'loan_id_prefix' => 'VAE',
-                    'starting_loan_id' => 1,
-                    'minimum_amount' => 25000,
-                    'maximum_amount' => 1000000,
-                    'late_payment_penalties' => 1000,
-                    'description' => 'Loan for value addition enterprises and agricultural processing',
-                    'interest_rate' => 12.0,
-                    'interest_type' => 'fixed',
-                    'term' => 36,
-                    'term_period' => 'month',
-                    'status' => 1,
-                    'loan_application_fee' => 2000,
-                    'loan_application_fee_type' => 0,
-                    'loan_processing_fee' => 5000,
-                    'loan_processing_fee_type' => 0,
-                ]);
-            } catch (\Exception $e) {
-                \Log::warning('Value Addition Enterprise Product creation failed: ' . $e->getMessage());
-            }
-        }
-        
-        // Create Startup Loan Product
-        $startupLoanProduct = \App\Models\LoanProduct::where('tenant_id', $tenant->id)
-            ->where('name', 'Startup Loan')
-            ->first();
-            
-        if (!$startupLoanProduct) {
-            try {
-                \App\Models\LoanProduct::create([
-                    'tenant_id' => $tenant->id,
-                    'name' => 'Startup Loan',
-                    'loan_id_prefix' => 'SL',
-                    'starting_loan_id' => 1,
-                    'minimum_amount' => 5000,
-                    'maximum_amount' => 200000,
-                    'late_payment_penalties' => 250,
-                    'description' => 'Loan for new business startups and entrepreneurs',
-                    'interest_rate' => 18.0,
-                    'interest_type' => 'fixed',
-                    'term' => 18,
-                    'term_period' => 'month',
-                    'status' => 1,
-                    'loan_application_fee' => 500,
-                    'loan_application_fee_type' => 0,
-                    'loan_processing_fee' => 1500,
-                    'loan_processing_fee_type' => 0,
-                ]);
-            } catch (\Exception $e) {
-                \Log::warning('Startup Loan Product creation failed: ' . $e->getMessage());
             }
         }
     }
+    
+    /**
+     * Create VSLA savings products
+     */
+    private function createVslaSavingsProducts($tenant)
+    {
+        $baseCurrencyId = base_currency_id();
+        
+        $vslaProducts = [
+            [
+                'name' => 'VSLA Projects',
+                'account_number_prefix' => 'VSLA-PROJ',
+                'starting_account_number' => 1000,
+                'description' => 'Project funding and investment accounts',
+            ],
+            [
+                'name' => 'VSLA Welfare',
+                'account_number_prefix' => 'VSLA-WELF',
+                'starting_account_number' => 2000,
+                'description' => 'Welfare contributions, social fund, and penalty fines',
+            ],
+            [
+                'name' => 'VSLA Shares',
+                'account_number_prefix' => 'VSLA-SHAR',
+                'starting_account_number' => 3000,
+                'description' => 'Member share contributions and purchases',
+            ],
+            [
+                'name' => 'VSLA Others',
+                'account_number_prefix' => 'VSLA-OTHR',
+                'starting_account_number' => 4000,
+                'description' => 'Other miscellaneous VSLA funds and contributions',
+            ],
+            [
+                'name' => 'VSLA Loan Fund',
+                'account_number_prefix' => 'VSLA-LOAN',
+                'starting_account_number' => 5000,
+                'description' => 'Loan disbursements and repayments',
+            ]
+        ];
+
+        foreach ($vslaProducts as $productData) {
+            // Check if product already exists
+            $existingProduct = \App\Models\SavingsProduct::where('tenant_id', $tenant->id)
+                ->where('name', $productData['name'])
+                ->first();
+
+            if (!$existingProduct) {
+                // VSLA Shares should not allow withdrawals (share purchases are permanent until shareout)
+                $allowWithdraw = ($productData['name'] === 'VSLA Shares') ? 0 : 1;
+                
+                \App\Models\SavingsProduct::create([
+                    'tenant_id' => $tenant->id,
+                    'name' => $productData['name'],
+                    'account_number_prefix' => $productData['account_number_prefix'],
+                    'starting_account_number' => $productData['starting_account_number'],
+                    'currency_id' => $baseCurrencyId,
+                    'interest_rate' => 0,
+                    'interest_method' => 'none',
+                    'allow_withdraw' => $allowWithdraw,
+                    'minimum_account_balance' => 0,
+                    'minimum_deposit_amount' => 10,
+                    'maintenance_fee' => 0,
+                    'auto_create' => 1,
+                    'status' => 1,
+                ]);
+            } elseif ($productData['name'] === 'VSLA Shares' && $existingProduct->allow_withdraw == 1) {
+                // Update existing VSLA Shares product to disallow withdrawals
+                $existingProduct->update(['allow_withdraw' => 0]);
+            }
+        }
+    }
+    
+    /**
+     * Create default expense categories for SACCO/Cooperative needs
+     */
+    private function createDefaultExpenseCategories($tenant)
+    {
+        $defaultCategories = [
+            [
+                'name' => 'Administrative Expenses',
+                'description' => 'General administrative and office expenses',
+                'color' => '#3498db'
+            ],
+            [
+                'name' => 'Staff Salaries & Benefits',
+                'description' => 'Employee salaries, wages, and benefits',
+                'color' => '#e74c3c'
+            ],
+            [
+                'name' => 'Office Rent & Utilities',
+                'description' => 'Office rent, electricity, water, internet, and phone bills',
+                'color' => '#f39c12'
+            ],
+            [
+                'name' => 'Office Supplies & Equipment',
+                'description' => 'Office supplies, equipment, and maintenance',
+                'color' => '#9b59b6'
+            ],
+            [
+                'name' => 'Training & Development',
+                'description' => 'Staff training, workshops, and professional development',
+                'color' => '#1abc9c'
+            ],
+            [
+                'name' => 'Marketing & Promotion',
+                'description' => 'Marketing campaigns, advertising, and promotional activities',
+                'color' => '#e67e22'
+            ],
+            [
+                'name' => 'Legal & Professional Fees',
+                'description' => 'Legal fees, audit fees, and professional services',
+                'color' => '#34495e'
+            ],
+            [
+                'name' => 'Insurance & Security',
+                'description' => 'Insurance premiums and security services',
+                'color' => '#2c3e50'
+            ],
+            [
+                'name' => 'Transportation & Travel',
+                'description' => 'Vehicle maintenance, fuel, and business travel expenses',
+                'color' => '#16a085'
+            ],
+            [
+                'name' => 'Bank Charges & Fees',
+                'description' => 'Banking fees, transaction charges, and financial services',
+                'color' => '#27ae60'
+            ],
+            [
+                'name' => 'VSLA Meeting Expenses',
+                'description' => 'Expenses related to VSLA meetings and activities',
+                'color' => '#8e44ad'
+            ],
+            [
+                'name' => 'Community Development',
+                'description' => 'Community projects and development initiatives',
+                'color' => '#2980b9'
+            ],
+            [
+                'name' => 'Emergency Fund',
+                'description' => 'Emergency expenses and contingency funds',
+                'color' => '#c0392b'
+            ],
+            [
+                'name' => 'Technology & IT',
+                'description' => 'Software licenses, IT support, and technology upgrades',
+                'color' => '#7f8c8d'
+            ],
+            [
+                'name' => 'Miscellaneous',
+                'description' => 'Other miscellaneous expenses not categorized elsewhere',
+                'color' => '#95a5a6'
+            ]
+        ];
+
+        foreach ($defaultCategories as $categoryData) {
+            // Check if category already exists
+            $existingCategory = \App\Models\ExpenseCategory::where('tenant_id', $tenant->id)
+                ->where('name', $categoryData['name'])
+                ->first();
+
+            if (!$existingCategory) {
+                \App\Models\ExpenseCategory::create([
+                    'tenant_id' => $tenant->id,
+                    'name' => $categoryData['name'],
+                    'description' => $categoryData['description'],
+                    'color' => $categoryData['color'],
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Toggle E-Signature module status
+     */
+    public function toggleESignature(Request $request)
+    {
+        // Check permission - only admin can toggle modules
+        if (!is_admin()) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('Permission denied!')]);
+            }
+            return back()->with('error', _lang('Permission denied!'));
+        }
+        
+        $tenant = app('tenant');
+        $enabled = $request->boolean('enabled');
+        
+        // Check if already in the desired state
+        if (($tenant->esignature_enabled ?? false) == $enabled) {
+            $message = $enabled ? 'E-Signature module is already enabled' : 'E-Signature module is already disabled';
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'info', 'message' => _lang($message)]);
+            }
+            
+            return back()->with('info', _lang($message));
+        }
+        
+        DB::beginTransaction();
+        
+        try {
+            $tenant->esignature_enabled = $enabled;
+            $tenant->save();
+            
+            if ($enabled) {
+                $this->provisionESignatureModule($tenant);
+            }
+            
+            DB::commit();
+            
+            $message = $enabled ? 'E-Signature module activated successfully' : 'E-Signature module deactivated successfully';
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'success', 'message' => _lang($message)]);
+            }
+            
+            return back()->with('success', _lang($message));
+            
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('E-Signature Module Toggle Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('An error occurred while updating the module: ') . $e->getMessage()]);
+            }
+            
+            return back()->with('error', _lang('An error occurred while updating the module: ') . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Provision E-Signature module when activated
+     */
+    private function provisionESignatureModule($tenant)
+    {
+        try {
+            // Create default E-Signature settings if they don't exist
+            $this->createESignatureSettings($tenant);
+            
+            // Log E-Signature module activation
+            \Log::info('E-Signature module activated for tenant: ' . $tenant->id);
+            
+        } catch (\Exception $e) {
+            \Log::error('E-Signature Module Provision Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Create E-Signature settings
+     */
+    private function createESignatureSettings($tenant)
+    {
+        // For now, we'll just log the activation
+        // In the future, you can add default E-Signature settings here
+        \Log::info('E-Signature module settings provisioned for tenant: ' . $tenant->id);
+    }
+
 }

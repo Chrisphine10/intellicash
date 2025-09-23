@@ -17,6 +17,7 @@
 						    <th>{{ _lang('Currency') }}</th>
 							<th>{{ _lang('Account Name') }}</th>
 							<th>{{ _lang('Account Number') }}</th>
+							<th>{{ _lang('Payment Method') }}</th>
 							<th class="text-center">{{ _lang('Action') }}</th>
 					    </tr>
 					</thead>
@@ -28,6 +29,17 @@
 							<td class='currency_id'>{{ $bankAccount->currency->name }}</td>
 							<td class='account_name'>{{ $bankAccount->account_name }}</td>
 							<td class='account_number'>{{ $bankAccount->account_number }}</td>
+							<td class='payment_method'>
+								@if($bankAccount->hasPaymentMethod())
+									<span class="badge badge-success">
+										<i class="fa fa-check-circle"></i> {{ ucfirst($bankAccount->payment_method_type) }}
+									</span>
+								@else
+									<span class="badge badge-secondary">
+										<i class="fa fa-times-circle"></i> {{ _lang('Not Connected') }}
+									</span>
+								@endif
+							</td>
 							
 							<td class="text-center">
 								<span class="dropdown">
@@ -41,6 +53,11 @@
 									<div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
 										<a href="{{ route('bank_accounts.edit', $bankAccount['id']) }}" data-title="{{ _lang('Update Bank Account') }}" class="dropdown-item dropdown-edit ajax-modal"><i class="fas fa-pencil-alt"></i> {{ _lang('Edit') }}</a>
 										<a href="{{ route('bank_accounts.show', $bankAccount['id']) }}" data-title="{{ _lang('Bank Account Details') }}" class="dropdown-item dropdown-view ajax-modal"><i class="fas fa-eye"></i> {{ _lang('View') }}</a>
+										@if($bankAccount->hasPaymentMethod())
+											<a href="{{ route('bank_accounts.payment.disconnect', $bankAccount['id']) }}" class="dropdown-item" onclick="return confirm('{{ _lang('Are you sure you want to disconnect the payment method?') }}')"><i class="fas fa-unlink"></i> {{ _lang('Disconnect Payment') }}</a>
+										@else
+											<a href="{{ route('bank_accounts.payment.connect', $bankAccount['id']) }}" class="dropdown-item"><i class="fas fa-link"></i> {{ _lang('Connect Payment') }}</a>
+										@endif
 										<button class="btn-remove dropdown-item" type="submit"><i class="fas fa-trash-alt"></i> {{ _lang('Delete') }}</button>
 									</div>
 								  </form>

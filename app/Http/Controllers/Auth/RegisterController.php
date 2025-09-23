@@ -99,10 +99,10 @@ class RegisterController extends Controller {
             })],
             'gender'               => ['required'],
             'city'                 => ['required'],
-            'state'                => ['required'],
+            'county'               => ['required', 'in:' . implode(',', array_keys(get_kenyan_counties()))],
             'zip'                  => ['required'],
             'address'              => ['required'],
-            'credit_source'        => ['required'],
+            'credit_source'        => ['required', 'in:' . implode(',', array_keys(get_credit_source_options()))],
             'g-recaptcha-response' => get_option('enable_recaptcha', 0) == 1 ? 'required|recaptchav3:register,0.5' : '',
         ], [
             'g-recaptcha-response.recaptchav3' => _lang('Recaptcha error!'),
@@ -141,7 +141,7 @@ class RegisterController extends Controller {
         $member->member_no     = get_tenant_option('starting_member_no', null, app('tenant')->id);
         $member->gender        = $request->gender;
         $member->city          = $request->city;
-        $member->state         = $request->state;
+        $member->county        = $request->county;
         $member->zip           = $request->zip;
         $member->address       = $request->address;
         $member->credit_source = $request->credit_source;

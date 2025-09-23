@@ -1,6 +1,31 @@
 @extends('layouts.app')
 
 @section('content')
+<style>
+.badge {
+    font-size: 0.75em;
+    padding: 0.375rem 0.75rem;
+}
+.badge-info {
+    background-color: #17a2b8;
+}
+.badge-success {
+    background-color: #28a745;
+}
+.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+.badge-danger {
+    background-color: #dc3545;
+}
+.badge-secondary {
+    background-color: #6c757d;
+}
+.table-info {
+    background-color: #d1ecf1;
+}
+</style>
 <div class="col-lg-12">
     <div class="card">
         <div class="card-header">
@@ -120,38 +145,121 @@
                 </div>
 
                 <div class="tab-pane fade mt-4" id="guarantor">
-                    <div class="table-responsive">
-                        <table id="guarantors_table" class="table table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>{{ _lang('Loan ID') }}</th>
-                                    <th>{{ _lang('Guarantor') }}</th>
-                                    <th>{{ _lang('Amount') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if($loan->guarantors->count() == 0)
-                                <tr>
-                                    <td colspan="3" class="text-center">{{ _lang('No Guarantor Found !') }}</td>
-                                </tr>
-                                @endif
+                    <!-- Guarantor Requests Section -->
+                    @if(isset($guarantorRequests) && $guarantorRequests->count() > 0)
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-user-friends"></i> {{ _lang('Guarantor Requests') }}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ _lang('Guarantor Name') }}</th>
+                                            <th>{{ _lang('Email') }}</th>
+                                            <th>{{ _lang('Status') }}</th>
+                                            <th>{{ _lang('Requested Date') }}</th>
+                                            <th>{{ _lang('Response Date') }}</th>
+                                            <th>{{ _lang('Message') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($guarantorRequests as $request)
+                                        <tr>
+                                            <td>{{ $request->guarantor_name }}</td>
+                                            <td>{{ $request->guarantor_email }}</td>
+                                            <td>
+                                                @if($request->status == 'pending')
+                                                    @if($request->isExpired())
+                                                        <span class="badge badge-warning">{{ _lang('Expired') }}</span>
+                                                    @else
+                                                        <span class="badge badge-info">{{ _lang('Pending') }}</span>
+                                                    @endif
+                                                @elseif($request->status == 'accepted')
+                                                    <span class="badge badge-success">{{ _lang('Accepted') }}</span>
+                                                @elseif($request->status == 'declined')
+                                                    <span class="badge badge-danger">{{ _lang('Declined') }}</span>
+                                                @else
+                                                    <span class="badge badge-secondary">{{ ucfirst($request->status) }}</span>
+                                                @endif
+                                            </td>
+                                            <td>{{ $request->created_at->format(get_date_format()) }}</td>
+                                            <td>
+                                                @if($request->responded_at)
+                                                    {{ $request->responded_at->format(get_date_format()) }}
+                                                @else
+                                                    <span class="text-muted">{{ _lang('Not responded') }}</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($request->guarantor_message)
+                                                    <small class="text-muted">{{ Str::limit($request->guarantor_message, 50) }}</small>
+                                                @else
+                                                    <span class="text-muted">{{ _lang('No message') }}</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
 
-                                @foreach($loan->guarantors as $guarantor)
-                                <tr data-id="row_{{ $guarantor->id }}">
-                                    <td class='loan_id'>{{ $guarantor->loan->loan_id }}</td>
-                                    <td class='member_id'>{{ $guarantor->member->name }}</td>
-                                    <td class='amount'>{{ decimalPlace($guarantor->amount, currency($loan->currency->name)) }}</td>
-                                </tr>
-                                @endforeach
+                    <!-- Confirmed Guarantors Section -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-shield-alt"></i> {{ _lang('Confirmed Guarantors') }}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table id="guarantors_table" class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ _lang('Guarantor Name') }}</th>
+                                            <th>{{ _lang('Amount') }}</th>
+                                            <th>{{ _lang('Status') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if(isset($guarantors) && $guarantors->count() == 0)
+                                        <tr>
+                                            <td colspan="3" class="text-center text-muted">
+                                                <i class="fas fa-info-circle"></i> {{ _lang('No confirmed guarantors yet') }}
+                                            </td>
+                                        </tr>
+                                        @endif
 
-                                @if($loan->guarantors->count() > 0)
-                                <tr>
-                                    <td colspan="2">{{ _lang('Grand Total') }}</td>
-                                    <td colspan="2"><b>{{ decimalPlace($loan->guarantors->sum('amount'), currency($loan->currency->name)) }}</b></td>
-                                </tr>
-                                @endif
-                            </tbody>
-                        </table>
+                                        @if(isset($guarantors))
+                                        @foreach($guarantors as $guarantor)
+                                        <tr data-id="row_{{ $guarantor->id }}">
+                                            <td class='member_id'>
+                                                <i class="fas fa-user"></i> {{ $guarantor->member->first_name }} {{ $guarantor->member->last_name }}
+                                                <br><small class="text-muted">{{ $guarantor->member->email }}</small>
+                                            </td>
+                                            <td class='amount'>
+                                                <strong>{{ decimalPlace($guarantor->amount, currency($loan->currency->name)) }}</strong>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-success">{{ _lang('Confirmed') }}</span>
+                                            </td>
+                                        </tr>
+                                        @endforeach
+
+                                        @if($guarantors->count() > 0)
+                                        <tr class="table-info">
+                                            <td><strong>{{ _lang('Total Guarantee Amount') }}</strong></td>
+                                            <td><strong>{{ decimalPlace($guarantors->sum('amount'), currency($loan->currency->name)) }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        @endif
+                                        @endif
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

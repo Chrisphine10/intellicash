@@ -111,8 +111,13 @@
 
 						<div class="col-md-6">
 							<div class="form-group">
-								<label class="control-label">{{ _lang('State') }}</label>
-								<input type="text" class="form-control" name="state" value="{{ old('state') }}">
+								<label class="control-label">{{ _lang('County') }}</label>
+								<select class="form-control auto-select" data-selected="{{ old('county') }}" name="county">
+									<option value="">{{ _lang('Select County') }}</option>
+									@foreach(get_kenyan_counties() as $key => $value)
+									<option value="{{ $value }}">{{ $value }}</option>
+									@endforeach
+								</select>
 							</div>
 						</div>
 
@@ -140,7 +145,12 @@
 						<div class="col-md-12">
 							<div class="form-group">
 								<label class="control-label">{{ _lang('Credit Source') }}</label>
-								<input type="text" class="form-control" name="credit_source" value="{{ old('credit_source') }}">
+								<select class="form-control auto-select" data-selected="{{ old('credit_source') }}" name="credit_source">
+									<option value="">{{ _lang('Select Credit Source') }}</option>
+									@foreach(get_credit_source_options() as $key => $value)
+									<option value="{{ $value }}">{{ $value }}</option>
+									@endforeach
+								</select>
 							</div>
 						</div>
 

@@ -28,8 +28,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'demo'            => \App\Http\Middleware\Demo::class,
             '2fa'             => \PragmaRX\Google2FALaravel\Middleware::class,
             'vsla.access'     => \App\Http\Middleware\EnsureVslaAccess::class,
+            'asset_module'    => \App\Http\Middleware\AssetModuleMiddleware::class,
             'military.security' => \App\Http\Middleware\MilitaryGradeSecurity::class,
             'api.auth'         => \App\Http\Middleware\ApiAuth::class,
+            'security.headers' => \App\Http\Middleware\EnforceSecurityHeaders::class,
+            'csrf.enhanced'    => \App\Http\Middleware\EnhancedCsrfProtection::class,
+            'esignature.access' => \App\Http\Middleware\ESignatureAccess::class,
         ]);
         $middleware->validateCsrfTokens(except: [
             '*/callback/instamojo',
@@ -39,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Apply military-grade security globally (excluding API routes)
         $middleware->web(append: [
             \App\Http\Middleware\MilitaryGradeSecurity::class,
+            \App\Http\Middleware\EnforceSecurityHeaders::class,
         ]);
         
         // Apply API middleware to API routes

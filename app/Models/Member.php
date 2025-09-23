@@ -31,7 +31,7 @@ class Member extends Model {
         'member_no',
         'gender',
         'city',
-        'state',
+        'county',
         'zip',
         'address',
         'credit_source',
@@ -140,5 +140,9 @@ class Member extends Model {
         return $query->whereHas('activeVslaRoleAssignments', function($q) use ($role) {
             $q->where('role', $role);
         });
+    }
+
+    public function scopeActive($query) {
+        return $query->where('status', 1);
     }
 }

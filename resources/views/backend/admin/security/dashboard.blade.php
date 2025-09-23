@@ -18,6 +18,9 @@
                             <p class="text-muted mb-0">Real-time threat monitoring and security analytics</p>
                         </div>
                         <div class="d-flex gap-2">
+                            <a href="{{ route('security.testing') }}" class="btn btn-outline-warning">
+                                <i class="fas fa-vial me-1"></i> Testing Interface
+                            </a>
                             <button class="btn btn-outline-primary" onclick="refreshDashboard()">
                                 <i class="fas fa-sync-alt me-1"></i> Refresh
                             </button>

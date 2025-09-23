@@ -13,6 +13,7 @@ class VslaMeeting extends Model
 
     protected $fillable = [
         'tenant_id',
+        'cycle_id',
         'meeting_number',
         'meeting_date',
         'meeting_time',
@@ -27,9 +28,65 @@ class VslaMeeting extends Model
         'meeting_time' => 'datetime:H:i',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Ensure meeting is assigned to the correct cycle based on date
+        static::creating(function ($meeting) {
+            static::assignToCorrectCycle($meeting);
+        });
+
+        static::updating(function ($meeting) {
+            if ($meeting->isDirty('meeting_date') || $meeting->isDirty('cycle_id')) {
+                static::assignToCorrectCycle($meeting);
+            }
+        });
+    }
+
+    /**
+     * Assign meeting to the correct cycle based on meeting date
+     */
+    protected static function assignToCorrectCycle($meeting)
+    {
+        if (!$meeting->cycle_id) {
+            // Find the active cycle for this tenant that contains the meeting date
+            $cycle = VslaCycle::where('tenant_id', $meeting->tenant_id)
+                ->where('status', 'active')
+                ->where('start_date', '<=', $meeting->meeting_date)
+                ->where(function($query) use ($meeting) {
+                    $query->where('end_date', '>=', $meeting->meeting_date)
+                          ->orWhereNull('end_date');
+                })
+                ->first();
+
+            if ($cycle) {
+                $meeting->cycle_id = $cycle->id;
+            } else {
+                // Check if there's a completed cycle that could contain this meeting
+                $completedCycle = VslaCycle::where('tenant_id', $meeting->tenant_id)
+                    ->where('status', 'completed')
+                    ->where('start_date', '<=', $meeting->meeting_date)
+                    ->where('end_date', '>=', $meeting->meeting_date)
+                    ->first();
+
+                if ($completedCycle) {
+                    $meeting->cycle_id = $completedCycle->id;
+                } else {
+                    throw new \Exception('No cycle found for the meeting date. Please ensure there is an active or completed cycle covering this period.');
+                }
+            }
+        }
+    }
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function cycle()
+    {
+        return $this->belongsTo(VslaCycle::class, 'cycle_id');
     }
 
     public function createdUser()

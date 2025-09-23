@@ -22,8 +22,10 @@
                                                 <i class="fas fa-code fa-lg"></i>
                                             @elseif($key === 'qr_code')
                                                 <i class="fas fa-qrcode fa-lg"></i>
-                                            @elseif($key === 'advanced_loan_management')
-                                                <i class="fas fa-hand-holding-usd fa-lg"></i>
+                                            @elseif($key === 'asset_management')
+                                                <i class="fas fa-building fa-lg"></i>
+                                            @elseif($key === 'esignature')
+                                                <i class="fas fa-signature fa-lg"></i>
                                             @else
                                                 <i class="fas fa-cog fa-lg"></i>
                                             @endif
@@ -72,8 +74,12 @@
                                     <a href="{{ route('modules.qr_code.guide') }}" class="btn btn-outline-primary btn-sm ms-2">
                                         <i class="fas fa-book"></i> {{ _lang('Guide') }}
                                     </a>
-                                    @elseif($key === 'advanced_loan_management' && $module['enabled'])
-                                    <a href="{{ route('advanced_loan_management.index') }}" class="btn btn-info btn-sm ms-2">
+                                    @elseif($key === 'asset_management' && $module['enabled'])
+                                    <a href="{{ route('asset-management.dashboard') }}" class="btn btn-info btn-sm ms-2">
+                                        <i class="fas fa-cog"></i> {{ _lang('Manage') }}
+                                    </a>
+                                    @elseif($key === 'esignature' && $module['enabled'])
+                                    <a href="{{ route('esignature.esignature-documents.index') }}" class="btn btn-info btn-sm ms-2">
                                         <i class="fas fa-cog"></i> {{ _lang('Manage') }}
                                     </a>
                                     @endif
@@ -105,8 +111,10 @@ $(document).ready(function() {
                 url = '{{ route("modules.toggle_api") }}';
             } else if (module === 'qr_code') {
                 url = '{{ route("modules.toggle_qr_code") }}';
-            } else if (module === 'advanced_loan_management') {
-                url = '{{ route("modules.toggle_advanced_loan_management") }}';
+            } else if (module === 'asset_management') {
+                url = '{{ route("modules.toggle_asset_management") }}';
+            } else if (module === 'esignature') {
+                url = '{{ route("modules.toggle_esignature") }}';
             }
             
             $.ajax({

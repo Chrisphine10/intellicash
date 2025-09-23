@@ -37,6 +37,11 @@ class DashboardController extends Controller {
                 ->get();
             $data['loans'] = Loan::where('status', 1)->where('borrower_id', $user->member->id)->get();
 
+            // Check if mobile PWA request
+            if (request()->get('mobile') == '1' || request()->header('X-Mobile-App') == '1') {
+                return view("backend.customer.mobile-dashboard", $data);
+            }
+
             return view("backend.customer.dashboard-$user_type", $data);
         } else {
             $data['recent_transactions'] = Transaction::limit('10')

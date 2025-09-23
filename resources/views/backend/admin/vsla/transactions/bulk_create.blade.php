@@ -111,8 +111,11 @@
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label class="control-label">{{ _lang('Amount') }} <span class="text-danger">*</span></label>
+                    <label class="control-label amount-label">{{ _lang('Amount') }} <span class="text-danger">*</span></label>
+                    <label class="control-label shares-label" style="display: none;">{{ _lang('Shares') }} <span class="text-danger">*</span></label>
                     <input type="number" class="form-control amount-input" name="transactions[INDEX][amount]" step="0.01" min="0.01" required>
+                    <input type="number" class="form-control shares-input" name="transactions[INDEX][shares]" min="1" style="display: none;">
+                    <small class="form-text text-muted shares-cost" style="display: none;"></small>
                 </div>
             </div>
             <div class="col-md-3">
@@ -138,7 +141,8 @@
 <script>
 $(document).ready(function() {
     let transactionIndex = 0;
-    const vslaSettings = @json($vslaSettings);
+    const vslaSettings = @json($vslaSettings ?? null);
+    const baseCurrency = '{{ get_base_currency() }}';
     
     // Add first transaction row
     addTransactionRow();
@@ -203,41 +207,74 @@ $(document).ready(function() {
         updateRemoveButtons();
     });
     
-    // Auto-fill default amounts when type changes
+    // Auto-fill default amounts when type changes and toggle between amount/shares
     $(document).on('change', '.transaction-type', function() {
         const type = $(this).val();
-        const amountInput = $(this).closest('.transaction-row').find('.amount-input');
+        const $row = $(this).closest('.transaction-row');
+        const amountInput = $row.find('.amount-input');
+        const sharesInput = $row.find('.shares-input');
+        const amountLabel = $row.find('.amount-label');
+        const sharesLabel = $row.find('.shares-label');
+        const sharesCost = $row.find('.shares-cost');
         
         // Check for duplicate transaction types for the same member
         if (type) {
-            const memberId = $(this).closest('.transaction-row').find('.member-select').val();
-            if (memberId && isDuplicateTransaction(memberId, type, $(this).closest('.transaction-row'))) {
+            const memberId = $row.find('.member-select').val();
+            if (memberId && isDuplicateTransaction(memberId, type, $row)) {
                 alert('{{ _lang("This member already has a transaction of this type. Please select a different type or member.") }}');
                 $(this).val('');
                 return;
             }
         }
         
-        if (type && !amountInput.val()) {
-            let defaultAmount = 0;
-            switch(type) {
-                case 'share_purchase':
-                    defaultAmount = vslaSettings ? (vslaSettings.share_amount || 0) : 0;
-                    break;
-                case 'penalty_fine':
-                    defaultAmount = vslaSettings ? (vslaSettings.penalty_amount || 0) : 0;
-                    break;
-                case 'welfare_contribution':
-                    defaultAmount = vslaSettings ? (vslaSettings.welfare_amount || 0) : 0;
-                    break;
-                case 'loan_issuance':
-                    defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
-                    break;
-                case 'loan_repayment':
-                    defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
-                    break;
+        // Toggle between shares and amount input based on transaction type
+        if (type === 'share_purchase') {
+            // Show shares input, hide amount input
+            amountInput.hide().prop('required', false);
+            amountLabel.hide();
+            sharesInput.show().prop('required', true);
+            sharesLabel.show();
+            
+            // Show share cost information
+            const shareAmount = vslaSettings ? (vslaSettings.share_amount || 0) : 0;
+            sharesCost.text(`Cost per share: ${shareAmount} ${baseCurrency}`).show();
+            
+            // Set default shares if not already set
+            if (!sharesInput.val()) {
+                const defaultShares = vslaSettings ? (vslaSettings.min_shares_per_member || 1) : 1;
+                sharesInput.val(defaultShares);
+                // Set min and max based on VSLA settings
+                const maxShares = vslaSettings ? (vslaSettings.max_shares_per_meeting || 3) : 3;
+                sharesInput.attr('min', vslaSettings ? (vslaSettings.min_shares_per_member || 1) : 1);
+                sharesInput.attr('max', maxShares);
             }
-            amountInput.val(defaultAmount);
+        } else {
+            // Show amount input, hide shares input
+            sharesInput.hide().prop('required', false);
+            sharesLabel.hide();
+            sharesCost.hide();
+            amountInput.show().prop('required', true);
+            amountLabel.show();
+            
+            // Set default amount if not already set
+            if (type && !amountInput.val()) {
+                let defaultAmount = 0;
+                switch(type) {
+                    case 'penalty_fine':
+                        defaultAmount = vslaSettings ? (vslaSettings.penalty_amount || 0) : 0;
+                        break;
+                    case 'welfare_contribution':
+                        defaultAmount = vslaSettings ? (vslaSettings.welfare_amount || 0) : 0;
+                        break;
+                    case 'loan_issuance':
+                        defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
+                        break;
+                    case 'loan_repayment':
+                        defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
+                        break;
+                }
+                amountInput.val(defaultAmount);
+            }
         }
     });
     
@@ -320,27 +357,49 @@ $(document).ready(function() {
             }
             
             $newRow.find('.transaction-type').val(defaultTransactionType);
-            // Auto-fill amount if type is set
-            const amountInput = $newRow.find('.amount-input');
-            let defaultAmount = 0;
-            switch(defaultTransactionType) {
-                case 'share_purchase':
-                    defaultAmount = vslaSettings ? (vslaSettings.share_amount || 0) : 0;
-                    break;
-                case 'penalty_fine':
-                    defaultAmount = vslaSettings ? (vslaSettings.penalty_amount || 0) : 0;
-                    break;
-                case 'welfare_contribution':
-                    defaultAmount = vslaSettings ? (vslaSettings.welfare_amount || 0) : 0;
-                    break;
-                case 'loan_issuance':
-                    defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
-                    break;
-                case 'loan_repayment':
-                    defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
-                    break;
+            
+            // Auto-fill amount or shares based on type
+            if (defaultTransactionType === 'share_purchase') {
+                // For share purchases, show shares input
+                const sharesInput = $newRow.find('.shares-input');
+                const amountInput = $newRow.find('.amount-input');
+                const amountLabel = $newRow.find('.amount-label');
+                const sharesLabel = $newRow.find('.shares-label');
+                const sharesCost = $newRow.find('.shares-cost');
+                
+                amountInput.hide().prop('required', false);
+                amountLabel.hide();
+                sharesInput.show().prop('required', true);
+                sharesLabel.show();
+                
+                const shareAmount = vslaSettings ? (vslaSettings.share_amount || 0) : 0;
+                sharesCost.text(`Cost per share: ${shareAmount} ${baseCurrency}`).show();
+                
+                const defaultShares = vslaSettings ? (vslaSettings.min_shares_per_member || 1) : 1;
+                const maxShares = vslaSettings ? (vslaSettings.max_shares_per_meeting || 3) : 3;
+                sharesInput.val(defaultShares);
+                sharesInput.attr('min', vslaSettings ? (vslaSettings.min_shares_per_member || 1) : 1);
+                sharesInput.attr('max', maxShares);
+            } else {
+                // For other transaction types, show amount input
+                const amountInput = $newRow.find('.amount-input');
+                let defaultAmount = 0;
+                switch(defaultTransactionType) {
+                    case 'penalty_fine':
+                        defaultAmount = vslaSettings ? (vslaSettings.penalty_amount || 0) : 0;
+                        break;
+                    case 'welfare_contribution':
+                        defaultAmount = vslaSettings ? (vslaSettings.welfare_amount || 0) : 0;
+                        break;
+                    case 'loan_issuance':
+                        defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
+                        break;
+                    case 'loan_repayment':
+                        defaultAmount = vslaSettings ? (vslaSettings.max_loan_amount || 1000) : 1000;
+                        break;
+                }
+                amountInput.val(defaultAmount);
             }
-            amountInput.val(defaultAmount);
         }
         
         $('#transactionsContainer').append($newRow);
@@ -373,14 +432,25 @@ $(document).ready(function() {
         $('.transaction-row').each(function(index) {
             const memberId = $(this).find('.member-select').val();
             const type = $(this).find('.transaction-type').val();
-            const amount = $(this).find('.amount-input').val();
             const description = $(this).find('input[name*="[description]"]').val();
             
-            if (memberId && type && amount) {
+            let amount = 0;
+            let shares = 0;
+            
+            if (type === 'share_purchase') {
+                shares = $(this).find('.shares-input').val();
+                // Calculate amount from shares
+                amount = shares * (vslaSettings ? (vslaSettings.share_amount || 0) : 0);
+            } else {
+                amount = $(this).find('.amount-input').val();
+            }
+            
+            if (memberId && type && (amount > 0 || shares > 0)) {
                 transactions.push({
                     member_id: memberId,
                     transaction_type: type,
                     amount: amount,
+                    shares: shares,
                     description: description || ''
                 });
             }

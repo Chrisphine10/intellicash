@@ -76,21 +76,33 @@ class MembersImport implements ToCollection, WithStartRow {
 
             $member->save();
 
-            foreach ($accountsTypes as $accountType) {
-                $savingsaccount                     = new SavingsAccount();
-                $savingsaccount->account_number     = $accountType->account_number_prefix . $accountType->starting_account_number;
-                $savingsaccount->member_id          = $member->id;
-                $savingsaccount->savings_product_id = $accountType->id;
-                $savingsaccount->status             = 1;
-                $savingsaccount->opening_balance    = 0;
-                $savingsaccount->description        = '';
-                $savingsaccount->created_user_id    = auth()->id();
-    
-                $savingsaccount->save();
-    
-                //Increment account number
-                $accountType->starting_account_number = $accountType->starting_account_number + 1;
-                $accountType->save();
+            // Check if VSLA is enabled and auto-create member accounts is enabled
+            $tenant = app('tenant');
+            $shouldCreateAccounts = true;
+            if ($tenant->isVslaEnabled()) {
+                $vslaSettings = $tenant->vslaSettings;
+                if ($vslaSettings && !$vslaSettings->auto_create_member_accounts) {
+                    $shouldCreateAccounts = false;
+                }
+            }
+            
+            if ($shouldCreateAccounts) {
+                foreach ($accountsTypes as $accountType) {
+                    $savingsaccount                     = new SavingsAccount();
+                    $savingsaccount->account_number     = $accountType->account_number_prefix . $accountType->starting_account_number;
+                    $savingsaccount->member_id          = $member->id;
+                    $savingsaccount->savings_product_id = $accountType->id;
+                    $savingsaccount->status             = 1;
+                    $savingsaccount->opening_balance    = 0;
+                    $savingsaccount->description        = '';
+                    $savingsaccount->created_user_id    = auth()->id();
+        
+                    $savingsaccount->save();
+        
+                    //Increment account number
+                    $accountType->starting_account_number = $accountType->starting_account_number + 1;
+                    $accountType->save();
+                }
             }
         }
 

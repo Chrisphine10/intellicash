@@ -1280,6 +1280,79 @@ if (! function_exists('get_currency_position')) {
     }
 }
 
+if (! function_exists('get_kenyan_counties')) {
+    function get_kenyan_counties() {
+        return [
+            'Baringo' => 'Baringo',
+            'Bomet' => 'Bomet',
+            'Bungoma' => 'Bungoma',
+            'Busia' => 'Busia',
+            'Elgeyo-Marakwet' => 'Elgeyo-Marakwet',
+            'Embu' => 'Embu',
+            'Garissa' => 'Garissa',
+            'Homa Bay' => 'Homa Bay',
+            'Isiolo' => 'Isiolo',
+            'Kajiado' => 'Kajiado',
+            'Kakamega' => 'Kakamega',
+            'Kericho' => 'Kericho',
+            'Kiambu' => 'Kiambu',
+            'Kilifi' => 'Kilifi',
+            'Kirinyaga' => 'Kirinyaga',
+            'Kisii' => 'Kisii',
+            'Kisumu' => 'Kisumu',
+            'Kitui' => 'Kitui',
+            'Kwale' => 'Kwale',
+            'Laikipia' => 'Laikipia',
+            'Lamu' => 'Lamu',
+            'Machakos' => 'Machakos',
+            'Makueni' => 'Makueni',
+            'Mandera' => 'Mandera',
+            'Marsabit' => 'Marsabit',
+            'Meru' => 'Meru',
+            'Migori' => 'Migori',
+            'Mombasa' => 'Mombasa',
+            'Murang\'a' => 'Murang\'a',
+            'Nairobi' => 'Nairobi',
+            'Nakuru' => 'Nakuru',
+            'Nandi' => 'Nandi',
+            'Narok' => 'Narok',
+            'Nyamira' => 'Nyamira',
+            'Nyandarua' => 'Nyandarua',
+            'Nyeri' => 'Nyeri',
+            'Samburu' => 'Samburu',
+            'Siaya' => 'Siaya',
+            'Taita-Taveta' => 'Taita-Taveta',
+            'Tana River' => 'Tana River',
+            'Tharaka-Nithi' => 'Tharaka-Nithi',
+            'Trans Nzoia' => 'Trans Nzoia',
+            'Turkana' => 'Turkana',
+            'Uasin Gishu' => 'Uasin Gishu',
+            'Vihiga' => 'Vihiga',
+            'Wajir' => 'Wajir',
+            'West Pokot' => 'West Pokot'
+        ];
+    }
+}
+
+if (! function_exists('get_credit_source_options')) {
+    function get_credit_source_options() {
+        return [
+            'Bank Loan' => 'Bank Loan',
+            'Microfinance Institution' => 'Microfinance Institution',
+            'SACCO' => 'SACCO',
+            'Chama/Investment Group' => 'Chama/Investment Group',
+            'Family/Friends' => 'Family/Friends',
+            'Personal Savings' => 'Personal Savings',
+            'Government Loan' => 'Government Loan',
+            'Mobile Money Loan' => 'Mobile Money Loan',
+            'Employer Loan' => 'Employer Loan',
+            'Asset Financing' => 'Asset Financing',
+            'Trade Credit' => 'Trade Credit',
+            'Others' => 'Others'
+        ];
+    }
+}
+
 if (! function_exists('base_currency_id')) {
     function base_currency_id() {
         if (app()->bound('tenant')) {
@@ -1572,5 +1645,25 @@ if (! function_exists('process_loan_fee')) {
         $fee->description        = ucwords(str_replace('_', ' ', $fee_name));
         $fee->loan_id            = $loan_id;
         $fee->save();
+    }
+}
+
+if (! function_exists('formatAmount')) {
+    function formatAmount($amount, $currency = '') {
+        if ($currency == '') {
+            if (isset(request()->tenant->id)) {
+                $currency = get_base_currency();
+            } else {
+                $currency = get_option('currency', 'USD');
+            }
+        }
+
+        $formatted_amount = money_format_2($amount);
+        
+        if (get_currency_position() == 'right') {
+            return $formatted_amount . ' ' . get_currency_symbol($currency);
+        } else {
+            return get_currency_symbol($currency) . ' ' . $formatted_amount;
+        }
     }
 }
