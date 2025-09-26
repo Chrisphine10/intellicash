@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('signer_phone')->nullable();
             $table->string('signer_company')->nullable();
             $table->string('signature_token', 191)->unique();
-            $table->string('status')->default('pending'); // pending, signed, declined, expired
+            $table->string('status', 50)->default('pending'); // pending, signed, declined, expired
             $table->text('signature_data')->nullable(); // Base64 encoded signature image
             $table->text('signature_type')->nullable(); // drawn, typed, uploaded
             $table->json('filled_fields')->nullable(); // Fields filled by signer
@@ -37,8 +37,8 @@ return new class extends Migration
 
             $table->foreign('document_id')->references('id')->on('esignature_documents')->onDelete('cascade');
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
-            $table->index(['document_id', 'status']);
-            $table->index(['tenant_id', 'status']);
+            $table->index(['document_id', 'status'], 'idx_signatures_doc_status');
+            $table->index(['tenant_id', 'status'], 'idx_signatures_tenant_status');
             $table->index('signature_token');
         });
     }

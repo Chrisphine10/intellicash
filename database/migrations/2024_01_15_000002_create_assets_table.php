@@ -23,7 +23,7 @@ return new class extends Migration
             $table->date('purchase_date');
             $table->date('warranty_expiry')->nullable();
             $table->string('location')->nullable();
-            $table->string('status')->default('active'); // active, inactive, maintenance, disposed
+            $table->string('status', 50)->default('active'); // active, inactive, maintenance, disposed
             $table->boolean('is_leasable')->default(false);
             $table->decimal('lease_rate', 10, 2)->nullable(); // daily rate for leasable assets
             $table->string('lease_rate_type')->default('daily'); // daily, weekly, monthly
@@ -33,7 +33,7 @@ return new class extends Migration
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('category_id')->references('id')->on('asset_categories')->onDelete('cascade');
-            $table->index(['tenant_id', 'status']);
+            $table->index(['tenant_id', 'status'], 'idx_assets_tenant_status');
             $table->index(['tenant_id', 'is_leasable']);
         });
     }

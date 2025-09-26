@@ -24,7 +24,7 @@ return new class extends Migration
             $table->decimal('total_amount', 15, 2)->nullable();
             $table->decimal('deposit_amount', 10, 2)->default(0);
             $table->unsignedBigInteger('payment_account_id');
-            $table->string('status')->default('pending'); // pending, approved, rejected
+            $table->string('status', 50)->default('pending'); // pending, approved, rejected
             $table->text('reason')->nullable();
             $table->boolean('terms_accepted')->default(false);
             $table->text('admin_notes')->nullable();
@@ -41,10 +41,10 @@ return new class extends Migration
             $table->foreign('processed_by')->references('id')->on('users')->onDelete('set null');
             $table->foreign('created_user_id')->references('id')->on('users')->onDelete('cascade');
             
-            $table->index(['tenant_id', 'status']);
-            $table->index(['member_id', 'status']);
-            $table->index(['asset_id', 'status']);
-            $table->index(['status', 'created_at']);
+            $table->index(['tenant_id', 'status'], 'idx_requests_tenant_status');
+            $table->index(['member_id', 'status'], 'idx_requests_member_status');
+            $table->index(['asset_id', 'status'], 'idx_requests_asset_status');
+            $table->index(['status', 'created_at'], 'idx_requests_status_date');
         });
     }
 

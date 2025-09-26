@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('daily_rate', 10, 2);
             $table->decimal('total_amount', 15, 2)->nullable();
             $table->decimal('deposit_amount', 10, 2)->default(0);
-            $table->string('status')->default('active'); // active, completed, cancelled, overdue
+            $table->string('status', 50)->default('active'); // active, completed, cancelled, overdue
             $table->text('terms_conditions')->nullable();
             $table->text('notes')->nullable();
             $table->unsignedBigInteger('created_by');
@@ -56,9 +56,9 @@ return new class extends Migration
 
         // Add indexes
         Schema::table('asset_leases', function (Blueprint $table) {
-            $table->index(['tenant_id', 'status']);
-            $table->index(['asset_id', 'status']);
-            $table->index(['member_id', 'status']);
+            $table->index(['tenant_id', 'status'], 'idx_leases_tenant_status');
+            $table->index(['asset_id', 'status'], 'idx_leases_asset_status');
+            $table->index(['member_id', 'status'], 'idx_leases_member_status');
         });
     }
 

@@ -11,30 +11,33 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('esignature_fields', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('document_id');
-            $table->unsignedBigInteger('tenant_id');
-            $table->string('field_type'); // text, signature, date, checkbox, dropdown, etc.
-            $table->string('field_name');
-            $table->string('field_label');
-            $table->text('field_value')->nullable();
-            $table->json('field_options')->nullable(); // For dropdowns, checkboxes, etc.
-            $table->boolean('is_required')->default(false);
-            $table->boolean('is_readonly')->default(false);
-            $table->integer('position_x')->nullable();
-            $table->integer('position_y')->nullable();
-            $table->integer('width')->nullable();
-            $table->integer('height')->nullable();
-            $table->integer('page_number')->default(1);
-            $table->string('assigned_to')->nullable(); // Email of signer this field is assigned to
-            $table->timestamps();
+        // Only create the table if it doesn't exist
+        if (!Schema::hasTable('esignature_fields')) {
+            Schema::create('esignature_fields', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('document_id');
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('field_type'); // text, signature, date, checkbox, dropdown, etc.
+                $table->string('field_name');
+                $table->string('field_label');
+                $table->text('field_value')->nullable();
+                $table->json('field_options')->nullable(); // For dropdowns, checkboxes, etc.
+                $table->boolean('is_required')->default(false);
+                $table->boolean('is_readonly')->default(false);
+                $table->integer('position_x')->nullable();
+                $table->integer('position_y')->nullable();
+                $table->integer('width')->nullable();
+                $table->integer('height')->nullable();
+                $table->integer('page_number')->default(1);
+                $table->string('assigned_to')->nullable(); // Email of signer this field is assigned to
+                $table->timestamps();
 
-            $table->foreign('document_id')->references('id')->on('esignature_documents')->onDelete('cascade');
-            $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
-            $table->index(['document_id', 'page_number']);
-            $table->index(['tenant_id', 'field_type']);
-        });
+                $table->foreign('document_id')->references('id')->on('esignature_documents')->onDelete('cascade');
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+                $table->index(['document_id', 'page_number']);
+                $table->index(['tenant_id', 'field_type']);
+            });
+        }
     }
 
     /**
