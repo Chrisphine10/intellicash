@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('email_subscribers', function (Blueprint $table) {
             $table->id();
-            $table->string('email_address')->unique();
+            $table->string('email_address', 191)->unique();
             $table->string('ip_address');
             $table->timestamps();
         });

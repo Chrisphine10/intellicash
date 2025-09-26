@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('tenants', function (Blueprint $table) {
             $table->id();
-            $table->string('slug')->unique(); // e.g., "tenant1" in example.com/tenant1
+            $table->string('slug', 191)->unique(); // e.g., "tenant1" in example.com/tenant1
             $table->string('name');
             $table->string('membership_type', 50)->nullable()->comment('trial | member');
             $table->bigInteger('package_id')->nullable();
