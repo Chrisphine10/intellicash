@@ -16,7 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('asset_id');
             $table->unsignedBigInteger('member_id');
-            $table->string('lease_number')->unique();
+            $table->string('lease_number', 191)->unique();
             $table->date('start_date');
             $table->date('end_date')->nullable();
             $table->decimal('daily_rate', 10, 2);

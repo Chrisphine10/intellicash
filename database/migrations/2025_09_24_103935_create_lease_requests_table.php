@@ -16,7 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('member_id');
             $table->unsignedBigInteger('asset_id');
-            $table->string('request_number')->unique();
+            $table->string('request_number', 191)->unique();
             $table->date('start_date');
             $table->date('end_date')->nullable();
             $table->integer('requested_days');

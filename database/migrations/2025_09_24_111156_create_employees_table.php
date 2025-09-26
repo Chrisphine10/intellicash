@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('user_id')->nullable(); // Link to system user if employee is a system user
-            $table->string('employee_id')->unique(); // Employee ID/Number
+            $table->string('employee_id', 191)->unique(); // Employee ID/Number
             $table->string('first_name');
             $table->string('last_name');
             $table->string('middle_name')->nullable();

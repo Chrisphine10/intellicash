@@ -16,7 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('category_id');
             $table->string('name');
-            $table->string('asset_code')->unique();
+            $table->string('asset_code', 191)->unique();
             $table->text('description')->nullable();
             $table->decimal('purchase_price', 15, 2);
             $table->decimal('current_value', 15, 2)->nullable();
