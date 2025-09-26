@@ -19,6 +19,8 @@ class AssetCategoryController extends Controller
      */
     public function index()
     {
+        $this->authorize('viewAny', \App\Models\AssetCategory::class);
+        
         $tenant = app('tenant');
         
         if (!$tenant->isAssetManagementEnabled()) {
@@ -38,6 +40,8 @@ class AssetCategoryController extends Controller
      */
     public function create(Request $request, $tenant)
     {
+        $this->authorize('create', \App\Models\AssetCategory::class);
+        
         return view('backend.asset_management.categories.create');
     }
 
@@ -46,6 +50,8 @@ class AssetCategoryController extends Controller
      */
     public function store(Request $request, $tenant)
     {
+        $this->authorize('create', \App\Models\AssetCategory::class);
+        
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -79,7 +85,8 @@ class AssetCategoryController extends Controller
      */
     public function show(Request $request, $tenant, $id)
     {
-        $asset_category = AssetCategory::withoutGlobalScopes()->findOrFail($id);
+        $tenant = app('tenant');
+        $asset_category = AssetCategory::where('tenant_id', $tenant->id)->findOrFail($id);
         $asset_category->load(['assets' => function($query) {
             $query->with(['activeLeases.member'])->orderBy('name');
         }]);
@@ -92,7 +99,8 @@ class AssetCategoryController extends Controller
      */
     public function edit(Request $request, $tenant, $id)
     {
-        $asset_category = AssetCategory::withoutGlobalScopes()->findOrFail($id);
+        $tenant = app('tenant');
+        $asset_category = AssetCategory::where('tenant_id', $tenant->id)->findOrFail($id);
         return view('backend.asset_management.categories.edit', compact('asset_category'));
     }
 
@@ -101,7 +109,8 @@ class AssetCategoryController extends Controller
      */
     public function update(Request $request, $tenant, $id)
     {
-        $asset_category = AssetCategory::withoutGlobalScopes()->findOrFail($id);
+        $tenant = app('tenant');
+        $asset_category = AssetCategory::where('tenant_id', $tenant->id)->findOrFail($id);
         
         $request->validate([
             'name' => 'required|string|max:255',
@@ -135,7 +144,8 @@ class AssetCategoryController extends Controller
      */
     public function destroy(Request $request, $tenant, $id)
     {
-        $asset_category = AssetCategory::withoutGlobalScopes()->findOrFail($id);
+        $tenant = app('tenant');
+        $asset_category = AssetCategory::where('tenant_id', $tenant->id)->findOrFail($id);
         
         // Check if category has assets
         if ($asset_category->assets()->count() > 0) {
@@ -162,7 +172,8 @@ class AssetCategoryController extends Controller
      */
     public function toggleStatus(Request $request, $tenant, $id)
     {
-        $asset_category = AssetCategory::withoutGlobalScopes()->findOrFail($id);
+        $tenant = app('tenant');
+        $asset_category = AssetCategory::where('tenant_id', $tenant->id)->findOrFail($id);
         
         DB::beginTransaction();
         

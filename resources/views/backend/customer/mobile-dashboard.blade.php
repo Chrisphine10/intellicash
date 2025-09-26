@@ -2,12 +2,17 @@
 
 @section('content')
 <div class="container-fluid">
+    <!-- Pull to Refresh Indicator -->
+    <div class="pull-to-refresh">
+        <div class="refresh-icon"></div>
+    </div>
+
     <!-- Welcome Section -->
-    <div class="mobile-card">
+    <div class="mobile-card fade-in-up">
         <div class="card-header">
             <div class="d-flex align-items-center">
-                <div class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; background: var(--primary-light); display: flex; align-items: center; justify-content: center; margin-right: 15px;">
-                    <i class="fas fa-user" style="font-size: 24px; color: var(--primary-color);"></i>
+                <div class="user-avatar" style="width: 60px; height: 60px; border-radius: 50%; background: var(--primary-light); display: flex; align-items: center; justify-content: center; margin-right: 16px; box-shadow: var(--shadow);">
+                    <i class="fas fa-user" style="font-size: 28px; color: var(--primary-color);"></i>
                 </div>
                 <div>
                     <h5 class="card-title">{{ _lang('Welcome back,') }} {{ Auth::user()->name }}!</h5>
@@ -38,7 +43,7 @@
             @php $upcomingPayments += $loan->next_payment->amount_to_pay ?? 0; @endphp
         @endforeach
 
-        <div class="stat-card">
+        <div class="stat-card fade-in-scale">
             <div class="stat-icon">
                 <i class="fas fa-wallet"></i>
             </div>
@@ -46,7 +51,7 @@
             <p class="stat-label">{{ _lang('Total Balance') }}</p>
         </div>
 
-        <div class="stat-card">
+        <div class="stat-card fade-in-scale">
             <div class="stat-icon">
                 <i class="fas fa-hand-holding-usd"></i>
             </div>

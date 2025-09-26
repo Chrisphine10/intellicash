@@ -231,6 +231,7 @@ $permissions = permission_list();
                 <li class="nav-item"><a class="nav-link" href="{{ route('assets.index') }}">{{ _lang('Assets') }}</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('asset-categories.index') }}">{{ _lang('Categories') }}</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('asset-leases.index') }}">{{ _lang('Leases') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('lease-requests.index') }}">{{ _lang('Lease Requests') }}</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('asset-maintenance.index') }}">{{ _lang('Maintenance') }}</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('asset-reports.index') }}">{{ _lang('Reports') }}</a></li>
                 @endif

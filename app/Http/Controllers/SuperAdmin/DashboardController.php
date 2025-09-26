@@ -89,7 +89,11 @@ class DashboardController extends Controller {
             array_push($subscribed, (double) $tenant->subscribed);
         }
 
-        echo json_encode(['package' => $package, 'subscribed' => $subscribed, 'colors' => $colors]);
+        return response()->json([
+            'package' => $package, 
+            'subscribed' => $subscribed, 
+            'colors' => $colors
+        ]);
     }
 
     public function json_yearly_revenue() {
@@ -109,7 +113,10 @@ class DashboardController extends Controller {
             $transactions[$subscriptionPayment->td] = $subscriptionPayment->amount;
         }
 
-        echo json_encode(['month' => $months, 'transactions' => $transactions]);
+        return response()->json([
+            'month' => $months, 
+            'transactions' => $transactions
+        ]);
     }
 
     public function json_yearly_signup() {
@@ -129,7 +136,10 @@ class DashboardController extends Controller {
             $signups[$tenant->td] = $tenant->total;
         }
 
-        echo json_encode(['month' => $months, 'signups' => $signups]);
+        return response()->json([
+            'month' => $months, 
+            'signups' => $signups
+        ]);
 
     }
 

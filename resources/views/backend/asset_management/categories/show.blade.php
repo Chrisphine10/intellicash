@@ -116,7 +116,7 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <a href="{{ route('assets.show', $asset) }}" class="btn btn-sm btn-info">
+                                            <a href="{{ route('assets.show', ['tenant' => app('tenant')->slug, 'asset' => $asset]) }}" class="btn btn-sm btn-info">
                                                 <i class="fas fa-eye"></i>
                                             </a>
                                         </td>

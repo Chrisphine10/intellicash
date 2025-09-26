@@ -43,7 +43,7 @@ class ESignatureDocumentPolicy
     public function update(User $user, ESignatureDocument $document): bool
     {
         return $document->tenant_id === request()->tenant->id && 
-               $document->status === 'draft' &&
+               in_array($document->getRawOriginal('status'), ['draft', 'sent', 'expired']) &&
                ($user->user_type === 'admin' || 
                 $user->user_type === 'user' || 
                 $document->created_by === $user->id);
@@ -55,7 +55,7 @@ class ESignatureDocumentPolicy
     public function delete(User $user, ESignatureDocument $document): bool
     {
         return $document->tenant_id === request()->tenant->id && 
-               $document->status === 'draft' &&
+               $document->getRawOriginal('status') === 'draft' &&
                ($user->user_type === 'admin' || 
                 $document->created_by === $user->id);
     }
@@ -66,7 +66,7 @@ class ESignatureDocumentPolicy
     public function send(User $user, ESignatureDocument $document): bool
     {
         return $document->tenant_id === request()->tenant->id && 
-               $document->status === 'draft' &&
+               $document->getRawOriginal('status') === 'draft' &&
                ($user->user_type === 'admin' || 
                 $user->user_type === 'user' || 
                 $document->created_by === $user->id);
@@ -78,7 +78,7 @@ class ESignatureDocumentPolicy
     public function cancel(User $user, ESignatureDocument $document): bool
     {
         return $document->tenant_id === request()->tenant->id && 
-               in_array($document->status, ['sent', 'draft']) &&
+               in_array($document->getRawOriginal('status'), ['sent', 'draft']) &&
                ($user->user_type === 'admin' || 
                 $user->user_type === 'user' || 
                 $document->created_by === $user->id);

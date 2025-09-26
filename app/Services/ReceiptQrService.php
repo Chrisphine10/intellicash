@@ -296,14 +296,14 @@ class ReceiptQrService
     private function getCurrency(Transaction $transaction): string
     {
         if ($transaction->account) {
-            return $transaction->account->savings_type->currency->name ?? 'USD';
+            return $transaction->account->savings_type->currency->name ?? get_base_currency();
         }
         
         if ($transaction->bankAccount) {
-            return $transaction->bankAccount->currency->name ?? 'USD';
+            return $transaction->bankAccount->currency->name ?? get_base_currency();
         }
         
-        return 'USD';
+        return get_base_currency();
     }
 
     /**

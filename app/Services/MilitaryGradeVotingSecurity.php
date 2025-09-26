@@ -47,36 +47,45 @@ class MilitaryGradeVotingSecurity
     }
 
     /**
-     * Check rate limiting for vote attempts
+     * Check rate limiting for vote attempts with IP-based protection
      */
     private function checkRateLimiting(Member $member)
     {
-        $key = "vote_attempts:{$member->id}";
-        $attempts = RateLimiter::attempts($key);
+        $memberKey = "vote_attempts:{$member->id}";
+        $ipKey = "vote_attempts_ip:" . request()->ip();
         
-        // Only block if significantly over the limit (more lenient approach)
-        if ($attempts >= $this->maxVoteAttempts) {
+        $memberAttempts = RateLimiter::attempts($memberKey);
+        $ipAttempts = RateLimiter::attempts($ipKey);
+        
+        // Check both member and IP-based rate limits
+        if ($memberAttempts >= $this->maxVoteAttempts || $ipAttempts >= $this->maxVoteAttempts) {
             // Check if the member has already successfully voted in this election
-            // If they have, this might be a legitimate retry due to UI issues
             $hasVotedRecently = Vote::where('member_id', $member->id)
                 ->where('created_at', '>=', now()->subMinutes(10))
                 ->exists();
             
             if (!$hasVotedRecently) {
-                RateLimiter::hit($key, $this->voteCooldownMinutes * 60);
+                RateLimiter::hit($memberKey, $this->voteCooldownMinutes * 60);
+                RateLimiter::hit($ipKey, $this->voteCooldownMinutes * 60);
+                
                 return [
                     'passed' => false,
                     'message' => 'Too many vote attempts. Please wait before trying again.',
                     'cooldown_until' => now()->addMinutes($this->voteCooldownMinutes),
+                    'member_attempts' => $memberAttempts,
+                    'ip_attempts' => $ipAttempts,
                 ];
             }
         }
 
-        RateLimiter::hit($key, $this->voteCooldownMinutes * 60);
+        RateLimiter::hit($memberKey, $this->voteCooldownMinutes * 60);
+        RateLimiter::hit($ipKey, $this->voteCooldownMinutes * 60);
+        
         return [
             'passed' => true,
             'message' => 'Rate limiting check passed',
-            'attempts_remaining' => $this->maxVoteAttempts - $attempts - 1,
+            'member_attempts_remaining' => $this->maxVoteAttempts - $memberAttempts - 1,
+            'ip_attempts_remaining' => $this->maxVoteAttempts - $ipAttempts - 1,
         ];
     }
 
@@ -168,7 +177,7 @@ class MilitaryGradeVotingSecurity
     }
 
     /**
-     * Validate device fingerprint
+     * Validate device fingerprint with enhanced security
      */
     private function validateDeviceFingerprint(Request $request)
     {
@@ -183,6 +192,35 @@ class MilitaryGradeVotingSecurity
         if (!preg_match('/^[a-f0-9]{64}$/', $deviceFingerprint)) {
             // If invalid format, generate a new one
             $deviceFingerprint = $this->generateDeviceFingerprint($request);
+        }
+
+        // Check for suspicious device fingerprint patterns
+        $suspiciousPatterns = [
+            '0000000000000000000000000000000000000000000000000000000000000000',
+            'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        ];
+        
+        if (in_array($deviceFingerprint, $suspiciousPatterns)) {
+            return [
+                'passed' => false,
+                'message' => 'Suspicious device fingerprint detected',
+                'fingerprint' => $deviceFingerprint,
+            ];
+        }
+
+        // Check for duplicate device fingerprints from different IPs
+        $duplicateFingerprints = Vote::where('device_fingerprint', $deviceFingerprint)
+            ->where('ip_address', '!=', $request->ip())
+            ->where('created_at', '>=', now()->subHours(24))
+            ->count();
+
+        if ($duplicateFingerprints > 5) {
+            return [
+                'passed' => false,
+                'message' => 'Device fingerprint used from multiple IP addresses',
+                'fingerprint' => $deviceFingerprint,
+                'duplicate_count' => $duplicateFingerprints,
+            ];
         }
 
         return [

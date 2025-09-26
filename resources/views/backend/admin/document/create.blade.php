@@ -6,6 +6,11 @@
         <div class="card">
             <div class="card-header">
                 <span class="panel-title">{{ _lang('Upload Document') }}</span>
+                <div class="card-tools">
+                    <a href="{{ route('documents.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back to Documents') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="post" class="validate" autocomplete="off" action="{{ route('documents.store') }}" enctype="multipart/form-data">

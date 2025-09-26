@@ -190,13 +190,12 @@ class VslaShareoutController extends Controller
             'shares_owned' => 0
         ];
         
-        // Get total shares in the cycle
-        $endDate = $cycle->end_date ?? now();
+        // FIXED: Use 'amount' for financial calculations, 'shares' for counting
         $totalShares = VslaTransaction::where('tenant_id', $tenant->id)
             ->where('transaction_type', 'share_purchase')
             ->where('status', 'approved')
             ->whereBetween('created_at', [$cycle->start_date, $endDate])
-            ->sum('shares');
+            ->sum('amount'); // Use amount for financial calculations
         
         // Get member's shares in this cycle
         $memberShares = VslaTransaction::where('tenant_id', $tenant->id)
@@ -204,9 +203,17 @@ class VslaShareoutController extends Controller
             ->where('transaction_type', 'share_purchase')
             ->where('status', 'approved')
             ->whereBetween('created_at', [$cycle->start_date, $endDate])
-            ->sum('shares');
+            ->sum('amount'); // Use amount for financial calculations
         
-        $expected['shares_owned'] = $memberShares;
+        // Get share count for display purposes
+        $memberShareCount = VslaTransaction::where('tenant_id', $tenant->id)
+            ->where('member_id', $member->id)
+            ->where('transaction_type', 'share_purchase')
+            ->where('status', 'approved')
+            ->whereBetween('created_at', [$cycle->start_date, $endDate])
+            ->sum('shares'); // Use shares for counting
+        
+        $expected['shares_owned'] = $memberShareCount; // Use share count for display
         
         if ($totalShares > 0 && $memberShares > 0) {
             // Calculate share percentage

@@ -261,18 +261,43 @@ class VotingController extends Controller
             return redirect()->back()->with('error', _lang('Only active elections can be closed'));
         }
 
-        DB::transaction(function () use ($election) {
-            $election->update(['status' => 'closed']);
-            
-            // Calculate results
-            $this->votingService->calculateResults($election);
-            
-            // Log the action
-            $this->logAuditAction($election, 'closed');
-        });
+        try {
+            DB::transaction(function () use ($election) {
+                $election->update(['status' => 'closed']);
+                
+                // Calculate results with error handling
+                try {
+                    $this->votingService->calculateResults($election);
+                } catch (\Exception $e) {
+                    // Log the error but don't fail the transaction
+                    $this->logAuditAction($election, 'RESULT_CALCULATION_ERROR', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    
+                    // Set election status to indicate calculation failed
+                    $election->update(['status' => 'calculation_failed']);
+                    throw new \Exception('Failed to calculate results: ' . $e->getMessage());
+                }
+                
+                // Log the action
+                $this->logAuditAction($election, 'closed');
+            });
 
-        // Send notifications about results
-        $this->votingService->notifyMembersOfResults($election);
+            // Send notifications about results
+            try {
+                $this->votingService->notifyMembersOfResults($election);
+            } catch (\Exception $e) {
+                // Log notification error but don't fail the process
+                $this->logAuditAction($election, 'NOTIFICATION_ERROR', [
+                    'error' => $e->getMessage(),
+                    'type' => 'results_notification',
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', _lang('Failed to close election: ') . $e->getMessage());
+        }
 
         return redirect()->back()->with('success', _lang('Election closed and results calculated'));
     }
@@ -396,36 +421,54 @@ class VotingController extends Controller
 
         // 3. Create vote with blockchain security
         $vote = null;
-        DB::transaction(function () use ($voteData, $election, $member, $policyResult, &$vote) {
-            $vote = Vote::create($voteData);
-            
-            // 4. Generate blockchain hash and encrypt data
-            $blockchainHash = $this->blockchainService->createVoteBlock($vote, $election);
-            
-            // 5. Update vote with security score
-            $vote->update([
-                'security_score' => $this->calculateSecurityScore($voteData),
-            ]);
+        try {
+            DB::transaction(function () use ($voteData, $election, $member, $policyResult, &$vote) {
+                $vote = Vote::create($voteData);
+                
+                // 4. Generate blockchain hash and encrypt data
+                $blockchainHash = $this->blockchainService->createVoteBlock($vote, $election);
+                
+                if (!$blockchainHash) {
+                    throw new \Exception('Failed to create blockchain hash');
+                }
+                
+                // 5. Update vote with security score
+                $vote->update([
+                    'security_score' => $this->calculateSecurityScore($voteData),
+                ]);
 
-            // 6. Log the secure vote
-            $this->logAuditAction($election, 'SECURE_VOTE_CREATED', [
-                'member_id' => $member->id,
-                'choice' => $voteData['choice'] ?? ($voteData['candidate_id'] ? 'candidate' : 'abstain'),
-                'candidate_id' => $voteData['candidate_id'] ?? null,
-                'blockchain_hash' => $blockchainHash,
-                'security_score' => $vote->security_score,
-                'policy_compliance' => $policyResult['compliance_score'],
-            ], $member->id);
-        });
+                // 6. Log the secure vote
+                $this->logAuditAction($election, 'SECURE_VOTE_CREATED', [
+                    'member_id' => $member->id,
+                    'choice' => $voteData['choice'] ?? ($voteData['candidate_id'] ? 'candidate' : 'abstain'),
+                    'candidate_id' => $voteData['candidate_id'] ?? null,
+                    'blockchain_hash' => $blockchainHash,
+                    'security_score' => $vote->security_score,
+                    'policy_compliance' => $policyResult['compliance_score'],
+                ], $member->id);
+            });
 
-        // 7. Verify the vote was created securely
-        $verificationResult = $this->blockchainService->verifyVote($vote);
-        if (!$verificationResult) {
-            // This should never happen, but if it does, we need to investigate
-            $this->logAuditAction($election, 'VOTE_VERIFICATION_FAILED', [
-                'vote_id' => $vote->id,
+            // 7. Verify the vote was created securely
+            $verificationResult = $this->blockchainService->verifyVote($vote);
+            if (!$verificationResult) {
+                // This should never happen, but if it does, we need to investigate
+                $this->logAuditAction($election, 'VOTE_VERIFICATION_FAILED', [
+                    'vote_id' => $vote->id,
+                    'member_id' => $member->id,
+                ], $member->id);
+                
+                return redirect()->back()->with('error', _lang('Vote verification failed. Please contact support.'));
+            }
+
+        } catch (\Exception $e) {
+            // Log the error
+            $this->logAuditAction($election, 'VOTE_CREATION_ERROR', [
                 'member_id' => $member->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ], $member->id);
+            
+            return redirect()->back()->with('error', _lang('Failed to submit vote. Please try again or contact support.'));
         }
 
         return redirect()->route('voting.elections.show', [

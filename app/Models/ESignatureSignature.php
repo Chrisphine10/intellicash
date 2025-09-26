@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\MultiTenant;
+use App\Services\ESignatureSecurityService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -124,10 +125,14 @@ class ESignatureSignature extends Model
         return route('esignature.public.sign', ['token' => $this->signature_token]);
     }
 
+    /**
+     * Get signature image URL with decryption
+     */
     public function getSignatureImageUrl(): ?string
     {
-        if ($this->signature_data) {
-            return 'data:image/png;base64,' . $this->signature_data;
+        $decryptedData = $this->decryptSignatureData();
+        if ($decryptedData) {
+            return 'data:image/png;base64,' . $decryptedData;
         }
         return null;
     }
@@ -222,5 +227,103 @@ class ESignatureSignature extends Model
         }
 
         return 'Unknown Device';
+    }
+
+    /**
+     * Generate secure signature token
+     */
+    public static function generateSecureToken(): string
+    {
+        $securityService = app(ESignatureSecurityService::class);
+        return $securityService->generateSecureToken();
+    }
+
+    /**
+     * Validate signature with cryptographic verification
+     */
+    public function validateSignature(string $signatureData, string $signatureType): bool
+    {
+        $securityService = app(ESignatureSecurityService::class);
+        
+        // Validate signature data format
+        if (!$securityService->validateSignatureData($signatureData, $signatureType)) {
+            return false;
+        }
+
+        // Check for suspicious activity
+        $suspiciousActivity = $securityService->detectSuspiciousActivity(
+            request()->ip(),
+            request()->userAgent()
+        );
+
+        // If suspicious activity detected, require additional verification
+        if (in_array(true, $suspiciousActivity)) {
+            \Log::warning('Suspicious e-signature activity detected', [
+                'ip' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'signature_id' => $this->id,
+                'patterns' => $suspiciousActivity
+            ]);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Create cryptographic signature hash
+     */
+    public function createSignatureHash(string $signatureData): string
+    {
+        $securityService = app(ESignatureSecurityService::class);
+        return $securityService->createSignatureHash(
+            $signatureData,
+            $this->signer_email,
+            $this->document_id
+        );
+    }
+
+    /**
+     * Verify signature hash
+     */
+    public function verifySignatureHash(string $signatureData, string $providedHash): bool
+    {
+        $securityService = app(ESignatureSecurityService::class);
+        return $securityService->verifySignatureHash(
+            $signatureData,
+            $this->signer_email,
+            $this->document_id,
+            $providedHash
+        );
+    }
+
+    /**
+     * Encrypt signature data before storage
+     */
+    public function encryptSignatureData(string $signatureData): string
+    {
+        $securityService = app(ESignatureSecurityService::class);
+        return $securityService->encryptSignatureData($signatureData);
+    }
+
+    /**
+     * Decrypt signature data for display
+     */
+    public function decryptSignatureData(): ?string
+    {
+        if (!$this->signature_data) {
+            return null;
+        }
+
+        try {
+            $securityService = app(ESignatureSecurityService::class);
+            return $securityService->decryptSignatureData($this->signature_data);
+        } catch (\Exception $e) {
+            \Log::error('Failed to decrypt signature data', [
+                'signature_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
 }

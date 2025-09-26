@@ -49,7 +49,13 @@ try {
                 SELECT `id`, 0, 0, 'mainnet', 200, 'H', 30, 1, 0, NOW(), NOW() FROM `tenants`");
     
     echo "SUCCESS: QR Code tables created successfully!";
-    echo "<br><a href='intelliwealth/modules'>Go to Modules</a>";
+    // Get first tenant for the link
+    $firstTenant = $pdo->query("SELECT slug FROM tenants LIMIT 1")->fetchColumn();
+    if ($firstTenant) {
+        echo "<br><a href='{$firstTenant}/modules'>Go to Modules</a>";
+    } else {
+        echo "<br><a href='#'>No tenants found - please create a tenant first</a>";
+    }
     
 } catch (PDOException $e) {
     echo "ERROR: " . $e->getMessage();

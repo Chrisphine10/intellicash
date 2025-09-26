@@ -16,14 +16,10 @@ class Member extends Model {
      */
     protected $table = 'members';
 
-    protected $guarded = ['id', 'created_at', 'updated_at'];
-
     protected $fillable = [
         'first_name',
         'last_name',
         'branch_id',
-        'user_id',
-        'status',
         'email',
         'country_code',
         'mobile',
@@ -37,11 +33,20 @@ class Member extends Model {
         'credit_source',
         'photo',
         'custom_fields',
-        'tenant_id',
         'vsla_role',
-        'is_vsla_chairperson',
-        'is_vsla_treasurer',
-        'is_vsla_secretary',
+    ];
+
+    // SECURE: Protected fields that should not be mass assignable
+    protected $guarded = [
+        'id',
+        'created_at',
+        'updated_at',
+        'tenant_id',        // CRITICAL: Prevent tenant switching
+        'user_id',         // SECURE: Prevent user account takeover
+        'status',          // SECURE: Prevent unauthorized status changes
+        'is_vsla_chairperson',  // SECURE: Prevent privilege escalation
+        'is_vsla_treasurer',    // SECURE: Prevent privilege escalation
+        'is_vsla_secretary',    // SECURE: Prevent privilege escalation
     ];
 
     protected $casts = [
@@ -51,8 +56,39 @@ class Member extends Model {
     ];
 
     protected static function booted() {
+        // Add tenant isolation global scope
+        static::addGlobalScope('tenant', function (Builder $builder) {
+            if (auth()->check() && auth()->user()->tenant_id) {
+                $builder->where('tenant_id', auth()->user()->tenant_id);
+            }
+        });
+
+        // Add status filtering with tenant validation
         static::addGlobalScope('status', function (Builder $builder) {
             return $builder->where('status', 1);
+        });
+
+        // Add security event monitoring
+        static::created(function ($member) {
+            if (class_exists('App\Services\ThreatMonitoringService')) {
+                app('App\Services\ThreatMonitoringService')->monitorEvent('member_created', [
+                    'member_id' => $member->id,
+                    'member_no' => $member->member_no,
+                    'tenant_id' => $member->tenant_id,
+                    'user_id' => auth()->id()
+                ]);
+            }
+        });
+
+        static::updated(function ($member) {
+            if (class_exists('App\Services\ThreatMonitoringService')) {
+                app('App\Services\ThreatMonitoringService')->monitorEvent('member_updated', [
+                    'member_id' => $member->id,
+                    'member_no' => $member->member_no,
+                    'tenant_id' => $member->tenant_id,
+                    'user_id' => auth()->id()
+                ]);
+            }
         });
     }
 
@@ -74,8 +110,20 @@ class Member extends Model {
         return $this->belongsTo('App\Models\User', 'user_id')->withDefault();
     }
 
+    public function employee() {
+        return $this->hasOne('App\Models\Employee', 'member_id');
+    }
+
     public function loans() {
         return $this->hasMany('App\Models\Loan', 'borrower_id');
+    }
+
+    public function savings_accounts() {
+        return $this->hasMany('App\Models\SavingsAccount', 'member_id');
+    }
+
+    public function transactions() {
+        return $this->hasMany('App\Models\Transaction', 'member_id');
     }
 
     public function documents() {
@@ -144,5 +192,45 @@ class Member extends Model {
 
     public function scopeActive($query) {
         return $query->where('status', 1);
+    }
+
+    public function leaseRequests() {
+        return $this->hasMany('App\Models\LeaseRequest', 'member_id');
+    }
+
+    public function assetLeases() {
+        return $this->hasMany('App\Models\AssetLease', 'member_id');
+    }
+
+    /**
+     * Check if member can be deleted
+     */
+    public function canBeDeleted() {
+        return $this->loans()->where('status', 'active')->count() === 0 &&
+               $this->transactions()->where('trans_date', '>=', now()->subDays(30))->count() === 0 &&
+               $this->savings_accounts()->where('status', 1)->where('balance', '>', 0)->count() === 0;
+    }
+
+    /**
+     * Get member statistics
+     */
+    public function getTotalLoansAttribute() {
+        return $this->loans()->sum('applied_amount');
+    }
+
+    public function getActiveLoansAttribute() {
+        return $this->loans()->where('status', 1)->count(); // Use integer status consistently
+    }
+
+    public function getTotalSavingsAttribute() {
+        return $this->savings_accounts()->sum('balance');
+    }
+
+
+    /**
+     * Scope for inactive members only
+     */
+    public function scopeInactive($query) {
+        return $query->where('status', 0);
     }
 }

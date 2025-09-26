@@ -7,6 +7,11 @@
         <div class="card">
             <div class="card-header">
                 <span class="panel-title">{{ _lang('Update User') }}</span>
+                <div class="card-tools">
+                    <a href="{{ route('users.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back to Users') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="post" class="validate" autocomplete="off"

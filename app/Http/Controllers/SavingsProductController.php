@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SavingsProduct;
+use App\Models\BankAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -37,7 +38,7 @@ class SavingsProductController extends Controller {
      */
     public function index() {
         $assets          = ['datatable'];
-        $savingsproducts = SavingsProduct::all()->sortByDesc("id");
+        $savingsproducts = SavingsProduct::with('bank_account')->get()->sortByDesc("id");
         return view('backend.admin.savings_product.list', compact('savingsproducts', 'assets'));
     }
 
@@ -50,7 +51,8 @@ class SavingsProductController extends Controller {
         if (! $request->ajax()) {
             return back();
         } else {
-            return view('backend.admin.savings_product.modal.create');
+            $bankAccounts = BankAccount::active()->get();
+            return view('backend.admin.savings_product.modal.create', compact('bankAccounts'));
         }
     }
 
@@ -66,6 +68,7 @@ class SavingsProductController extends Controller {
             'account_number_prefix'          => 'nullable|max:10',
             'starting_account_number'        => 'required|integer',
             'currency_id'                    => 'required',
+            'bank_account_id'               => 'nullable|exists:bank_accounts,id',
             'interest_rate'                  => 'nullable|numeric',
             'interest_method'                => 'required_with:interest_rate',
             'interest_period'                => 'required_with:interest_rate',
@@ -100,6 +103,7 @@ class SavingsProductController extends Controller {
         $savingsproduct->account_number_prefix          = $request->input('account_number_prefix');
         $savingsproduct->starting_account_number        = $request->input('starting_account_number');
         $savingsproduct->currency_id                    = $request->input('currency_id');
+        $savingsproduct->bank_account_id                = $request->input('bank_account_id');
         $savingsproduct->interest_rate                  = $request->input('interest_rate');
         $savingsproduct->interest_method                = $request->input('interest_method');
         $savingsproduct->interest_period                = $request->input('interest_period');
@@ -155,7 +159,8 @@ class SavingsProductController extends Controller {
         if (! $request->ajax()) {
             return back();
         } else {
-            return view('backend.admin.savings_product.modal.edit', compact('savingsproduct', 'id'));
+            $bankAccounts = BankAccount::active()->get();
+            return view('backend.admin.savings_product.modal.edit', compact('savingsproduct', 'id', 'bankAccounts'));
         }
     }
 
@@ -172,6 +177,7 @@ class SavingsProductController extends Controller {
             'account_number_prefix'          => 'nullable|max:10',
             'starting_account_number'        => 'required|integer',
             'currency_id'                    => 'required',
+            'bank_account_id'               => 'nullable|exists:bank_accounts,id',
             'interest_rate'                  => 'nullable|numeric',
             'interest_method'                => 'required_with:interest_rate',
             'interest_period'                => 'required_with:interest_rate',
@@ -205,6 +211,7 @@ class SavingsProductController extends Controller {
         $savingsproduct->account_number_prefix          = $request->input('account_number_prefix');
         $savingsproduct->starting_account_number        = $request->input('starting_account_number');
         $savingsproduct->currency_id                    = $request->input('currency_id');
+        $savingsproduct->bank_account_id                = $request->input('bank_account_id');
         $savingsproduct->interest_rate                  = $request->input('interest_rate');
         $savingsproduct->interest_method                = $request->input('interest_method');
         $savingsproduct->interest_period                = $request->input('interest_period');

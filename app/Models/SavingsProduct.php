@@ -24,6 +24,7 @@ class SavingsProduct extends Model {
 		'account_number_prefix',
 		'starting_account_number',
 		'currency_id',
+		'bank_account_id',
 		'interest_rate',
 		'interest_method',
 		'interest_period',
@@ -63,6 +64,10 @@ class SavingsProduct extends Model {
 
 	public function maintenanceFee() {
 		return $this->hasMany('App\Models\ScheduleTaskHistory', 'reference_id')->where('name', 'maintenance_fee');
+	}
+
+	public function bank_account() {
+		return $this->belongsTo('App\Models\BankAccount', 'bank_account_id')->withDefault();
 	}
 
 }

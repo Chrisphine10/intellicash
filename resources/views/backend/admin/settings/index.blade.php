@@ -114,6 +114,7 @@
 								</div>
 							</div>
 
+
 							<div class="form-group row">
 								<label class="col-xl-3 col-form-label">{{ _lang('Backend Direction') }}</label>
 								<div class="col-xl-9">
@@ -336,7 +337,7 @@
 									<div class="form-group row">
 										<label class="col-xl-3 col-form-label">{{ _lang('SMTP Password') }}</label>
 										<div class="col-xl-9">
-											<input type="password" class="form-control smtp" autocomplete="off" name="smtp_password" value="{{ get_setting($settings, 'smtp_password', '') }}">
+											<input type="password" class="form-control smtp" autocomplete="off" name="smtp_password" value="{{ get_setting_masked($settings, 'smtp_password', '') }}" placeholder="{{ _lang('Enter password to update') }}">
 										</div>
 									</div>
 
@@ -434,7 +435,7 @@
 											<div class="form-group row">
 												<label class="col-xl-3 col-lg-4 col-form-label">{{ _lang('Auth Token') }}</label>
 												<div class="col-xl-9 col-lg-8">
-													<input type="text" class="form-control" name="twilio_auth_token" value="{{ get_setting($settings, 'twilio_auth_token') }}">
+													<input type="password" class="form-control" name="twilio_auth_token" value="{{ get_setting_masked($settings, 'twilio_auth_token') }}" placeholder="{{ _lang('Enter token to update') }}">
 												</div>
 											</div>
 
@@ -488,7 +489,7 @@
 											<div class="form-group row">
 												<label class="col-xl-3 col-lg-4 col-form-label">{{ _lang('API V2 KEY') }}</label>
 												<div class="col-xl-9 col-lg-8">
-													<input type="text" class="form-control" name="textmagic_api_key" value="{{ get_setting($settings, 'textmagic_api_key') }}">
+													<input type="password" class="form-control" name="textmagic_api_key" value="{{ get_setting_masked($settings, 'textmagic_api_key') }}" placeholder="{{ _lang('Enter API key to update') }}">
 												</div>
 											</div>
 
@@ -535,7 +536,7 @@
 											<div class="form-group row">
 												<label class="col-xl-3 col-lg-4 col-form-label">{{ _lang('API Secret') }}</label>
 												<div class="col-xl-9 col-lg-8">
-													<input type="text" class="form-control" name="nexmo_api_secret" value="{{ get_setting($settings, 'nexmo_api_secret') }}">
+													<input type="password" class="form-control" name="nexmo_api_secret" value="{{ get_setting_masked($settings, 'nexmo_api_secret') }}" placeholder="{{ _lang('Enter API secret to update') }}">
 												</div>
 											</div>
 
@@ -575,7 +576,7 @@
 											<div class="form-group row">
 												<label class="col-xl-3 col-lg-4 col-form-label">{{ _lang('API KEY') }}</label>
 												<div class="col-xl-9 col-lg-8">
-													<input type="text" class="form-control" name="infobip_api_key" value="{{ get_setting($settings, 'infobip_api_key') }}">
+													<input type="password" class="form-control" name="infobip_api_key" value="{{ get_setting_masked($settings, 'infobip_api_key') }}" placeholder="{{ _lang('Enter API key to update') }}">
 												</div>
 											</div>
 
@@ -629,7 +630,7 @@
 											<div class="form-group row">
 												<label class="col-xl-3 col-lg-4 col-form-label">{{ _lang('API Key') }}</label>
 												<div class="col-xl-9 col-lg-8">
-													<input type="text" class="form-control" name="africas_talking_api_key" value="{{ get_setting($settings, 'africas_talking_api_key') }}">
+													<input type="password" class="form-control" name="africas_talking_api_key" value="{{ get_setting_masked($settings, 'africas_talking_api_key') }}" placeholder="{{ _lang('Enter API key to update') }}">
 												</div>
 											</div>
 
@@ -816,164 +817,6 @@
 									<div class="form-group">
 										<button type="submit" class="btn btn-primary">{{ _lang('Save Settings') }}</button>
 										<a href="{{ route('pwa.install-prompt') }}" target="_blank" class="btn btn-info ml-2">{{ _lang('Test PWA') }}</a>
-									</div>
-								</div>
-							</div>
-						</form>
-					</div>
-				</div>
-			</div>
-
-							<div class="row">
-								<div class="col-md-12">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('App Description') }}</label>
-										<textarea class="form-control" name="pwa_description" rows="3">{{ get_setting($settings, 'pwa_description', 'Progressive Web App for IntelliCash - Manage your finances efficiently') }}</textarea>
-										<small class="form-text text-muted">{{ _lang('Description of your PWA app') }}</small>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('Theme Color') }}</label>
-										<input type="color" class="form-control" name="pwa_theme_color" value="{{ get_setting($settings, 'pwa_theme_color', '#007bff') }}">
-										<small class="form-text text-muted">{{ _lang('Theme color for the PWA') }}</small>
-									</div>
-								</div>
-
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('Background Color') }}</label>
-										<input type="color" class="form-control" name="pwa_background_color" value="{{ get_setting($settings, 'pwa_background_color', '#ffffff') }}">
-										<small class="form-text text-muted">{{ _lang('Background color for the PWA') }}</small>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('Display Mode') }}</label>
-										<select class="form-control auto-select" name="pwa_display_mode" data-selected="{{ get_setting($settings, 'pwa_display_mode', 'standalone') }}">
-											<option value="standalone">{{ _lang('Standalone') }}</option>
-											<option value="fullscreen">{{ _lang('Fullscreen') }}</option>
-											<option value="minimal-ui">{{ _lang('Minimal UI') }}</option>
-											<option value="browser">{{ _lang('Browser') }}</option>
-										</select>
-										<small class="form-text text-muted">{{ _lang('How the app is displayed when launched') }}</small>
-									</div>
-								</div>
-
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('Orientation') }}</label>
-										<select class="form-control auto-select" name="pwa_orientation" data-selected="{{ get_setting($settings, 'pwa_orientation', 'portrait-primary') }}">
-											<option value="portrait-primary">{{ _lang('Portrait Primary') }}</option>
-											<option value="landscape-primary">{{ _lang('Landscape Primary') }}</option>
-											<option value="any">{{ _lang('Any') }}</option>
-										</select>
-										<small class="form-text text-muted">{{ _lang('Preferred orientation for the app') }}</small>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-12">
-									<h6 class="mt-4 mb-3">{{ _lang('App Icons') }}</h6>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('App Icon (192x192)') }}</label>
-										<input type="file" class="dropify" name="pwa_icon_192" data-default-file="{{ get_setting($settings, 'pwa_icon_192') ? asset('public/uploads/media/'.get_setting($settings, 'pwa_icon_192')) : '' }}">
-										<small class="form-text text-muted">{{ _lang('192x192 PNG icon for Android devices') }}</small>
-									</div>
-								</div>
-
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('App Icon (512x512)') }}</label>
-										<input type="file" class="dropify" name="pwa_icon_512" data-default-file="{{ get_setting($settings, 'pwa_icon_512') ? asset('public/uploads/media/'.get_setting($settings, 'pwa_icon_512')) : '' }}">
-										<small class="form-text text-muted">{{ _lang('512x512 PNG icon for high-resolution displays') }}</small>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-12">
-									<h6 class="mt-4 mb-3">{{ _lang('Shortcuts') }}</h6>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-4">
-									<div class="form-group">
-										<div class="custom-control custom-switch">
-											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_dashboard" name="pwa_shortcut_dashboard" value="1" {{ get_setting($settings, 'pwa_shortcut_dashboard') == '1' ? 'checked' : '' }}>
-											<label class="custom-control-label" for="pwa_shortcut_dashboard">{{ _lang('Dashboard Shortcut') }}</label>
-										</div>
-									</div>
-								</div>
-
-								<div class="col-md-4">
-									<div class="form-group">
-										<div class="custom-control custom-switch">
-											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_transactions" name="pwa_shortcut_transactions" value="1" {{ get_setting($settings, 'pwa_shortcut_transactions') == '1' ? 'checked' : '' }}>
-											<label class="custom-control-label" for="pwa_shortcut_transactions">{{ _lang('Transactions Shortcut') }}</label>
-										</div>
-									</div>
-								</div>
-
-								<div class="col-md-4">
-									<div class="form-group">
-										<div class="custom-control custom-switch">
-											<input type="checkbox" class="custom-control-input" id="pwa_shortcut_profile" name="pwa_shortcut_profile" value="1" {{ get_setting($settings, 'pwa_shortcut_profile') == '1' ? 'checked' : '' }}>
-											<label class="custom-control-label" for="pwa_shortcut_profile">{{ _lang('Profile Shortcut') }}</label>
-										</div>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-12">
-									<h6 class="mt-4 mb-3">{{ _lang('Advanced Settings') }}</h6>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-6">
-									<div class="form-group">
-										<div class="custom-control custom-switch">
-											<input type="checkbox" class="custom-control-input" id="pwa_offline_support" name="pwa_offline_support" value="1" {{ get_setting($settings, 'pwa_offline_support') == '1' ? 'checked' : '' }}>
-											<label class="custom-control-label" for="pwa_offline_support">{{ _lang('Offline Support') }}</label>
-										</div>
-										<small class="form-text text-muted">{{ _lang('Enable offline functionality and caching') }}</small>
-									</div>
-								</div>
-
-								<div class="col-md-6">
-									<div class="form-group">
-										<label class="control-label">{{ _lang('Cache Strategy') }}</label>
-										<select class="form-control auto-select" name="pwa_cache_strategy" data-selected="{{ get_setting($settings, 'pwa_cache_strategy', 'cache-first') }}">
-											<option value="cache-first">{{ _lang('Cache First') }}</option>
-											<option value="network-first">{{ _lang('Network First') }}</option>
-											<option value="stale-while-revalidate">{{ _lang('Stale While Revalidate') }}</option>
-										</select>
-										<small class="form-text text-muted">{{ _lang('Strategy for caching resources') }}</small>
-									</div>
-								</div>
-							</div>
-
-							<div class="row">
-								<div class="col-md-12">
-									<div class="form-group">
-										<button type="submit" class="btn btn-primary">{{ _lang('Save Settings') }}</button>
-										<a href="{{ route('pwa.test') }}" class="btn btn-info ml-2">{{ _lang('Test PWA') }}</a>
-										<button type="button" class="btn btn-success ml-2" onclick="generateIcons()">{{ _lang('Generate Icons') }}</button>
 									</div>
 								</div>
 							</div>

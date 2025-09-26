@@ -2,10 +2,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Role;
+use App\Models\Branch;
 use DataTables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller {
@@ -116,74 +120,178 @@ class UserController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request) {
-        $validator = Validator::make($request->all(), [
-            'name'            => 'required|max:60',
-            'email'           => [
-                'required',
-                'email',
-                Rule::unique('users')->where(function ($query) {
-                    return $query->where('tenant_id', app('tenant')->id);
-                }),
-            ],
-            'status'          => 'required',
-            'profile_picture' => 'nullable|image|max:4096',
-            'password'        => 'required|min:6',
-            'country_code'    => [
-                function ($attribute, $value, $fail) use ($request) {
-                    if ($request->filled('mobile') && empty($value)) {
-                        $fail('The country code is required when mobile is provided.');
-                    }
-                },
-            ],
-        ]);
+        try {
+            // Enhanced validation rules
+            $validator = Validator::make($request->all(), [
+                'name'            => 'required|max:60|string',
+                'email'           => [
+                    'required',
+                    'email',
+                    'max:255',
+                    Rule::unique('users')->where(function ($query) {
+                        return $query->where('tenant_id', app('tenant')->id);
+                    }),
+                ],
+                'user_type'        => 'required|in:admin,user',
+                'role_id'          => 'nullable|exists:roles,id',
+                'branch_id'        => 'nullable|exists:branches,id',
+                'status'           => 'required|in:0,1',
+                'profile_picture'  => 'nullable|image|mimes:jpeg,png,jpg,gif|max:4096',
+                'password'         => 'required|min:8|confirmed',
+                'password_confirmation' => 'required|min:8',
+                'country_code'     => 'nullable|string|max:10',
+                'mobile'           => 'nullable|string|max:50',
+                'city'             => 'nullable|string|max:100',
+                'state'            => 'nullable|string|max:100',
+                'zip'              => 'nullable|string|max:30',
+                'address'          => 'nullable|string|max:500',
+            ], [
+                'email.unique' => 'This email address is already registered in your organization.',
+                'password.min' => 'Password must be at least 8 characters long.',
+                'password.confirmed' => 'Password confirmation does not match.',
+                'user_type.in' => 'User type must be either Admin or User.',
+                'role_id.exists' => 'Selected role does not exist.',
+                'branch_id.exists' => 'Selected branch does not exist.',
+                'profile_picture.image' => 'Profile picture must be an image file.',
+                'profile_picture.max' => 'Profile picture must not exceed 4MB.',
+            ]);
 
-        if ($validator->fails()) {
+            // Additional validation for role assignment
+            if ($request->user_type === 'user' && empty($request->role_id)) {
+                $validator->after(function ($validator) {
+                    $validator->errors()->add('role_id', 'Role is required for regular users.');
+                });
+            }
+
+            if ($validator->fails()) {
+                Log::warning('User creation validation failed', [
+                    'errors' => $validator->errors()->toArray(),
+                    'user_id' => auth()->id(),
+                    'tenant_id' => app('tenant')->id
+                ]);
+
+                if ($request->ajax()) {
+                    return response()->json([
+                        'result' => 'error', 
+                        'message' => $validator->errors()->all()
+                    ], 422);
+                } else {
+                    return redirect()->route('users.create')
+                        ->withErrors($validator)
+                        ->withInput();
+                }
+            }
+
+            DB::beginTransaction();
+
+            try {
+                // Handle profile picture upload
+                $profile_picture = "default.png";
+                if ($request->hasFile('profile_picture')) {
+                    $file = $request->file('profile_picture');
+                    $profile_picture = time() . '_' . rand() . '.' . $file->getClientOriginalExtension();
+                    
+                    // Validate file type
+                    if (!in_array($file->getClientOriginalExtension(), ['jpg', 'jpeg', 'png', 'gif'])) {
+                        throw new \Exception('Invalid file type. Only JPG, PNG, and GIF files are allowed.');
+                    }
+                    
+                    $file->move(public_path() . "/uploads/profile/", $profile_picture);
+                }
+
+                // Create user
+                $user = new User();
+                $user->name = $request->input('name');
+                $user->email = $request->input('email');
+                $user->user_type = $request->input('user_type');
+                $user->role_id = $request->input('role_id');
+                $user->tenant_id = app('tenant')->id;
+                $user->status = $request->input('status');
+                $user->profile_picture = $profile_picture;
+                $user->password = Hash::make($request->password);
+                $user->country_code = $request->input('country_code');
+                $user->mobile = $request->input('mobile');
+                $user->city = $request->input('city');
+                $user->state = $request->input('state');
+                $user->zip = $request->input('zip');
+                $user->address = $request->input('address');
+
+                // Handle branch assignment
+                if ($request->branch_id == 'all_branch') {
+                    $user->branch_id = null;
+                    $user->all_branch_access = 1;
+                } else {
+                    $user->branch_id = $request->input('branch_id');
+                    $user->all_branch_access = 0;
+                }
+
+                $user->save();
+
+                // Log successful user creation
+                Log::info('User created successfully', [
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'user_email' => $user->email,
+                    'user_type' => $user->user_type,
+                    'role_id' => $user->role_id,
+                    'created_by' => auth()->id(),
+                    'tenant_id' => app('tenant')->id
+                ]);
+
+                DB::commit();
+
+                if ($request->ajax()) {
+                    return response()->json([
+                        'result' => 'success', 
+                        'message' => _lang('User created successfully'),
+                        'redirect' => route('users.index')
+                    ]);
+                } else {
+                    return redirect()->route('users.index')
+                        ->with('success', _lang('User created successfully'));
+                }
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                
+                Log::error('User creation failed', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'user_data' => $request->except(['password', 'password_confirmation']),
+                    'created_by' => auth()->id(),
+                    'tenant_id' => app('tenant')->id
+                ]);
+
+                if ($request->ajax()) {
+                    return response()->json([
+                        'result' => 'error', 
+                        'message' => _lang('Failed to create user. Please try again.')
+                    ], 500);
+                } else {
+                    return redirect()->route('users.create')
+                        ->with('error', _lang('Failed to create user. Please try again.'))
+                        ->withInput();
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('User creation system error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'created_by' => auth()->id(),
+                'tenant_id' => app('tenant')->id
+            ]);
+
             if ($request->ajax()) {
-                return response()->json(['result' => 'error', 'message' => $validator->errors()->all()]);
+                return response()->json([
+                    'result' => 'error', 
+                    'message' => _lang('System error occurred. Please contact support.')
+                ], 500);
             } else {
                 return redirect()->route('users.create')
-                    ->withErrors($validator)
+                    ->with('error', _lang('System error occurred. Please contact support.'))
                     ->withInput();
             }
-        }
-
-        $profile_picture = "default.png";
-        if ($request->hasfile('profile_picture')) {
-            $file            = $request->file('profile_picture');
-            $profile_picture = rand() . time() . $file->getClientOriginalName();
-            $file->move(public_path() . "/uploads/profile/", $profile_picture);
-        }
-
-        $user            = new User();
-        $user->name      = $request->input('name');
-        $user->email     = $request->input('email');
-        $user->user_type = $request->input('user_type');
-        $user->role_id   = $request->input('role_id');
-        $user->tenant_id = app('tenant')->id;
-
-        if ($request->branch_id == 'all_branch') {
-            $user->branch_id         = null;
-            $user->all_branch_access = 1;
-        } else {
-            $user->branch_id = $request->input('branch_id');
-        }
-
-        $user->status          = $request->input('status');
-        $user->profile_picture = $profile_picture;
-        $user->password        = Hash::make($request->password);
-        $user->country_code    = $request->input('country_code');
-        $user->mobile          = $request->input('mobile');
-        $user->city            = $request->input('city');
-        $user->state           = $request->input('state');
-        $user->zip             = $request->input('zip');
-        $user->address         = $request->input('address');
-
-        $user->save();
-
-        if ($user->id > 0) {
-            return redirect()->route('users.index')->with('success', _lang('Saved Sucessfully'));
-        } else {
-            return redirect()->route('users.create')->with('error', _lang('Error Occured. Please try again'));
         }
     }
 

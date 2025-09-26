@@ -137,15 +137,20 @@
                                             {{ _lang('Actions') }}
                                         </button>
                                         <div class="dropdown-menu">
-                                            <a class="dropdown-item" href="{{ route('assets.show', $asset) }}">
+                                            <a class="dropdown-item" href="#" onclick="showAssetModal({{ $asset->id }})">
                                                 <i class="fas fa-eye"></i> {{ _lang('View') }}
                                             </a>
-                                            <a class="dropdown-item" href="{{ route('assets.edit', $asset) }}">
+                                            <a class="dropdown-item" href="#" onclick="editAssetModal({{ $asset->id }})">
                                                 <i class="fas fa-edit"></i> {{ _lang('Edit') }}
                                             </a>
                                             @if($asset->is_leasable && $asset->activeLeases->count() == 0)
                                                 <a class="dropdown-item" href="{{ route('assets.lease-form', $asset) }}">
                                                     <i class="fas fa-handshake"></i> {{ _lang('Create Lease') }}
+                                                </a>
+                                            @endif
+                                            @if($asset->status == 'active')
+                                                <a class="dropdown-item" href="{{ route('assets.sell', $asset) }}">
+                                                    <i class="fas fa-money-bill-wave"></i> {{ _lang('Sell Asset') }}
                                                 </a>
                                             @endif
                                             <div class="dropdown-divider"></div>
@@ -170,6 +175,47 @@
         </div>
     </div>
 </div>
+<!-- Asset View Modal -->
+<div class="modal fade" id="assetViewModal" tabindex="-1" role="dialog" aria-labelledby="assetViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assetViewModalLabel">{{ _lang('Asset Details') }}</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="assetViewModalBody">
+                <!-- Content will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _lang('Close') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Asset Edit Modal -->
+<div class="modal fade" id="assetEditModal" tabindex="-1" role="dialog" aria-labelledby="assetEditModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assetEditModalLabel">{{ _lang('Edit Asset') }}</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="assetEditModalBody">
+                <!-- Content will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _lang('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" onclick="saveAsset()">{{ _lang('Save Changes') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @section('js-script')
@@ -182,5 +228,84 @@ $(document).ready(function() {
         }
     });
 });
+
+function showAssetModal(assetId) {
+    $('#assetViewModalBody').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> {{ _lang("Loading...") }}</div>');
+    $('#assetViewModal').modal('show');
+    
+    $.ajax({
+        url: '{{ route("assets.show", ":id") }}'.replace(':id', assetId),
+        type: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(data) {
+            $('#assetViewModalBody').html(data);
+        },
+        error: function(xhr, status, error) {
+            console.log('AJAX Error:', xhr.responseText);
+            console.log('Status:', status);
+            console.log('Error:', error);
+            console.log('URL:', '{{ route("assets.show", ":id") }}'.replace(':id', assetId));
+            $('#assetViewModalBody').html('<div class="alert alert-danger">{{ _lang("Error loading asset details") }}<br><small>Status: ' + status + ', Error: ' + error + '</small></div>');
+        }
+    });
+}
+
+function editAssetModal(assetId) {
+    $('#assetEditModalBody').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> {{ _lang("Loading...") }}</div>');
+    $('#assetEditModal').modal('show');
+    
+    $.ajax({
+        url: '{{ route("assets.edit", ":id") }}'.replace(':id', assetId),
+        type: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(data) {
+            $('#assetEditModalBody').html(data);
+        },
+        error: function(xhr, status, error) {
+            console.log('AJAX Error:', xhr.responseText);
+            console.log('Status:', status);
+            console.log('Error:', error);
+            console.log('URL:', '{{ route("assets.edit", ":id") }}'.replace(':id', assetId));
+            $('#assetEditModalBody').html('<div class="alert alert-danger">{{ _lang("Error loading edit form") }}<br><small>Status: ' + status + ', Error: ' + error + '</small></div>');
+        }
+    });
+}
+
+function saveAsset() {
+    const form = $('#assetEditModalBody form');
+    const formData = new FormData(form[0]);
+    
+    $.ajax({
+        url: form.attr('action'),
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            $('#assetEditModal').modal('hide');
+            location.reload(); // Reload the page to show updated data
+        },
+        error: function(xhr) {
+            if (xhr.status === 422) {
+                // Handle validation errors
+                const errors = xhr.responseJSON.errors;
+                let errorHtml = '<div class="alert alert-danger"><ul>';
+                for (let field in errors) {
+                    errorHtml += '<li>' + errors[field][0] + '</li>';
+                }
+                errorHtml += '</ul></div>';
+                $('#assetEditModalBody').prepend(errorHtml);
+            } else {
+                alert('{{ _lang("Error saving asset") }}');
+            }
+        }
+    });
+}
 </script>
 @endsection

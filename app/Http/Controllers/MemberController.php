@@ -61,13 +61,30 @@ class MemberController extends Controller
 
     public function get_table_data()
     {
-        $members = Member::select('members.*')
-            ->with('branch')
+        $tenantId = auth()->user()->tenant_id;
+        
+        $members = Member::withoutGlobalScopes()
+            ->select([
+                'members.id',
+                'members.first_name',
+                'members.last_name',
+                'members.email',
+                'members.member_no',
+                'members.photo',
+                'members.status',
+                'branches.name as branch_name',
+                DB::raw("(SELECT COUNT(*) FROM loans WHERE loans.borrower_id = members.id AND loans.tenant_id = {$tenantId}) as loans_count"),
+                DB::raw("(SELECT COUNT(*) FROM transactions WHERE transactions.member_id = members.id AND transactions.tenant_id = {$tenantId}) as transactions_count"),
+                DB::raw("(SELECT COUNT(*) FROM savings_accounts WHERE savings_accounts.member_id = members.id AND savings_accounts.tenant_id = {$tenantId}) as savings_accounts_count")
+            ])
+            ->leftJoin('branches', 'members.branch_id', '=', 'branches.id')
+            ->where('members.tenant_id', $tenantId)
+            ->where('members.status', 1)
             ->orderBy("members.id", "desc");
 
         return Datatables::eloquent($members)
-            ->editColumn('branch.name', function ($member) {
-                return $member->branch->name;
+            ->editColumn('branch_name', function ($member) {
+                return $member->branch_name ?? _lang('Main Branch');
             })
             ->editColumn('photo', function ($member) {
                 $photo = $member->photo != null ? profile_picture($member->photo) : asset('public/backend/images/avatar.png');
@@ -75,7 +92,21 @@ class MemberController extends Controller
                     . '<img src="' . $photo . '" class="thumb-sm img-thumbnail">'
                     . '</div>';
             })
+            ->addColumn('full_name', function ($member) {
+                return $member->first_name . ' ' . $member->last_name;
+            })
+            ->addColumn('member_stats', function ($member) {
+                return '<small class="text-muted">'
+                    . 'Loans: ' . $member->loans_count . ' | '
+                    . 'Transactions: ' . $member->transactions_count . ' | '
+                    . 'Accounts: ' . $member->savings_accounts_count
+                    . '</small>';
+            })
             ->addColumn('action', function ($member) {
+                $canDelete = $member->loans_count == 0 && 
+                           $member->transactions_count == 0 && 
+                           $member->savings_accounts_count == 0;
+                           
                 return '<div class="dropdown text-center">'
                 . '<button class="btn btn-primary btn-xs dropdown-toggle" type="button" data-toggle="dropdown">' . _lang('Action')
                 . '&nbsp;</button>'
@@ -83,18 +114,18 @@ class MemberController extends Controller
                 . '<a class="dropdown-item" href="' . route('members.edit', $member->id) . '"><i class="ti-pencil-alt"></i> ' . _lang('Edit') . '</a>'
                 . '<a class="dropdown-item" href="' . route('members.show', $member->id) . '"><i class="ti-eye"></i>  ' . _lang('View') . '</a>'
                 . '<a class="dropdown-item" href="' . route('member_documents.index', $member->id) . '"><i class="ti-files"></i>  ' . _lang('Documents') . '</a>'
-                . '<form action="' . route('members.destroy', $member->id) . '" method="post">'
+                . ($canDelete ? '<form action="' . route('members.destroy', $member->id) . '" method="post">'
                 . csrf_field()
                 . '<input name="_method" type="hidden" value="DELETE">'
                 . '<button class="dropdown-item btn-remove" type="submit"><i class="ti-trash"></i> ' . _lang('Delete') . '</button>'
-                    . '</form>'
+                    . '</form>' : '<span class="dropdown-item text-muted"><i class="ti-info"></i> ' . _lang('Cannot delete - has related data') . '</span>')
                     . '</div>'
                     . '</div>';
             })
             ->setRowId(function ($member) {
                 return "row_" . $member->id;
             })
-            ->rawColumns(['photo', 'action'])
+            ->rawColumns(['photo', 'action', 'member_stats'])
             ->make(true);
     }
 
@@ -132,29 +163,39 @@ class MemberController extends Controller
     public function store(Request $request)
     {
         $validationRules = [
-            'first_name'   => 'required',
-            'last_name'    => 'required',
+            'first_name'   => 'required|string|max:50|regex:/^[a-zA-Z\s]+$/',
+            'last_name'    => 'required|string|max:50|regex:/^[a-zA-Z\s]+$/',
             'email'        => [
                 'nullable',
                 'email',
+                'max:100',
                 Rule::unique('members')->where(function ($query) {
                     return $query->where('tenant_id', app('tenant')->id);
                 }),
             ],
-            'member_no'    => 'required|unique:members|max:50',
-            'country_code' => 'required_with:mobile',
-            'photo'        => 'nullable|image',
+            'member_no'    => 'required|string|max:50|unique:members',
+            'country_code' => 'required_with:mobile|string|max:10',
+            'mobile'       => 'nullable|string|max:20|regex:/^[\+]?[0-9\s\-\(\)]+$/',
+            'business_name' => 'nullable|string|max:100',
+            'gender'        => 'nullable|in:male,female,other',
+            'city'          => 'nullable|string|max:100',
+            'county'        => 'nullable|string|max:100',
+            'zip'           => 'nullable|string|max:20',
+            'address'       => 'nullable|string|max:500',
+            'credit_source' => 'nullable|string|max:100',
+            'photo'         => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             //User Login Attributes
-            'name'         => 'required_if:client_login,1|max:191',
+            'name'         => 'required_if:client_login,1|string|max:191',
             'login_email'  => [
                 'required_if:client_login,1',
                 'email',
+                'max:100',
                 Rule::unique('users', 'email')->where(function ($query) {
                     return $query->where('tenant_id', app('tenant')->id);
                 }),
             ],
-            'password'     => 'required_if:client_login,1|max:20|min:6',
-            'status'       => 'required_if:client_login,1',
+            'password'     => 'required_if:client_login,1|string|min:6|max:20',
+            'status'       => 'required_if:client_login,1|in:0,1',
         ];
 
         $validationMessages = [
@@ -187,9 +228,22 @@ class MemberController extends Controller
 
         $photo = 'default.png';
         if ($request->hasfile('photo')) {
-            $file  = $request->file('photo');
-            $photo = time() . $file->getClientOriginalName();
-            $file->move(public_path() . "/uploads/profile/", $photo);
+            $file = $request->file('photo');
+            
+            // Validate file
+            if (!$file->isValid()) {
+                return redirect()->route('members.create')
+                    ->with('error', _lang('Invalid file uploaded'))
+                    ->withInput();
+            }
+            
+            // Generate secure filename
+            $extension = $file->getClientOriginalExtension();
+            $filename = uniqid() . '_' . time() . '.' . $extension;
+            
+            // Move file to secure location
+            $file->move(public_path() . "/uploads/profile/", $filename);
+            $photo = $filename;
         }
 
         DB::beginTransaction();
@@ -261,7 +315,10 @@ class MemberController extends Controller
      */
     public function show(Request $request, $tenant, $id)
     {
-        $member       = Member::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation and proper member access control
+        $member = Member::where('tenant_id', app('tenant')->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
         $assets       = ['datatable'];
         $customFields = CustomField::where('table', 'members')
             ->where('status', 1)
@@ -273,14 +330,24 @@ class MemberController extends Controller
 
     public function get_member_transaction_data($tenant, $member_id)
     {
-        $transactions = Transaction::select('transactions.*')
-            ->with(['member', 'account', 'account.savings_type'])
-            ->where('member_id', $member_id)
+        $transactions = Transaction::select([
+                'transactions.*',
+                'members.first_name as member_first_name',
+                'members.last_name as member_last_name',
+                'savings_accounts.account_number',
+                'savings_products.name as savings_type_name',
+                'currency.name as currency_name'
+            ])
+            ->leftJoin('members', 'transactions.member_id', '=', 'members.id')
+            ->leftJoin('savings_accounts', 'transactions.savings_account_id', '=', 'savings_accounts.id')
+            ->leftJoin('savings_products', 'savings_accounts.savings_product_id', '=', 'savings_products.id')
+            ->leftJoin('currency', 'savings_products.currency_id', '=', 'currency.id')
+            ->where('transactions.member_id', $member_id)
             ->orderBy("transactions.trans_date", "desc");
 
         return Datatables::eloquent($transactions)
-            ->editColumn('member.first_name', function ($transactions) {
-                return $transactions->member->first_name . ' ' . $transactions->member->last_name;
+            ->editColumn('member_first_name', function ($transactions) {
+                return $transactions->member_first_name . ' ' . $transactions->member_last_name;
             })
             ->editColumn('dr_cr', function ($transactions) {
                 return strtoupper($transactions->dr_cr);
@@ -291,15 +358,15 @@ class MemberController extends Controller
             ->editColumn('amount', function ($transaction) {
                 $symbol = $transaction->dr_cr == 'dr' ? '-' : '+';
                 $class  = $transaction->dr_cr == 'dr' ? 'text-danger' : 'text-success';
-                return '<span class="' . $class . '">' . $symbol . ' ' . decimalPlace($transaction->amount, currency_symbol($transaction->account->savings_type->currency->name)) . '</span>';
+                return '<span class="' . $class . '">' . $symbol . ' ' . decimalPlace($transaction->amount, currency_symbol($transaction->currency_name)) . '</span>';
             })
             ->editColumn('type', function ($transaction) {
                 return str_replace('_', ' ', $transaction->type);
             })
-            ->filterColumn('member.first_name', function ($query, $keyword) {
-                $query->whereHas('member', function ($query) use ($keyword) {
-                    return $query->where("first_name", "like", "{$keyword}%")
-                        ->orWhere("last_name", "like", "{$keyword}%");
+            ->filterColumn('member_first_name', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where("members.first_name", "like", "{$keyword}%")
+                      ->orWhere("members.last_name", "like", "{$keyword}%");
                 });
             }, true)
             ->addColumn('action', function ($transaction) {
@@ -336,7 +403,10 @@ class MemberController extends Controller
             ->where('status', 1)
             ->orderBy("id", "asc")
             ->get();
-        $member = Member::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for member edit
+        $member = Member::where('tenant_id', app('tenant')->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
         if (! $request->ajax()) {
             return view('backend.admin.member.edit', compact('member', 'id', 'customFields'));
         } else {
@@ -353,33 +423,52 @@ class MemberController extends Controller
      */
     public function update(Request $request, $tenant, $id)
     {
-        $member = Member::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for member edit
+        $member = Member::where('tenant_id', app('tenant')->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
 
+        // ENHANCED: More secure validation rules
         $validationRules = [
-            'first_name'   => 'required',
-            'last_name'    => 'required',
+            'first_name'   => 'required|string|max:50|regex:/^[a-zA-Z\s\-\']+$/|min:2',
+            'last_name'    => 'required|string|max:50|regex:/^[a-zA-Z\s\-\']+$/|min:2',
             'email'        => [
                 'nullable',
-                'email',
+                'email:rfc,dns',
+                'max:100',
+                'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/',
                 Rule::unique('members')->where(function ($query) {
                     return $query->where('tenant_id', app('tenant')->id);
                 })->ignore($id),
             ],
             'member_no'    => [
                 'required',
+                'string',
+                'max:50',
+                'regex:/^[A-Z0-9\-_]+$/',
                 Rule::unique('members')->ignore($id),
             ],
-            'country_code' => 'required_with:mobile',
-            'photo'        => 'nullable|image',
-            'name'         => 'required_if:client_login,1|max:191', // User Login Attribute
+            'country_code' => 'required_with:mobile|string|max:10|regex:/^\+?[0-9]{1,4}$/',
+            'mobile'       => 'nullable|string|max:20|regex:/^[\+]?[0-9\s\-\(\)]{7,20}$/',
+            'business_name' => 'nullable|string|max:100|regex:/^[a-zA-Z0-9\s\-\'\.&]+$/',
+            'gender'        => 'nullable|in:male,female,other',
+            'city'          => 'nullable|string|max:100|regex:/^[a-zA-Z\s\-\']+$/',
+            'county'        => 'nullable|string|max:100|regex:/^[a-zA-Z\s\-\']+$/',
+            'zip'           => 'nullable|string|max:20|regex:/^[a-zA-Z0-9\s\-]+$/',
+            'address'       => 'nullable|string|max:500|regex:/^[a-zA-Z0-9\s\-\'\.\,\#]+$/',
+            'credit_source' => 'nullable|string|max:100|regex:/^[a-zA-Z\s\-\']+$/',
+            'photo'         => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'name'         => 'required_if:client_login,1|string|max:191',
             'login_email'  => [
                 'required_if:client_login,1',
+                'email',
+                'max:100',
                 Rule::unique('users', 'email')->where(function ($query) {
                     return $query->where('tenant_id', app('tenant')->id);
-                })->ignore($member->user_id),                   // User Login Attribute
-            ],                                              // User Login Attribute
-            'password'     => 'nullable|max:20|min:6',      // User Login Attribute
-            'status'       => 'required_if:client_login,1', // User Login Attribute
+                })->ignore($member->user_id),
+            ],
+            'password'     => 'nullable|string|min:6|max:20',
+            'status'       => 'required_if:client_login,1|in:0,1',
         ];
 
         $validationMessages = [
@@ -411,9 +500,22 @@ class MemberController extends Controller
         }
 
         if ($request->hasfile('photo')) {
-            $file  = $request->file('photo');
-            $photo = time() . $file->getClientOriginalName();
-            $file->move(public_path() . "/uploads/profile/", $photo);
+            $file = $request->file('photo');
+            
+            // Validate file
+            if (!$file->isValid()) {
+                return redirect()->route('members.edit', $id)
+                    ->with('error', _lang('Invalid file uploaded'))
+                    ->withInput();
+            }
+            
+            // Generate secure filename
+            $extension = $file->getClientOriginalExtension();
+            $filename = uniqid() . '_' . time() . '.' . $extension;
+            
+            // Move file to secure location
+            $file->move(public_path() . "/uploads/profile/", $filename);
+            $photo = $filename;
         }
 
         DB::beginTransaction();
@@ -527,8 +629,8 @@ class MemberController extends Controller
         @set_time_limit(0);
 
         $validator = Validator::make($request->all(), [
-            'phone'   => 'required',
-            'message' => 'required:max:160',
+            'phone'   => 'required|regex:/^[\+]?[0-9\s\-\(\)]{8,20}$/',
+            'message' => 'required|string|max:160|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -549,8 +651,30 @@ class MemberController extends Controller
 
         try {
             $sms = new TextMessage();
-            $sms->send($request->phone, $message);
+            $result = $sms->send($request->phone, $message);
+            
+            if (!$result) {
+                \Log::warning('SMS send failed', [
+                    'phone' => $request->phone,
+                    'user_id' => auth()->id(),
+                    'ip' => $request->ip()
+                ]);
+                
+                if (! $request->ajax()) {
+                    return back()->with('error', _lang('SMS delivery failed. Please try again later.'));
+                } else {
+                    return response()->json(['result' => 'error', 'message' => _lang('SMS delivery failed. Please try again later.')]);
+                }
+            }
         } catch (\Exception $e) {
+            \Log::error('SMS Send Exception', [
+                'error' => $e->getMessage(),
+                'phone' => $request->phone,
+                'user_id' => auth()->id(),
+                'ip' => $request->ip(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             if (! $request->ajax()) {
                 return back()->with('error', _lang('Sorry, Error Occured !'));
             } else {
@@ -573,54 +697,141 @@ class MemberController extends Controller
      */
     public function destroy($tenant, $id)
     {
-        $member = Member::find($id);
-        if ($member->user) {
-            $member->user->delete();
+        try {
+            $member = Member::findOrFail($id);
+            
+            // Check if member can be deleted
+            if (!$member->canBeDeleted()) {
+                $reasons = [];
+                if ($member->loans()->where('status', 'active')->count() > 0) {
+                    $reasons[] = _lang('active loans');
+                }
+                if ($member->transactions()->where('trans_date', '>=', now()->subDays(30))->count() > 0) {
+                    $reasons[] = _lang('recent transactions');
+                }
+                if ($member->savings_accounts()->where('status', 1)->where('balance', '>', 0)->count() > 0) {
+                    $reasons[] = _lang('active savings accounts');
+                }
+                
+                return redirect()->route('members.index')
+                    ->with('error', _lang('Cannot delete member with: ') . implode(', ', $reasons));
+            }
+            
+            DB::beginTransaction();
+            
+            // Delete associated user account if exists
+            if ($member->user) {
+                $member->user->delete();
+            }
+            
+            // Delete member
+            $member->delete();
+            
+            DB::commit();
+            
+            // Log the deletion
+            \Log::info('Member deleted', [
+                'member_id' => $member->id,
+                'member_name' => $member->first_name . ' ' . $member->last_name,
+                'deleted_by' => auth()->id(),
+                'tenant_id' => auth()->user()->tenant_id
+            ]);
+            
+            return redirect()->route('members.index')
+                ->with('success', _lang('Member deleted successfully'));
+                
+        } catch (\Exception $e) {
+            DB::rollback();
+            \Log::error('Member deletion failed', [
+                'member_id' => $id,
+                'error' => $e->getMessage(),
+                'deleted_by' => auth()->id()
+            ]);
+            
+            return redirect()->route('members.index')
+                ->with('error', _lang('Error deleting member'));
         }
-        $member->delete();
-        return redirect()->route('members.index')->with('success', _lang('Deleted Successfully'));
     }
 
     public function accept_request(Request $request, $tenant, $id)
     {
-        if ($request->isMethod('get')) {
-            $member = Member::withoutGlobalScopes(['status'])->find($id);
-            return view('backend.admin.member.modal.accept_request', compact('member'));
-        } else {
-            $validator = Validator::make($request->all(), [
-                'member_no' => [
-                    'required',
-                    Rule::unique('members')->ignore($id),
-                ],
-            ]);
+        // Query member once at the beginning with tenant validation
+        $member = Member::where('tenant_id', app('tenant')->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
 
-            if ($validator->fails()) {
-                if ($request->ajax()) {
-                    return response()->json(['result' => 'error', 'message' => $validator->errors()->all()]);
-                } else {
-                    return back()->withErrors($validator)->withInput();
-                }
+        // Ensure member is in pending status
+        if ($member->status !== 0) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('Member request is not pending')]);
             }
+            return back()->with('error', _lang('Member request is not pending'));
+        }
 
-            DB::beginTransaction();
+        if ($request->isMethod('get')) {
+            return view('backend.admin.member.modal.accept_request', compact('member'));
+        }
 
-            $member            = Member::withoutGlobalScopes(['status'])->find($id);
+        // POST method - validate member number with tenant scope
+        $validator = Validator::make($request->all(), [
+            'member_no' => [
+                'required',
+                'string',
+                'max:50',
+                'regex:/^[A-Z0-9\-_]+$/',
+                Rule::unique('members')->where(function ($query) {
+                    return $query->where('tenant_id', app('tenant')->id);
+                })->ignore($id),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => $validator->errors()->all()]);
+            } else {
+                return back()->withErrors($validator)->withInput();
+            }
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // Update member details
             $member->member_no = $request->member_no;
-            $member->status    = 1;
+            $member->status = 1;
             $member->save();
 
-            $member->user->status = 1;
-            $member->user->save();
+            // Update user status if user exists
+            if ($member->user) {
+                $member->user->status = 1;
+                $member->user->save();
+            }
 
+            // Generate accounts for the member
             $this->generateAccounts($member->id);
 
             DB::commit();
 
+            // Send notification if member is now active
             if ($member->status == 1) {
                 try {
                     $member->notify(new MemberRequestAccepted($member));
-                } catch (\Exception $e) {}
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to send member acceptance notification', [
+                        'member_id' => $member->id,
+                        'error' => $e->getMessage(),
+                        'tenant_id' => app('tenant')->id
+                    ]);
+                }
             }
+
+            // Log successful acceptance
+            \Log::info('Member request accepted', [
+                'member_id' => $member->id,
+                'member_no' => $request->member_no,
+                'accepted_by' => auth()->id(),
+                'tenant_id' => app('tenant')->id
+            ]);
 
             if (! $request->ajax()) {
                 return redirect()->route('members.index')->with('success', _lang('Member Request Accepted'));
@@ -628,12 +839,30 @@ class MemberController extends Controller
                 return response()->json(['result' => 'success', 'action' => 'update', 'message' => _lang('Member Request Accepted'), 'data' => $member, 'table' => '#members_table']);
             }
 
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('Member acceptance failed', [
+                'member_id' => $member->id,
+                'error' => $e->getMessage(),
+                'accepted_by' => auth()->id(),
+                'tenant_id' => app('tenant')->id
+            ]);
+
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('Failed to accept member request')]);
+            } else {
+                return back()->with('error', _lang('Failed to accept member request'));
+            }
         }
     }
 
     public function reject_request($tenant, $id)
     {
-        $member = Member::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for member edit
+        $member = Member::where('tenant_id', app('tenant')->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
         $member->user->delete();
         $member->delete();
         return redirect()->back()->with('error', _lang('Member Request Rejected'));
@@ -648,41 +877,65 @@ class MemberController extends Controller
             @set_time_limit(0);
 
             $validator = Validator::make($request->all(), [
-                'file' => 'required|mimes:xlsx',
+                'file' => 'required|mimes:xlsx|max:10240', // 10MB limit
             ]);
 
             if ($validator->fails()) {
                 return back()->withErrors($validator)->withInput();
             }
 
-            $rows = Excel::toArray([], $request->file('file'));
+            try {
+                $rows = Excel::toArray([], $request->file('file'));
 
-            if (has_limit('members', 'member_limit') < (count($rows[0]) - 1)) {
-                if ($request->ajax()) {
-                    return response()->json(['result' => 'error', 'message' => _lang('Sorry, Your have reached your limit ! You can update your subscription plan to increase your limit.')]);
+                if (has_limit('members', 'member_limit') < (count($rows[0]) - 1)) {
+                    return back()->with('error', _lang('Sorry, Your have reached your limit ! You can update your subscription plan to increase your limit.'));
                 }
-                return back()->with('error', _lang('Sorry, Your have reached your limit ! You can update your subscription plan to increase your limit.'));
+
+                DB::beginTransaction();
+
+                $previous_rows = Member::count();
+
+                $import = new MembersImport();
+                Excel::import($import, $request->file('file'));
+
+                $current_rows = Member::count();
+                $new_rows = $current_rows - $previous_rows;
+
+                DB::commit();
+
+                // Get import results
+                $importedCount = $import->getImportedCount();
+                $errors = $import->getErrors();
+
+                $message = $importedCount . ' ' . _lang('members imported successfully');
+                
+                if (!empty($errors)) {
+                    $message .= '. ' . count($errors) . ' ' . _lang('rows had errors');
+                    \Log::warning('Member import completed with errors', [
+                        'imported_count' => $importedCount,
+                        'error_count' => count($errors),
+                        'errors' => $errors,
+                        'user_id' => auth()->id()
+                    ]);
+                }
+
+                if ($importedCount == 0) {
+                    return back()->with('error', _lang('Nothing Imported, Data may already exists or contains errors !'));
+                }
+
+                return back()->with('success', $message);
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                
+                \Log::error('Member import failed', [
+                    'error' => $e->getMessage(),
+                    'file' => $request->file('file')->getClientOriginalName(),
+                    'user_id' => auth()->id()
+                ]);
+
+                return back()->with('error', _lang('Import failed: ') . $e->getMessage());
             }
-
-            $new_rows = 0;
-
-            DB::beginTransaction();
-
-            $previous_rows = Member::count();
-
-            $data   = [];
-            $import = Excel::import(new MembersImport($data), $request->file('file'));
-
-            $current_rows = Member::count();
-
-            $new_rows = $current_rows - $previous_rows;
-
-            DB::commit();
-
-            if ($new_rows == 0) {
-                return back()->with('error', _lang('Nothing Imported, Data may already exists !'));
-            }
-            return back()->with('success', $new_rows . ' ' . _lang('Rows Imported Sucessfully'));
         }
     }
 
@@ -703,22 +956,47 @@ class MemberController extends Controller
             return;
         }
         
-        $accountsTypes = SavingsProduct::where('auto_create', 1)->get();
-        foreach ($accountsTypes as $accountType) {
-            $savingsaccount                     = new SavingsAccount();
-            $savingsaccount->account_number     = $accountType->account_number_prefix . $accountType->starting_account_number;
-            $savingsaccount->member_id          = $member_id;
-            $savingsaccount->savings_product_id = $accountType->id;
-            $savingsaccount->status             = 1;
-            $savingsaccount->opening_balance    = 0;
-            $savingsaccount->description        = '';
-            $savingsaccount->created_user_id    = auth()->id();
+        // SECURE: Use database transactions to prevent race conditions
+        DB::transaction(function () use ($member_id) {
+            $accountsTypes = SavingsProduct::where('auto_create', 1)
+                ->lockForUpdate() // Prevent concurrent access
+                ->get();
+                
+            foreach ($accountsTypes as $accountType) {
+                // SECURE: Generate unique account number atomically
+                $nextAccountNumber = $accountType->starting_account_number;
+                
+                // Check if account number already exists
+                $existingAccount = SavingsAccount::where('account_number', 
+                    $accountType->account_number_prefix . $nextAccountNumber
+                )->first();
+                
+                if ($existingAccount) {
+                    // Find next available account number
+                    do {
+                        $nextAccountNumber++;
+                        $existingAccount = SavingsAccount::where('account_number', 
+                            $accountType->account_number_prefix . $nextAccountNumber
+                        )->first();
+                    } while ($existingAccount);
+                }
+                
+                $savingsaccount = new SavingsAccount();
+                $savingsaccount->account_number     = $accountType->account_number_prefix . $nextAccountNumber;
+                $savingsaccount->member_id          = $member_id;
+                $savingsaccount->savings_product_id = $accountType->id;
+                $savingsaccount->status             = 1;
+                $savingsaccount->opening_balance    = 0;
+                $savingsaccount->description        = '';
+                $savingsaccount->created_user_id    = auth()->id();
+                $savingsaccount->tenant_id          = app('tenant')->id;
 
-            $savingsaccount->save();
+                $savingsaccount->save();
 
-            //Increment account number
-            $accountType->starting_account_number = $accountType->starting_account_number + 1;
-            $accountType->save();
-        }
+                // SECURE: Update account number atomically
+                $accountType->starting_account_number = $nextAccountNumber + 1;
+                $accountType->save();
+            }
+        });
     }
 }

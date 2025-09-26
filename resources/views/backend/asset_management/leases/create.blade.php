@@ -9,7 +9,7 @@
                     <ol class="breadcrumb m-0">
                         <li class="breadcrumb-item"><a href="{{ route('dashboard.index') }}">{{ _lang('Dashboard') }}</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('asset-management.dashboard') }}">{{ _lang('Asset Management') }}</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index') }}">{{ _lang('Leases') }}</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}">{{ _lang('Leases') }}</a></li>
                         <li class="breadcrumb-item active">{{ _lang('Create Lease') }}</li>
                     </ol>
                 </div>
@@ -23,9 +23,14 @@
             <div class="card">
                 <div class="card-header">
                     <h4 class="card-title mb-0">{{ _lang('Lease Information') }}</h4>
+                    <div class="card-tools">
+                        <a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Leases') }}
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <form action="{{ route('asset-leases.store') }}" method="POST">
+                    <form action="{{ route('asset-leases.store', ['tenant' => app('tenant')->slug]) }}" method="POST">
                         @csrf
                         
                         <div class="row">
@@ -151,7 +156,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-1"></i> {{ _lang('Create Lease') }}
                             </button>
-                            <a href="{{ route('asset-leases.index') }}" class="btn btn-secondary">
+                            <a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i> {{ _lang('Cancel') }}
                             </a>
                         </div>

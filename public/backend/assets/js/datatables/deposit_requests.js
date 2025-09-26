@@ -1,6 +1,11 @@
 (function ($) {
   "use strict";
 
+  console.log("Starting DataTables initialization...");
+  console.log("jQuery version:", $.fn.jquery);
+  console.log("DataTables available:", typeof $.fn.DataTable !== 'undefined');
+  console.log("_tenant_url:", typeof _tenant_url !== 'undefined' ? _tenant_url : 'undefined');
+
   var deposit_request_table = $("#deposit_request_table").DataTable({
     processing: true,
     serverSide: true,
@@ -15,17 +20,17 @@
         }
       },
       error: function (request, status, error) {
-        console.log(request.responseText);
+        console.log("DataTables Error:", request.responseText);
       },
     },
     columns: [
-      { data: "member.first_name", name: "member.first_name", "defaultContent": "" },
-      { data: "account.account_number", name: "account.account_number", "defaultContent": "" },
-      { data: "account.savings_type.currency.name", name: "account.savings_type.currency.name", "defaultContent": "" },
-      { data: "amount", name: "amount" },
-      { data: "method.name", name: "method.name" },
-      { data: "status", name: "status" },
-      { data: "action", name: "action" },
+      { data: "member_first_name", name: "member_first_name", "defaultContent": "" },
+      { data: "account_number", name: "account_number", "defaultContent": "" },
+      { data: "currency_name", name: "currency_name", "defaultContent": "" },
+      { data: "amount", name: "amount", "defaultContent": "0.00" },
+      { data: "method_name", name: "method_name", "defaultContent": "N/A" },
+      { data: "status", name: "status", "defaultContent": "" },
+      { data: "action", name: "action", "defaultContent": "" },
     ],
     responsive: true,
     bStateSave: true,

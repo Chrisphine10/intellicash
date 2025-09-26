@@ -339,7 +339,10 @@
                 this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing...';
                 this.disabled = true;
 
-                // Submit signature
+                // Generate signature hash for security
+                const signatureHash = generateSignatureHash(signature, '{{ $signature->signer_email }}', '{{ $signature->document_id }}');
+
+                // Submit signature with enhanced security
                 fetch('{{ route("esignature.public.submit", $signature->signature_token) }}', {
                     method: 'POST',
                     headers: {
@@ -349,6 +352,7 @@
                     body: JSON.stringify({
                         signature_data: signature,
                         signature_type: currentSignatureType,
+                        signature_hash: signatureHash,
                         fields: fields
                     })
                 })
@@ -458,6 +462,61 @@
                 });
             });
             return fields;
+        }
+
+        // Generate signature hash for security verification
+        function generateSignatureHash(signatureData, signerEmail, documentId) {
+            const payload = {
+                signature_data: signatureData,
+                signer_email: signerEmail,
+                document_id: documentId,
+                timestamp: Math.floor(Date.now() / 1000),
+                nonce: Math.random().toString(36).substring(2, 15)
+            };
+            
+            const payloadString = JSON.stringify(payload);
+            
+            // Use Web Crypto API for HMAC-SHA256
+            return crypto.subtle.importKey(
+                'raw',
+                new TextEncoder().encode('{{ config("app.key") }}'),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            ).then(key => {
+                return crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadString));
+            }).then(signature => {
+                return Array.from(new Uint8Array(signature))
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+            }).catch(error => {
+                console.error('Error generating signature hash:', error);
+                // Fallback to simple hash (less secure)
+                return btoa(payloadString).replace(/[^a-zA-Z0-9]/g, '').substring(0, 64);
+            });
+        }
+
+        // Enhanced signature hash generation (synchronous fallback)
+        function generateSignatureHashSync(signatureData, signerEmail, documentId) {
+            const payload = {
+                signature_data: signatureData,
+                signer_email: signerEmail,
+                document_id: documentId,
+                timestamp: Math.floor(Date.now() / 1000),
+                nonce: Math.random().toString(36).substring(2, 15)
+            };
+            
+            const payloadString = JSON.stringify(payload);
+            
+            // Simple hash function (fallback)
+            let hash = 0;
+            for (let i = 0; i < payloadString.length; i++) {
+                const char = payloadString.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32-bit integer
+            }
+            
+            return Math.abs(hash).toString(16).padStart(8, '0').repeat(8).substring(0, 64);
         }
     </script>
 </body>

@@ -19,12 +19,28 @@ class Branch extends Model {
      *
      * @var array
      */
-    protected $fillable = ['name'];
+    protected $fillable = [
+        'name',
+        'contact_email',
+        'contact_phone',
+        'address',
+        'descriptions'
+    ];
 
     public function __construct(array $attributes = []) {
         parent::__construct($attributes);
         $this->attributes['name'] = get_tenant_option('default_branch_name', 'Main Branch');
     }
-    
+
+    public function members() {
+        return $this->hasMany('App\Models\Member', 'branch_id');
+    }
+
+    /**
+     * Check if branch can be deleted
+     */
+    public function canBeDeleted() {
+        return $this->members()->count() === 0;
+    }
 
 }

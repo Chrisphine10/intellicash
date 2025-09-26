@@ -7,7 +7,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="card-title">{{ _lang('Asset Leases') }}</h4>
                 <div>
-                    <a href="{{ route('asset-leases.create') }}" class="btn btn-primary btn-sm">
+                    <a href="{{ route('asset-leases.create', ['tenant' => app('tenant')->slug]) }}" class="btn btn-primary btn-sm">
                         <i class="fas fa-plus"></i> {{ _lang('Create Lease') }}
                     </a>
                 </div>
@@ -17,7 +17,7 @@
                 <!-- Filters -->
                 <div class="row mb-3">
                     <div class="col-md-12">
-                        <form method="GET" action="{{ route('asset-leases.index') }}">
+                        <form method="GET" action="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}">
                             <div class="row">
                                 <div class="col-md-3">
                                     <select name="status" class="form-control form-control-sm">
@@ -57,7 +57,7 @@
                                     <button type="submit" class="btn btn-primary btn-sm">
                                         <i class="fas fa-search"></i>
                                     </button>
-                                    <a href="{{ route('asset-leases.index') }}" class="btn btn-secondary btn-sm">
+                                    <a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
                                         <i class="fas fa-refresh"></i>
                                     </a>
                                 </div>
@@ -90,13 +90,21 @@
                                 </td>
                                 <td>
                                     <div>
-                                        <strong>{{ $lease->asset->name }}</strong>
-                                        <br><small class="text-muted">{{ $lease->asset->asset_code }}</small>
+                                        @if($lease->asset)
+                                            <strong>{{ $lease->asset->name }}</strong>
+                                            <br><small class="text-muted">{{ $lease->asset->asset_code }}</small>
+                                        @else
+                                            <strong class="text-muted">{{ _lang('Asset not found') }}</strong>
+                                        @endif
                                     </div>
                                 </td>
                                 <td>
-                                    {{ $lease->member->first_name }} {{ $lease->member->last_name }}
-                                    <br><small class="text-muted">{{ $lease->member->member_code }}</small>
+                                    @if($lease->member)
+                                        {{ $lease->member->first_name }} {{ $lease->member->last_name }}
+                                        <br><small class="text-muted">{{ $lease->member->member_code }}</small>
+                                    @else
+                                        <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                    @endif
                                 </td>
                                 <td>{{ $lease->start_date }}</td>
                                 <td>{{ $lease->end_date ?? _lang('Open-ended') }}</td>
@@ -119,27 +127,27 @@
                                             {{ _lang('Actions') }}
                                         </button>
                                         <div class="dropdown-menu">
-                                            <a class="dropdown-item" href="{{ route('asset-leases.show', $lease) }}">
+                                            <a class="dropdown-item" href="{{ route('asset-leases.show', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id ?? 0]) }}">
                                                 <i class="fas fa-eye"></i> {{ _lang('View') }}
                                             </a>
                                             @if($lease->status == 'active')
-                                                <a class="dropdown-item" href="{{ route('asset-leases.edit', $lease) }}">
+                                                <a class="dropdown-item" href="{{ route('asset-leases.edit', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id ?? 0]) }}">
                                                     <i class="fas fa-edit"></i> {{ _lang('Edit') }}
                                                 </a>
                                                 <div class="dropdown-divider"></div>
-                                                <form action="{{ route('asset-leases.complete', $lease) }}" method="POST" class="d-inline">
+                                                <form action="{{ route('asset-leases.complete', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline">
                                                     @csrf
                                                     <button type="submit" class="dropdown-item text-success">
                                                         <i class="fas fa-check"></i> {{ _lang('Complete') }}
                                                     </button>
                                                 </form>
-                                                <form action="{{ route('asset-leases.cancel', $lease) }}" method="POST" class="d-inline">
+                                                <form action="{{ route('asset-leases.cancel', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline">
                                                     @csrf
                                                     <button type="submit" class="dropdown-item text-warning">
                                                         <i class="fas fa-times"></i> {{ _lang('Cancel') }}
                                                     </button>
                                                 </form>
-                                                <form action="{{ route('asset-leases.mark-overdue', $lease) }}" method="POST" class="d-inline">
+                                                <form action="{{ route('asset-leases.mark-overdue', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline">
                                                     @csrf
                                                     <button type="submit" class="dropdown-item text-danger">
                                                         <i class="fas fa-exclamation-triangle"></i> {{ _lang('Mark Overdue') }}
@@ -148,7 +156,7 @@
                                             @endif
                                             @if($lease->status !== 'completed')
                                                 <div class="dropdown-divider"></div>
-                                                <form action="{{ route('asset-leases.destroy', $lease) }}" method="POST" class="d-inline delete-form">
+                                                <form action="{{ route('asset-leases.destroy', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline delete-form">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="dropdown-item text-danger">

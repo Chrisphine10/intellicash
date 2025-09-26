@@ -221,6 +221,18 @@ $upcomming_repayments = request_count('upcomming_repayments', true);
         </li>
         @endif
 
+        @if(app('tenant')->isPayrollEnabled())
+        <li>
+            <a href="javascript: void(0);"><i class="fas fa-money-bill-wave"></i><span>{{ _lang('Payroll Management') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+            <ul class="nav-second-level" aria-expanded="false">
+                <li class="nav-item"><a class="nav-link" href="{{ route('payroll.periods.index') }}">{{ _lang('Payroll Periods') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('payroll.employees.index') }}">{{ _lang('Employees') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('payroll.deductions.index') }}">{{ _lang('Deductions') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('payroll.benefits.index') }}">{{ _lang('Benefits') }}</a></li>
+            </ul>
+        </li>
+        @endif
+
 <li>
 	<a href="javascript: void(0);"><i class="ti-settings"></i><span>{{ _lang('System Settings') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
 	<ul class="nav-second-level" aria-expanded="false">

@@ -11,6 +11,14 @@ class Asset extends Model
 {
     use HasFactory, MultiTenant;
 
+    /**
+     * Get the route key for the model.
+     */
+    public function getRouteKeyName()
+    {
+        return 'id';
+    }
+
     protected $fillable = [
         'tenant_id',
         'category_id',
@@ -31,6 +39,14 @@ class Asset extends Model
         'depreciation_method',
         'useful_life',
         'salvage_value',
+        'supplier_name',
+        'invoice_number',
+        'payment_method',
+        'bank_account_id',
+        'sale_price',
+        'sale_date',
+        'buyer_name',
+        'sale_reason',
     ];
 
     protected $casts = [
@@ -43,6 +59,8 @@ class Asset extends Model
         'salvage_value' => 'decimal:2',
         'useful_life' => 'integer',
         'metadata' => 'array',
+        'sale_price' => 'decimal:2',
+        'sale_date' => 'date',
     ];
 
     public function category()

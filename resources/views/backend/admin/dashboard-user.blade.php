@@ -5,16 +5,16 @@
 <div class="row">
 	@if (in_array('dashboard.total_customer_widget', $permissions))
 	<div class="col-xl-3 col-md-6">
-		<a href="{{ route('members.index') }}">
-			<div class="card mb-4 dashboard-card">
+		<a href="{{ route('members.index') }}" class="dashboard-card-link">
+			<div class="card mb-4 dashboard-card modern-card members-card">
 				<div class="card-body">
-					<div class="d-flex">
+					<div class="d-flex align-items-center">
 						<div class="flex-grow-1">
-							<h5>{{ _lang('Total Members') }}</h5>
-							<h4 class="pt-1 mb-0"><b>{{ $total_customer }}</b></h4>
+							<div class="card-title">{{ _lang('Total Members') }}</div>
+							<div class="card-value">{{ $total_customer }}</div>
 						</div>
-						<div class="ml-2 text-center">
-							<i class="fas fa-users bg-success text-white"></i>
+						<div class="card-icon">
+							<i class="fas fa-users"></i>
 						</div>
 					</div>
 				</div>
@@ -25,16 +25,16 @@
 
 	@if (in_array('dashboard.deposit_requests_widget',$permissions))
 	<div class="col-xl-3 col-md-6">
-		<a href="{{ route('deposit_requests.index') }}">
-			<div class="card mb-4 dashboard-card">
+		<a href="{{ route('deposit_requests.index') }}" class="dashboard-card-link">
+			<div class="card mb-4 dashboard-card modern-card deposit-card">
 				<div class="card-body">
-					<div class="d-flex">
+					<div class="d-flex align-items-center">
 						<div class="flex-grow-1">
-							<h5>{{ _lang('Deposit Requests') }}</h5>
-							<h4 class="pt-1 mb-0"><b>{{ request_count('deposit_requests') }}</b></h4>
+							<div class="card-title">{{ _lang('Deposit Requests') }}</div>
+							<div class="card-value">{{ request_count('deposit_requests') }}</div>
 						</div>
-						<div class="ml-2 text-center">
-							<i class="fas fa-calendar-alt bg-info text-white"></i>
+						<div class="card-icon">
+							<i class="fas fa-calendar-alt"></i>
 						</div>
 					</div>
 				</div>
@@ -45,16 +45,16 @@
 
 	@if (in_array('dashboard.withdraw_requests_widget',$permissions))
 	<div class="col-xl-3 col-md-6">
-		<a href="{{ route('withdraw_requests.index') }}">
-			<div class="card mb-4 dashboard-card">
+		<a href="{{ route('withdraw_requests.index') }}" class="dashboard-card-link">
+			<div class="card mb-4 dashboard-card modern-card withdraw-card">
 				<div class="card-body">
-					<div class="d-flex">
+					<div class="d-flex align-items-center">
 						<div class="flex-grow-1">
-							<h5>{{ _lang('Withdraw Requests') }}</h5>
-							<h4 class="pt-1 mb-0"><b>{{ request_count('withdraw_requests') }}</b></h4>
+							<div class="card-title">{{ _lang('Withdraw Requests') }}</div>
+							<div class="card-value">{{ request_count('withdraw_requests') }}</div>
 						</div>
-						<div class="ml-2 text-center">
-							<i class="fas fa-coins bg-primary text-white"></i>
+						<div class="card-icon">
+							<i class="fas fa-coins"></i>
 						</div>
 					</div>
 				</div>
@@ -65,16 +65,16 @@
 
 	@if (in_array('dashboard.loan_requests_widget',$permissions))
 	<div class="col-xl-3 col-md-6">
-		<a href="{{ route('loans.filter', 'pending') }}">
-			<div class="card mb-4 dashboard-card">
+		<a href="{{ route('loans.filter', 'pending') }}" class="dashboard-card-link">
+			<div class="card mb-4 dashboard-card modern-card pending-loans-card">
 				<div class="card-body">
-					<div class="d-flex">
+					<div class="d-flex align-items-center">
 						<div class="flex-grow-1">
-							<h5>{{ _lang('Pending Loans') }}</h5>
-							<h4 class="pt-1 mb-0"><b>{{ request_count('pending_loans') }}</b></h4>
+							<div class="card-title">{{ _lang('Pending Loans') }}</div>
+							<div class="card-value">{{ request_count('pending_loans') }}</div>
 						</div>
-						<div class="ml-2 text-center">
-							<i class="fas fa-dollar-sign bg-danger text-white"></i>
+						<div class="card-icon">
+							<i class="fas fa-dollar-sign"></i>
 						</div>
 					</div>
 				</div>
@@ -262,3 +262,146 @@
 <script src="{{ asset('public/backend/plugins/chartJs/chart.min.js') }}"></script>
 <script src="{{ asset('public/backend/assets/js/dashboard.js') }}"></script>
 @endsection
+
+<style>
+/* Modern Dashboard Card Styling for User Dashboard */
+.dashboard-card-link {
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s ease;
+}
+
+.dashboard-card-link:hover {
+    text-decoration: none;
+    color: inherit;
+    transform: translateY(-2px);
+}
+
+.modern-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    overflow: hidden;
+    position: relative;
+}
+
+.modern-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+
+.modern-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #5f27cd, #00d2d3);
+}
+
+/* User Dashboard Card Variants */
+.members-card::before {
+    background: linear-gradient(90deg, #5f27cd, #7c3aed);
+}
+
+.deposit-card::before {
+    background: linear-gradient(90deg, #00d2d3, #54a0ff);
+}
+
+.withdraw-card::before {
+    background: linear-gradient(90deg, #ff9ff3, #f368e0);
+}
+
+.pending-loans-card::before {
+    background: linear-gradient(90deg, #ff6b6b, #ee5a52);
+}
+
+/* Card Content Styling */
+.modern-card .card-body {
+    padding: 1.5rem;
+    position: relative;
+}
+
+.modern-card .card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #6c757d;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.modern-card .card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    line-height: 1.2;
+}
+
+.modern-card .card-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    margin-left: 15px;
+    flex-shrink: 0;
+}
+
+/* Icon Backgrounds for User Dashboard */
+.members-card .card-icon {
+    background: linear-gradient(135deg, #5f27cd, #7c3aed);
+}
+
+.deposit-card .card-icon {
+    background: linear-gradient(135deg, #00d2d3, #54a0ff);
+}
+
+.withdraw-card .card-icon {
+    background: linear-gradient(135deg, #ff9ff3, #f368e0);
+}
+
+.pending-loans-card .card-icon {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .modern-card .card-value {
+        font-size: 24px;
+    }
+    
+    .modern-card .card-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+}
+
+/* Animation for card loading */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modern-card {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+.modern-card:nth-child(1) { animation-delay: 0.1s; }
+.modern-card:nth-child(2) { animation-delay: 0.2s; }
+.modern-card:nth-child(3) { animation-delay: 0.3s; }
+.modern-card:nth-child(4) { animation-delay: 0.4s; }
+</style>

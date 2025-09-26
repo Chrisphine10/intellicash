@@ -123,7 +123,13 @@ try {
     
     echo "<h3>Next Steps:</h3>";
     echo "<ol>";
-    echo "<li><strong>Go to Modules:</strong> <a href='intelliwealth/modules' target='_blank'>http://localhost/intellicash/intelliwealth/modules</a></li>";
+    // Get first tenant for the link
+    $firstTenant = DB::table('tenants')->first();
+    if ($firstTenant) {
+        echo "<li><strong>Go to Modules:</strong> <a href='{$firstTenant->slug}/modules' target='_blank'>http://localhost/intellicash/{$firstTenant->slug}/modules</a></li>";
+    } else {
+        echo "<li><strong>Go to Modules:</strong> <a href='#'>No tenants found - please create a tenant first</a></li>";
+    }
     echo "<li><strong>Enable QR Code Module:</strong> Click 'Enable' on the QR Code module</li>";
     echo "<li><strong>Configure Settings:</strong> Click 'Configure' to set up preferences</li>";
     echo "</ol>";

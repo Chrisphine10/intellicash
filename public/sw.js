@@ -1,10 +1,12 @@
-// Service Worker for IntelliCash PWA
-const CACHE_NAME = 'intellicash-pwa-v2';
+// Enhanced Service Worker for IntelliCash PWA - Native App Experience
+const CACHE_NAME = 'intellicash-member-v4';
 const OFFLINE_URL = '/offline';
+const API_CACHE_NAME = 'intellicash-api-v4';
 
-// Assets to cache on install
+// Assets to cache on install - Enhanced for native app experience
 const STATIC_CACHE_URLS = [
     '/',
+    '/dashboard?mobile=1',
     '/public/backend/assets/css/styles.css',
     '/public/backend/assets/css/responsive.css',
     '/public/backend/assets/js/scripts.js',
@@ -19,33 +21,39 @@ const STATIC_CACHE_URLS = [
     '/offline'
 ];
 
-// API endpoints that should be cached
-const API_CACHE_PATTERNS = [
-    /\/api\/dashboard/,
-    /\/api\/transactions/,
-    /\/api\/profile/,
+// Member-specific API endpoints for caching
+const MEMBER_API_PATTERNS = [
+    /\/api\/member\/profile/,
+    /\/api\/member\/accounts/,
+    /\/api\/member\/transactions/,
+    /\/api\/member\/loans/,
     /\/dashboard/,
     /\/loans\/my_loans/,
-    /\/deposit\/automatic_methods/
+    /\/transactions\/index/,
+    /\/deposit\/automatic_methods/,
+    /\/profile\/edit/
 ];
 
-// Install event - cache static assets
+// Install event - Enhanced caching strategy
 self.addEventListener('install', event => {
-    console.log('Service Worker: Installing...');
+    console.log('Service Worker: Installing enhanced PWA...');
     
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
+        Promise.all([
+            caches.open(CACHE_NAME).then(cache => {
                 console.log('Service Worker: Caching static assets');
                 return cache.addAll(STATIC_CACHE_URLS);
+            }),
+            caches.open(API_CACHE_NAME).then(cache => {
+                console.log('Service Worker: API cache ready');
+                return Promise.resolve();
             })
-            .then(() => {
-                console.log('Service Worker: Installation complete');
-                return self.skipWaiting();
-            })
-            .catch(error => {
-                console.error('Service Worker: Installation failed', error);
-            })
+        ]).then(() => {
+            console.log('Service Worker: Installation complete');
+            return self.skipWaiting();
+        }).catch(error => {
+            console.error('Service Worker: Installation failed', error);
+        })
     );
 });
 

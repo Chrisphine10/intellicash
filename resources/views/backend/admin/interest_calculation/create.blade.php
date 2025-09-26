@@ -21,10 +21,29 @@
                             <div class="col-md-8">
                                 <select class="form-control" name="account_type" id="account_type" required>
                                     <option value="">{{ _lang('Select One') }}</option>
-                                    @foreach(App\Models\SavingsProduct::active()->where('interest_rate','>',0)->get() as $product)
-                                    <option value="{{ $product->id }}" data-rate="{{ $product->interest_rate }}" data-period="{{ $product->interest_period }}">{{ $product->name }} ({{ $product->currency->name }})</option>
-                                    @endforeach
+                                    @php
+                                        $savingsProducts = App\Models\SavingsProduct::active()
+                                            ->where('interest_rate', '>', 0)
+                                            ->whereNotNull('interest_rate')
+                                            ->with('currency')
+                                            ->get();
+                                    @endphp
+                                    @if($savingsProducts->count() > 0)
+                                        @foreach($savingsProducts as $product)
+                                        <option value="{{ $product->id }}" 
+                                                data-rate="{{ $product->interest_rate }}" 
+                                                data-period="{{ $product->interest_period }}"
+                                                data-method="{{ $product->interest_method }}">
+                                            {{ $product->name }} ({{ $product->currency->name ?? 'N/A' }}) - {{ $product->interest_rate }}%
+                                        </option>
+                                        @endforeach
+                                    @else
+                                        <option value="" disabled>{{ _lang('No savings products with interest rates configured') }}</option>
+                                    @endif
                                 </select>
+                                @if($savingsProducts->count() == 0)
+                                    <small class="text-danger">{{ _lang('Please configure interest rates for savings products first') }}</small>
+                                @endif
                             </div>
                         </div>
 

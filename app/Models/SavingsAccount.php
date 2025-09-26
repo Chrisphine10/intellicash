@@ -57,6 +57,7 @@ class SavingsAccount extends Model {
         return $this->belongsTo('App\Models\User', 'updated_user_id')->withDefault(['name' => _lang('N/A')]);
     }
 
+
     public function getCreatedAtAttribute($value) {
         $date_format = get_date_format();
         $time_format = get_time_format();

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ESignatureDocument;
 use App\Models\ESignatureSignature;
 use App\Models\ESignatureField;
+use App\Services\ESignaturePDFService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\File;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -13,25 +14,19 @@ use Dompdf\Options;
 
 class ESignatureService
 {
+    protected $pdfService;
+
+    public function __construct(ESignaturePDFService $pdfService)
+    {
+        $this->pdfService = $pdfService;
+    }
+
     /**
-     * Generate signed PDF document
+     * Generate signed PDF document with proper digital signatures
      */
     public function generateSignedDocument(ESignatureDocument $document): string
     {
-        $originalPath = storage_path('app/public/' . $document->file_path);
-        $signedPath = storage_path('app/public/esignature/signed/' . time() . '_signed_' . $document->file_name);
-        
-        // Ensure signed directory exists
-        $signedDir = dirname($signedPath);
-        if (!File::exists($signedDir)) {
-            File::makeDirectory($signedDir, 0755, true);
-        }
-
-        // For now, just copy the original document as the signed version
-        // In a production environment, you would implement proper PDF signing here
-        copy($originalPath, $signedPath);
-        
-        return $signedPath;
+        return $this->pdfService->generateSignedDocument($document);
     }
 
     /**

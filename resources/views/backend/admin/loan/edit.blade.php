@@ -6,6 +6,11 @@
 		<div class="card">
 			<div class="card-header">
 				<span class="panel-title">{{ _lang('Update Loan Information') }}</span>
+				<div class="card-tools">
+					<a href="{{ route('loans.index') }}" class="btn btn-secondary btn-sm">
+						<i class="fas fa-arrow-left"></i> {{ _lang('Back to Loans') }}
+					</a>
+				</div>
 			</div>
 			<div class="card-body">
 				@if($loan->status == 1)

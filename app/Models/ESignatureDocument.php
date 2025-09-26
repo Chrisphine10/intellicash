@@ -12,6 +12,7 @@ class ESignatureDocument extends Model
 {
     use MultiTenant;
 
+
     protected $table = 'esignature_documents';
 
     protected $fillable = [

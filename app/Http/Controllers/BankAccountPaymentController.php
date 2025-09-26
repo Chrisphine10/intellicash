@@ -19,7 +19,7 @@ class BankAccountPaymentController extends Controller
     /**
      * Show payment method connection form
      */
-    public function showConnectionForm($bankAccountId)
+    public function showConnectionForm($tenant, $bankAccountId)
     {
         $bankAccount = BankAccount::findOrFail($bankAccountId);
         
@@ -34,7 +34,7 @@ class BankAccountPaymentController extends Controller
     /**
      * Connect payment method to bank account
      */
-    public function connectPaymentMethod(Request $request, $bankAccountId)
+    public function connectPaymentMethod(Request $request, $tenant, $bankAccountId)
     {
         $bankAccount = BankAccount::findOrFail($bankAccountId);
         
@@ -72,7 +72,7 @@ class BankAccountPaymentController extends Controller
     /**
      * Disconnect payment method from bank account
      */
-    public function disconnectPaymentMethod($bankAccountId)
+    public function disconnectPaymentMethod($tenant, $bankAccountId)
     {
         $bankAccount = BankAccount::findOrFail($bankAccountId);
         
@@ -172,7 +172,7 @@ class BankAccountPaymentController extends Controller
     /**
      * Test payment method connection
      */
-    public function testConnection(Request $request, $bankAccountId)
+    public function testConnection(Request $request, $tenant, $bankAccountId)
     {
         $bankAccount = BankAccount::findOrFail($bankAccountId);
         

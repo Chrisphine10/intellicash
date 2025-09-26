@@ -17,7 +17,14 @@ class VotingSecurityTestSeeder extends Seeder
     public function run()
     {
         // Get the first tenant
-        $tenantId = 1;
+        $tenant = \App\Models\Tenant::first();
+        
+        if (!$tenant) {
+            $this->command->info('No tenants found. Skipping voting security test seeding.');
+            return;
+        }
+        
+        $tenantId = $tenant->id;
         
         // Create test admin user if not exists
         $adminUser = User::firstOrCreate(

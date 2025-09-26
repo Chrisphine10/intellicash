@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PaymentMethod;
 use App\Models\BankAccount;
 use App\Models\WithdrawRequest;
 use App\Models\Transaction;
@@ -13,33 +14,40 @@ use Illuminate\Support\Facades\Log;
 class PaymentMethodService
 {
     /**
-     * Connect a bank account to a payment method
+     * Create a new payment method
      */
-    public function connectPaymentMethod(BankAccount $bankAccount, $paymentType, $config = [], $reference = null)
+    public function createPaymentMethod($name, $type, $currencyId, $config = [], $description = null, $tenantId = null)
     {
         try {
             // Validate payment method type
-            if (!in_array($paymentType, ['paystack', 'buni', 'manual'])) {
+            if (!in_array($type, ['paystack', 'buni', 'manual'])) {
                 throw new \InvalidArgumentException('Invalid payment method type');
             }
 
             // Validate configuration based on payment type
-            $this->validatePaymentConfig($paymentType, $config);
+            $this->validatePaymentConfig($type, $config);
 
-            // Connect the payment method
-            $bankAccount->connectPaymentMethod($paymentType, $config, $reference);
-
-            Log::info('Payment method connected', [
-                'bank_account_id' => $bankAccount->id,
-                'payment_type' => $paymentType,
-                'tenant_id' => $bankAccount->tenant_id
+            // Create the payment method
+            $paymentMethod = PaymentMethod::create([
+                'tenant_id' => $tenantId ?? request()->tenant->id,
+                'name' => $name,
+                'type' => $type,
+                'currency_id' => $currencyId,
+                'config' => $config,
+                'description' => $description,
+                'is_active' => true
             ]);
 
-            return true;
+            Log::info('Payment method created', [
+                'payment_method_id' => $paymentMethod->id,
+                'payment_type' => $type,
+                'tenant_id' => $paymentMethod->tenant_id
+            ]);
+
+            return $paymentMethod;
         } catch (\Exception $e) {
-            Log::error('Failed to connect payment method', [
-                'bank_account_id' => $bankAccount->id,
-                'payment_type' => $paymentType,
+            Log::error('Failed to create payment method', [
+                'payment_type' => $type,
                 'error' => $e->getMessage()
             ]);
             throw $e;
@@ -47,26 +55,35 @@ class PaymentMethodService
     }
 
     /**
-     * Process withdrawal through connected payment method
+     * Process withdrawal through payment method
      */
     public function processWithdrawal(WithdrawRequest $withdrawRequest, $recipientDetails)
     {
-        $bankAccount = $this->getBankAccountForWithdrawal($withdrawRequest);
+        // Get payment method from transaction or requirements
+        $requirements = json_decode($withdrawRequest->requirements, true);
+        $paymentMethodId = $requirements['payment_method_id'] ?? null;
         
-        if (!$bankAccount || !$bankAccount->hasPaymentMethod()) {
-            throw new \Exception('No payment method connected to bank account');
+        if (!$paymentMethodId) {
+            throw new \Exception('No payment method specified for withdrawal');
         }
 
-        $paymentType = $bankAccount->payment_method_type;
-        $config = $bankAccount->getPaymentConfig();
+        $paymentMethod = PaymentMethod::where('tenant_id', $withdrawRequest->member->tenant_id)
+            ->where('is_active', true)
+            ->find($paymentMethodId);
 
-        switch ($paymentType) {
+        if (!$paymentMethod) {
+            throw new \Exception('Payment method not found or inactive');
+        }
+
+        $config = $paymentMethod->config;
+
+        switch ($paymentMethod->type) {
             case 'paystack':
-                return $this->processPaystackWithdrawal($withdrawRequest, $bankAccount, $config, $recipientDetails);
+                return $this->processPaystackWithdrawal($withdrawRequest, $paymentMethod, $config, $recipientDetails);
             case 'buni':
-                return $this->processBuniWithdrawal($withdrawRequest, $bankAccount, $config, $recipientDetails);
+                return $this->processBuniWithdrawal($withdrawRequest, $paymentMethod, $config, $recipientDetails);
             case 'manual':
-                return $this->processManualWithdrawal($withdrawRequest, $bankAccount, $config, $recipientDetails);
+                return $this->processManualWithdrawal($withdrawRequest, $paymentMethod, $config, $recipientDetails);
             default:
                 throw new \Exception('Unsupported payment method type');
         }
@@ -77,9 +94,8 @@ class PaymentMethodService
      */
     private function getBankAccountForWithdrawal(WithdrawRequest $withdrawRequest)
     {
-        // Get the first bank account with payment method enabled for the tenant
-        return BankAccount::withPaymentMethods()
-            ->where('tenant_id', $withdrawRequest->member->tenant_id)
+        // Get the first active bank account for the tenant
+        return BankAccount::where('tenant_id', $withdrawRequest->member->tenant_id)
             ->where('is_active', true)
             ->first();
     }
@@ -87,7 +103,7 @@ class PaymentMethodService
     /**
      * Process Paystack withdrawal
      */
-    private function processPaystackWithdrawal(WithdrawRequest $withdrawRequest, BankAccount $bankAccount, $config, $recipientDetails)
+    private function processPaystackWithdrawal(WithdrawRequest $withdrawRequest, PaymentMethod $paymentMethod, $config, $recipientDetails)
     {
         try {
             $secretKey = $config['paystack_secret_key'] ?? null;
@@ -156,7 +172,7 @@ class PaymentMethodService
     /**
      * Process Buni withdrawal
      */
-    private function processBuniWithdrawal(WithdrawRequest $withdrawRequest, BankAccount $bankAccount, $config, $recipientDetails)
+    private function processBuniWithdrawal(WithdrawRequest $withdrawRequest, PaymentMethod $paymentMethod, $config, $recipientDetails)
     {
         try {
             $baseUrl = $config['buni_base_url'] ?? null;
@@ -185,12 +201,12 @@ class PaymentMethodService
             $transferData = [
                 'companyCode' => $config['company_code'] ?? 'KE0010001',
                 'transactionType' => 'IF', // Interbank Funds Transfer
-                'debitAccountNumber' => $bankAccount->account_number,
+                'debitAccountNumber' => $recipientDetails['debit_account_number'] ?? '0000000000',
                 'creditAccountNumber' => $recipientDetails['account_number'],
                 'debitAmount' => $withdrawRequest->amount,
                 'paymentDetails' => 'Member withdrawal via IntelliCash',
                 'transactionReference' => 'TXN-' . $withdrawRequest->id . '-' . time(),
-                'currency' => $bankAccount->currency->name ?? 'KES',
+                'currency' => $paymentMethod->currency->name ?? 'KES',
                 'beneficiaryDetails' => $recipientDetails['name'] ?? 'Member Withdrawal',
                 'beneficiaryBankCode' => $recipientDetails['bank_code'] ?? '001'
             ];
@@ -229,7 +245,7 @@ class PaymentMethodService
     /**
      * Process manual withdrawal (for admin processing)
      */
-    private function processManualWithdrawal(WithdrawRequest $withdrawRequest, BankAccount $bankAccount, $config, $recipientDetails)
+    private function processManualWithdrawal(WithdrawRequest $withdrawRequest, PaymentMethod $paymentMethod, $config, $recipientDetails)
     {
         // For manual withdrawals, just mark as pending for admin review
         $withdrawRequest->update([
@@ -297,17 +313,16 @@ class PaymentMethodService
      */
     public function getAvailablePaymentMethods($tenantId)
     {
-        return BankAccount::withPaymentMethods()
-            ->where('tenant_id', $tenantId)
+        return PaymentMethod::where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->get()
-            ->map(function ($account) {
+            ->map(function ($paymentMethod) {
                 return [
-                    'id' => $account->id,
-                    'name' => $account->bank_name . ' - ' . $account->account_name,
-                    'type' => $account->payment_method_type,
-                    'currency' => $account->currency->name ?? 'KES',
-                    'available_balance' => $account->available_balance
+                    'id' => $paymentMethod->id,
+                    'name' => $paymentMethod->name,
+                    'type' => $paymentMethod->type,
+                    'currency' => $paymentMethod->currency->name ?? 'KES',
+                    'display_name' => $paymentMethod->display_name
                 ];
             });
     }

@@ -15,7 +15,7 @@ class OverdueLoanNotification {
         $dueRepayments = LoanRepayment::withoutGlobalScopes()
             ->selectRaw('loan_id, MAX(repayment_date) as repayment_date, COUNT(id) as total_due_repayment, SUM(principal_amount) as total_due')
             ->with('loan.currency')
-            ->whereRaw("repayment_date < '$date'")
+            ->where('repayment_date', '<', $date)
             ->where('status', 0)
             ->whereNull('overdue_notification')
             ->groupBy('loan_id')
@@ -28,7 +28,7 @@ class OverdueLoanNotification {
                 if ($dueRepayment->total_due_repayment > 0) {
                     LoanRepayment::withoutGlobalScopes()
                         ->where('loan_id', $dueRepayment->loan_id)
-                        ->whereRaw("repayment_date < '$date'")
+                        ->where('repayment_date', '<', $date)
                         ->where('status', 0)
                         ->whereNull('overdue_notification')
                         ->update(['overdue_notification' => now()]);

@@ -36,6 +36,19 @@
 
 		<div class="col-md-6">
 			<div class="form-group">
+				<label class="control-label">{{ _lang('Bank Account') }}</label>						
+				<select class="form-control select2 auto-select" data-selected="{{ old('bank_account_id') }}" name="bank_account_id">
+					<option value="">{{ _lang('Select Bank Account (Optional)') }}</option>
+					@foreach($bankAccounts as $bankAccount)
+					<option value="{{ $bankAccount->id }}">{{ $bankAccount->account_name }} - {{ $bankAccount->bank_name }} ({{ $bankAccount->account_number }})</option>
+					@endforeach
+				</select>
+				<small class="text-muted">{{ _lang('All transactions for this account type will be tracked through the selected bank account') }}</small>
+			</div>
+		</div>
+
+		<div class="col-md-6">
+			<div class="form-group">
 				<label class="control-label">{{ _lang('Yearly Interest Rate') }} (%)</label>						
 				<input type="text" class="form-control float-field" name="interest_rate" value="{{ old('interest_rate') }}" >
 			</div>

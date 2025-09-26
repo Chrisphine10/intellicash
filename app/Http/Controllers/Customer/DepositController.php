@@ -42,7 +42,23 @@ class DepositController extends Controller {
         $deposit_methods = AutomaticGateway::active()
             ->where('tenant_id', request()->tenant->id)
             ->get();
-        return view('backend.customer.deposit.automatic_methods', compact('deposit_methods', 'alert_col'));
+        
+        // Get tenant-specific payment methods for deposits
+        $tenantPaymentMethods = \App\Models\PaymentMethod::active()
+            ->where('tenant_id', request()->tenant->id)
+            ->where('type', '!=', 'manual') // Only show automated payment methods for deposits
+            ->get()
+            ->map(function ($paymentMethod) {
+                return [
+                    'id' => 'payment_' . $paymentMethod->id,
+                    'name' => $paymentMethod->display_name,
+                    'type' => 'payment_method',
+                    'payment_method' => $paymentMethod,
+                    'currency' => $paymentMethod->currency->name ?? 'KES',
+                ];
+            });
+        
+        return view('backend.customer.deposit.automatic_methods', compact('deposit_methods', 'tenantPaymentMethods', 'alert_col'));
     }
 
     public function manual_deposit(Request $request, $teant, $methodId) {
@@ -62,9 +78,16 @@ class DepositController extends Controller {
 
             $validator = Validator::make($request->all(), [
                 'requirements.*' => 'required',
-                'credit_account' => 'required',
-                'amount'         => "required|numeric",
-                'attachment'     => 'nullable|mimes:jpeg,JPEG,png,PNG,jpg,doc,pdf,docx|max:4096',
+                'credit_account' => 'required|exists:savings_accounts,id',
+                'amount'         => "required|numeric|min:0.01|max:999999.99",
+                'attachment'     => 'nullable|mimes:jpeg,jpg,png,pdf,doc,docx|max:4096',
+                'description'    => 'nullable|string|max:1000',
+            ], [
+                'credit_account.exists' => 'Selected account does not exist',
+                'amount.min' => 'Amount must be greater than 0',
+                'amount.max' => 'Amount exceeds maximum limit',
+                'attachment.mimes' => 'Only JPEG, PNG, PDF, DOC, and DOCX files are allowed',
+                'attachment.max' => 'File size must not exceed 4MB',
             ]);
 
             if ($validator->fails()) {
@@ -95,22 +118,36 @@ class DepositController extends Controller {
 
             $attachment = "";
             if ($request->hasfile('attachment')) {
-                $file       = $request->file('attachment');
-                $attachment = time() . $file->getClientOriginalName();
-                $file->move(public_path() . "/uploads/media/", $attachment);
+                $file = $request->file('attachment');
+                
+                // Generate secure filename
+                $extension = $file->getClientOriginalExtension();
+                $filename = time() . '_' . uniqid() . '.' . $extension;
+                
+                // Validate file content (basic check)
+                $allowedMimes = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+                if (!in_array($file->getMimeType(), $allowedMimes)) {
+                    return back()->with('error', _lang('Invalid file type'))->withInput();
+                }
+                
+                // Move file to secure location
+                $file->move(public_path() . "/uploads/media/", $filename);
+                $attachment = $filename;
             }
 
-            $depositRequest                    = new DepositRequest();
-            $depositRequest->member_id         = auth()->user()->member->id;
-            $depositRequest->method_id         = $methodId;
-            $depositRequest->credit_account_id = $request->credit_account;
-            $depositRequest->amount            = $request->amount;
-            $depositRequest->converted_amount  = $convertedAdmount + $charge;
-            $depositRequest->charge            = $charge;
-            $depositRequest->description       = $request->description;
-            $depositRequest->requirements      = json_encode($request->requirements);
-            $depositRequest->attachment        = $attachment;
-            $depositRequest->save();
+            $depositRequest = DepositRequest::create([
+                'member_id' => auth()->user()->member->id,
+                'deposit_method_id' => $methodId,
+                'savings_account_id' => $request->credit_account,
+                'amount' => $request->amount,
+                'converted_amount' => $convertedAdmount + $charge,
+                'charge' => $charge,
+                'description' => $request->description,
+                'requirements' => $request->requirements,
+                'attachment' => $attachment,
+                'status' => 0,
+                'tenant_id' => app('tenant')->id
+            ]);
 
             if (! $request->ajax()) {
                 return redirect()->route('deposit.manual_methods')->with('success', _lang('Deposit Request submited successfully'));

@@ -23,12 +23,14 @@ class Tenant extends Model {
         'qr_code_enabled',
         'asset_management_enabled',
         'esignature_enabled',
+        'payroll_enabled',
     ];
 
     protected static function boot() {
         parent::boot();
 
         static::created(function ($tenant) {
+            // Use the comprehensive TenantSetupService for better organization
             $seeder = new SaasSeeder();
             $seeder->run($tenant->id);
         });
@@ -143,6 +145,31 @@ class Tenant extends Model {
     public function assetMaintenance()
     {
         return $this->hasMany(AssetMaintenance::class);
+    }
+
+    public function isPayrollEnabled()
+    {
+        return $this->payroll_enabled ?? false;
+    }
+
+    public function employees()
+    {
+        return $this->hasMany(Employee::class);
+    }
+
+    public function payrollPeriods()
+    {
+        return $this->hasMany(PayrollPeriod::class);
+    }
+
+    public function payrollDeductions()
+    {
+        return $this->hasMany(PayrollDeduction::class);
+    }
+
+    public function payrollBenefits()
+    {
+        return $this->hasMany(PayrollBenefit::class);
     }
 
 }

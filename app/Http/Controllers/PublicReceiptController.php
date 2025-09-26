@@ -41,7 +41,7 @@ class PublicReceiptController extends Controller
             $receiptData = [
                 'transaction_id' => $transaction->id,
                 'amount' => $transaction->amount,
-                'currency' => $transaction->currency ?? 'USD',
+                'currency' => $transaction->currency ?? get_base_currency(),
                 'type' => $transaction->type,
                 'status' => $transaction->status,
                 'created_at' => $transaction->created_at->format('M d, Y H:i:s'),
@@ -110,7 +110,7 @@ class PublicReceiptController extends Controller
                 'transaction' => [
                     'id' => $transaction->id,
                     'amount' => $transaction->amount,
-                    'currency' => $transaction->currency ?? 'USD',
+                    'currency' => $transaction->currency ?? get_base_currency(),
                     'type' => $transaction->type,
                     'status' => $transaction->status,
                     'created_at' => $transaction->created_at->format('M d, Y H:i:s'),

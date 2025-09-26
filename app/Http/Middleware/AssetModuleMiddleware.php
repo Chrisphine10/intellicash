@@ -25,7 +25,7 @@ class AssetModuleMiddleware
                 ], 403);
             }
             
-            return redirect()->route('dashboard')->with('error', _lang('Asset Management module is not enabled'));
+            return redirect()->route('dashboard.index')->with('error', _lang('Asset Management module is not enabled'));
         }
 
         return $next($request);

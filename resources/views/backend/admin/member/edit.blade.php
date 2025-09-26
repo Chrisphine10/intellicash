@@ -8,6 +8,11 @@
 			<div class="card">
 				<div class="card-header">
 					<span class="header-title">{{ _lang('Update Member Information') }}</span>
+					<div class="card-tools">
+						<a href="{{ route('members.index') }}" class="btn btn-secondary btn-sm">
+							<i class="fas fa-arrow-left"></i> {{ _lang('Back to Members') }}
+						</a>
+					</div>
 				</div>
 				<div class="card-body">
 					<input name="_method" type="hidden" value="PATCH">

@@ -134,6 +134,12 @@ class TenantController extends Controller {
 
         $tenant->save();
 
+        // Get the Admin role for this tenant
+        $adminRole = DB::table('roles')
+            ->where('tenant_id', $tenant->id)
+            ->where('name', 'Admin')
+            ->first();
+
         $user                  = new User();
         $user->name            = $request->input('name');
         $user->email           = $request->input('email');
@@ -143,6 +149,7 @@ class TenantController extends Controller {
         $user->status          = 1;
         $user->profile_picture = 'default.png';
         $user->password        = Hash::make($request->password);
+        $user->role_id         = $adminRole ? $adminRole->id : null;
         $user->save();
 
         DB::commit();

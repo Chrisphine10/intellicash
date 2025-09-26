@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Notifications\DepositMoney;
 use App\Notifications\WithdrawMoney;
 use App\Services\AuditService;
+use App\Services\BankingService;
 use DataTables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,13 @@ class TransactionController extends Controller {
      */
     public function __construct() {
         date_default_timezone_set(get_timezone());
+        
+        // Apply authorization middleware
+        $this->middleware('auth');
+        $this->middleware('transaction.auth:transactions.view')->only(['index', 'show']);
+        $this->middleware('transaction.auth:transactions.create')->only(['create', 'store']);
+        $this->middleware('transaction.auth:transactions.edit')->only(['edit', 'update']);
+        $this->middleware('transaction.auth:transactions.delete')->only(['destroy']);
     }
 
     /**
@@ -34,13 +42,23 @@ class TransactionController extends Controller {
     }
 
     public function get_table_data() {
-        $transactions = Transaction::select('transactions.*')
-            ->with(['member', 'account', 'account.savings_type'])
+        $transactions = Transaction::select([
+                'transactions.*',
+                'members.first_name as member_first_name',
+                'members.last_name as member_last_name',
+                'savings_accounts.account_number',
+                'savings_products.name as savings_type_name',
+                'currency.name as currency_name'
+            ])
+            ->leftJoin('members', 'transactions.member_id', '=', 'members.id')
+            ->leftJoin('savings_accounts', 'transactions.savings_account_id', '=', 'savings_accounts.id')
+            ->leftJoin('savings_products', 'savings_accounts.savings_product_id', '=', 'savings_products.id')
+            ->leftJoin('currency', 'savings_products.currency_id', '=', 'currency.id')
             ->orderBy("transactions.trans_date", "desc");
 
         return Datatables::eloquent($transactions)
-            ->editColumn('member.first_name', function ($transactions) {
-                return $transactions->member->first_name . ' ' . $transactions->member->last_name;
+            ->editColumn('member_first_name', function ($transactions) {
+                return $transactions->member_first_name . ' ' . $transactions->member_last_name;
             })
             ->editColumn('dr_cr', function ($transactions) {
                 return strtoupper($transactions->dr_cr);
@@ -51,15 +69,15 @@ class TransactionController extends Controller {
             ->editColumn('amount', function ($transaction) {
                 $symbol = $transaction->dr_cr == 'dr' ? '-' : '+';
                 $class  = $transaction->dr_cr == 'dr' ? 'text-danger' : 'text-success';
-                return '<span class="' . $class . '">' . $symbol . ' ' . decimalPlace($transaction->amount, currency($transaction->account->savings_type->currency->name)) . '</span>';
+                return '<span class="' . $class . '">' . $symbol . ' ' . decimalPlace($transaction->amount, currency($transaction->currency_name)) . '</span>';
             })
             ->editColumn('type', function ($transaction) {
                 return ucwords(str_replace('_', ' ', $transaction->type));
             })
-            ->filterColumn('member.first_name', function ($query, $keyword) {
-                $query->whereHas('member', function ($query) use ($keyword) {
-                    return $query->where("first_name", "like", "{$keyword}%")
-                        ->orWhere("last_name", "like", "{$keyword}%");
+            ->filterColumn('member_first_name', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where("members.first_name", "like", "{$keyword}%")
+                      ->orWhere("members.last_name", "like", "{$keyword}%");
                 });
             }, true)
             ->addColumn('action', function ($transaction) {
@@ -137,66 +155,84 @@ class TransactionController extends Controller {
                 ->withInput();
         }
 
-        if ($request->dr_cr == 'dr') {
-            if ($accountType->allow_withdraw == 0) {
-                return back()
-                    ->with('error', _lang('Withdraw is not allowed for') . ' ' . $accountType->name)
-                    ->withInput();
+        // Use database transaction with pessimistic locking to prevent race conditions
+        try {
+            return DB::transaction(function() use ($request, $accountType) {
+                // Lock the account to prevent concurrent modifications
+                $account = SavingsAccount::where('id', $request->savings_account_id)
+                    ->where('member_id', $request->member_id)
+                    ->where('tenant_id', request()->tenant->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$account) {
+                    throw new \Exception('Account not found or unauthorized access');
+                }
+
+                if ($request->dr_cr == 'dr') {
+                    if ($accountType->allow_withdraw == 0) {
+                        throw new \Exception(_lang('Withdraw is not allowed for') . ' ' . $accountType->name);
+                    }
+
+                    $account_balance = $this->getAccountBalanceAtomic($request->savings_account_id, $request->member_id);
+                    if (($account_balance - $request->amount) < $accountType->minimum_account_balance) {
+                        throw new \Exception(_lang('Sorry Minimum account balance will be exceeded'));
+                    }
+
+                    if ($account_balance < $request->amount) {
+                        throw new \Exception(_lang('Insufficient account balance'));
+                    }
+
+                } else {
+                    if ($request->amount < $accountType->minimum_deposit_amount) {
+                        throw new \Exception(_lang('You must deposit minimum') . ' ' . $accountType->minimum_deposit_amount . ' ' . $accountType->currency->name);
+                    }
+                }
+
+                $transaction                     = new Transaction();
+                $transaction->trans_date         = $request->input('trans_date');
+                $transaction->member_id          = $request->input('member_id');
+                $transaction->savings_account_id = $request->input('savings_account_id');
+                $transaction->amount             = $request->input('amount');
+                $transaction->dr_cr              = $request->dr_cr == 'dr' ? 'dr' : 'cr';
+                $transaction->type               = ucwords($request->type);
+                $transaction->method             = 'Manual';
+                $transaction->status             = $request->input('status');
+                $transaction->description        = $request->input('description');
+                $transaction->created_user_id    = auth()->id();
+
+                $transaction->save();
+
+                // Process bank account transaction automatically
+                $bankingService = new BankingService();
+                $bankingService->processMemberTransaction($transaction);
+
+                // Log audit trail for transaction creation
+                $transactionType = $transaction->dr_cr == 'dr' ? 'withdrawal' : 'deposit';
+                AuditService::logCreated($transaction, 'Transaction created: ' . $transactionType . ' - ' . $transaction->amount . ' (' . $transaction->type . ')');
+
+                if ($transaction->dr_cr == 'dr') {
+                    try {
+                        $transaction->member->notify(new WithdrawMoney($transaction));
+                    } catch (\Exception $e) {}
+                } else if ($transaction->dr_cr == 'cr') {
+                    try {
+                        $transaction->member->notify(new DepositMoney($transaction));
+                    } catch (\Exception $e) {}
+                }
+
+                if (! $request->ajax()) {
+                    return redirect()->route('transactions.show', $transaction->id)->with('success', _lang('Transaction completed successfully'));
+                } else {
+                    return response()->json(['result' => 'success', 'action' => 'store', 'message' => _lang('Transaction completed successfully'), 'data' => $transaction, 'table' => '#transactions_table']);
+                }
+            }, 5); // 5 second timeout for transaction
+        } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => $e->getMessage()]);
+            } else {
+                return back()->with('error', $e->getMessage())->withInput();
             }
-
-            $account_balance = get_account_balance($request->savings_account_id, $request->member_id);
-            if (($account_balance - $request->amount) < $accountType->minimum_account_balance) {
-                return back()
-                    ->with('error', _lang('Sorry Minimum account balance will be exceeded'))
-                    ->withInput();
-            }
-
-            if ($account_balance < $request->amount) {
-                return back()
-                    ->with('error', _lang('Insufficient account balance'))
-                    ->withInput();
-            }
-
-        } else {
-            if ($request->amount < $accountType->minimum_deposit_amount) {
-                return back()
-                    ->with('error', _lang('You must deposit minimum') . ' ' . $accountType->minimum_deposit_amount . ' ' . $accountType->currency->name)
-                    ->withInput();
-            }
-        }
-
-        $transaction                     = new Transaction();
-        $transaction->trans_date         = $request->input('trans_date');
-        $transaction->member_id          = $request->input('member_id');
-        $transaction->savings_account_id = $request->input('savings_account_id');
-        $transaction->amount             = $request->input('amount');
-        $transaction->dr_cr              = $request->dr_cr == 'dr' ? 'dr' : 'cr';
-        $transaction->type               = ucwords($request->type);
-        $transaction->method             = 'Manual';
-        $transaction->status             = $request->input('status');
-        $transaction->description        = $request->input('description');
-        $transaction->created_user_id    = auth()->id();
-
-        $transaction->save();
-
-        // Log audit trail for transaction creation
-        $transactionType = $transaction->dr_cr == 'dr' ? 'withdrawal' : 'deposit';
-        AuditService::logCreated($transaction, 'Transaction created: ' . $transactionType . ' - ' . $transaction->amount . ' (' . $transaction->type . ')');
-
-        if ($transaction->dr_cr == 'dr') {
-            try {
-                $transaction->member->notify(new WithdrawMoney($transaction));
-            } catch (\Exception $e) {}
-        } else if ($transaction->dr_cr == 'cr') {
-            try {
-                $transaction->member->notify(new DepositMoney($transaction));
-            } catch (\Exception $e) {}
-        }
-
-        if (! $request->ajax()) {
-            return redirect()->route('transactions.show', $transaction->id)->with('success', _lang('Transaction completed successfully'));
-        } else {
-            return response()->json(['result' => 'success', 'action' => 'store', 'message' => _lang('Transaction completed successfully'), 'data' => $transaction, 'table' => '#transactions_table']);
         }
 
     }
@@ -272,43 +308,63 @@ class TransactionController extends Controller {
                 ->withInput();
         }
 
-        if ($request->dr_cr == 'dr') {
-            if ($accountType->allow_withdraw == 0) {
-                return back()
-                    ->with('error', _lang('Withdraw is not allowed for') . ' ' . $accountType->name)
-                    ->withInput();
-            }
+        // Use database transaction with pessimistic locking to prevent race conditions
+        try {
+            return DB::transaction(function() use ($request, $transaction, $accountType) {
+                // Lock the account to prevent concurrent modifications
+                $account = SavingsAccount::where('id', $request->savings_account_id)
+                    ->where('member_id', $request->member_id)
+                    ->where('tenant_id', request()->tenant->id)
+                    ->lockForUpdate()
+                    ->first();
 
-            $account_balance = get_account_balance($request->savings_account_id, $request->member_id);
-            $previousAmount  = $request->member_id == $transaction->member_id ? $transaction->amount : 0;
+                if (!$account) {
+                    throw new \Exception('Account not found or unauthorized access');
+                }
 
-            if ((($account_balance + $previousAmount) - $request->amount) < $accountType->minimum_account_balance) {
-                return back()
-                    ->with('error', _lang('Sorry Minimum account balance will be exceeded'))
-                    ->withInput();
-            }
+                if ($request->dr_cr == 'dr') {
+                    if ($accountType->allow_withdraw == 0) {
+                        throw new \Exception(_lang('Withdraw is not allowed for') . ' ' . $accountType->name);
+                    }
 
-            if (($account_balance + $previousAmount) < $request->amount) {
-                return back()
-                    ->with('error', _lang('Insufficient account balance'))
-                    ->withInput();
-            }
-        } else {
-            if ($request->amount < $accountType->minimum_deposit_amount) {
-                return back()
-                    ->with('error', _lang('You must deposit minimum') . ' ' . $accountType->minimum_deposit_amount . ' ' . $accountType->currency->name)
-                    ->withInput();
+                    $account_balance = $this->getAccountBalanceAtomic($request->savings_account_id, $request->member_id);
+                    $previousAmount  = $request->member_id == $transaction->member_id ? $transaction->amount : 0;
+
+                    if ((($account_balance + $previousAmount) - $request->amount) < $accountType->minimum_account_balance) {
+                        throw new \Exception(_lang('Sorry Minimum account balance will be exceeded'));
+                    }
+
+                    if (($account_balance + $previousAmount) < $request->amount) {
+                        throw new \Exception(_lang('Insufficient account balance'));
+                    }
+                } else {
+                    if ($request->amount < $accountType->minimum_deposit_amount) {
+                        throw new \Exception(_lang('You must deposit minimum') . ' ' . $accountType->minimum_deposit_amount . ' ' . $accountType->currency->name);
+                    }
+                }
+
+                $transaction->trans_date         = $request->input('trans_date');
+                $transaction->member_id          = $request->input('member_id');
+                $transaction->savings_account_id = $request->input('savings_account_id');
+                $transaction->amount             = $request->input('amount');
+                $transaction->status             = $request->input('status');
+                $transaction->description        = $request->input('description');
+                $transaction->updated_user_id    = auth()->id();
+                $transaction->save();
+
+                // Process bank account transaction automatically (for updates)
+                $bankingService = new BankingService();
+                $bankingService->processMemberTransaction($transaction);
+
+                return $transaction;
+            }, 5); // 5 second timeout for transaction
+        } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => $e->getMessage()]);
+            } else {
+                return back()->with('error', $e->getMessage())->withInput();
             }
         }
-
-        $transaction->trans_date         = $request->input('trans_date');
-        $transaction->member_id          = $request->input('member_id');
-        $transaction->savings_account_id = $request->input('savings_account_id');
-        $transaction->amount             = $request->input('amount');
-        $transaction->status             = $request->input('status');
-        $transaction->description        = $request->input('description');
-        $transaction->updated_user_id    = auth()->id();
-        $transaction->save();
 
         // Log audit trail for transaction update
         $transactionType = $transaction->dr_cr == 'dr' ? 'withdrawal' : 'deposit';
@@ -348,5 +404,44 @@ class TransactionController extends Controller {
         DB::commit();
 
         return redirect()->route('transactions.index')->with('success', _lang('Deleted Successfully'));
+    }
+
+    /**
+     * Get account balance atomically within a locked transaction
+     * This method ensures balance calculation is consistent with locked account
+     *
+     * @param int $accountId
+     * @param int $memberId
+     * @return float
+     */
+    private function getAccountBalanceAtomic($accountId, $memberId)
+    {
+        // Calculate blocked amount using Eloquent for security
+        $blockedAmount = \App\Models\Guarantor::join('loans', 'loans.id', 'guarantors.loan_id')
+            ->whereIn('loans.status', [0, 1]) // Use whereIn instead of whereRaw
+            ->where('guarantors.member_id', $memberId)
+            ->where('guarantors.savings_account_id', $accountId)
+            ->sum('guarantors.amount');
+
+        // Calculate balance using parameterized query with proper status handling
+        $result = DB::select("
+            SELECT (
+                (SELECT IFNULL(SUM(amount), 0) 
+                 FROM transactions 
+                 WHERE dr_cr = 'cr' 
+                   AND member_id = ? 
+                   AND savings_account_id = ? 
+                   AND status = 2) - 
+                (SELECT IFNULL(SUM(amount), 0) 
+                 FROM transactions 
+                 WHERE dr_cr = 'dr' 
+                   AND member_id = ? 
+                   AND savings_account_id = ? 
+                   AND status = 2)
+            ) as balance
+        ", [$memberId, $accountId, $memberId, $accountId]);
+
+        $balance = $result[0]->balance ?? 0;
+        return $balance - $blockedAmount;
     }
 }

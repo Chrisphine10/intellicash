@@ -4,6 +4,13 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
+            <!-- Back Button -->
+            <div class="mb-3">
+                <a href="{{ route('asset-reports.index') }}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to Reports
+                </a>
+            </div>
+            
             <div class="page-title-box">
                 <div class="page-title-right">
                     <ol class="breadcrumb m-0">

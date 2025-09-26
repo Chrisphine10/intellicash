@@ -17,6 +17,11 @@ class KenyanLegalComplianceSeeder extends Seeder
     {
         $tenants = Tenant::all();
         
+        if ($tenants->isEmpty()) {
+            $this->command->info('No tenants found. Skipping Kenyan legal compliance seeding.');
+            return;
+        }
+        
         foreach ($tenants as $tenant) {
             // Get the first admin user for this tenant
             $adminUser = User::where('tenant_id', $tenant->id)
@@ -24,6 +29,7 @@ class KenyanLegalComplianceSeeder extends Seeder
                 ->first();
             
             if (!$adminUser) {
+                $this->command->warn("No admin user found for tenant {$tenant->id}. Skipping...");
                 continue;
             }
             

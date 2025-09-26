@@ -32,14 +32,38 @@ class LoanPaymentController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function index() {
+        $user = auth()->user();
+        
+        // Only allow admin and staff users for admin loan payment management
+        if (!in_array($user->user_type, ['admin', 'user'])) {
+            abort(403, 'Unauthorized access to loan payment management');
+        }
+        
+        // For staff users, check specific permissions
+        if ($user->user_type === 'user' && !has_permission('loan_payment.view')) {
+            abort(403, 'Insufficient permissions for loan payment management');
+        }
+        
         $assets = ['datatable'];
         return view('backend.admin.loan_payment.list', compact('assets'));
     }
 
     public function get_table_data() {
+        $user = auth()->user();
+        
         $loanpayments = LoanPayment::select('loan_payments.*')
             ->with('loan')
             ->orderBy("loan_payments.id", "desc");
+
+        // Add data filtering based on user type
+        if ($user->user_type === 'user') {
+            // Staff users might have limited access - could be filtered by branch or other criteria
+            // For now, show all payments but this can be customized based on business requirements
+            // Example: $loanpayments->whereHas('loan', function($query) use ($user) {
+            //     $query->where('branch_id', $user->branch_id);
+            // });
+        }
+        // Admin users see all data (no additional filtering needed)
 
         return Datatables::eloquent($loanpayments)
             ->editColumn('repayment_amount', function ($loanpayment) {
@@ -78,6 +102,13 @@ class LoanPaymentController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function create(Request $request) {
+        $user = auth()->user();
+        
+        // Check permissions for creating loan payments
+        if ($user->user_type === 'user' && !has_permission('loan_payment.create')) {
+            abort(403, 'Insufficient permissions to create loan payments');
+        }
+        
         $alert_col = 'col-lg-8 offset-lg-2';
         return view('backend.admin.loan_payment.create', compact('alert_col'));
     }
@@ -89,13 +120,26 @@ class LoanPaymentController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request) {
+        $user = auth()->user();
+        
+        // Check permissions for creating loan payments
+        if ($user->user_type === 'user' && !has_permission('loan_payment.create')) {
+            abort(403, 'Insufficient permissions to create loan payments');
+        }
+        
         $validator = Validator::make($request->all(), [
-            'loan_id'          => 'required',
-            'paid_at'          => 'required',
-            'late_penalties'   => 'nullable|numeric',
-            'principal_amount' => 'required|numeric',
-            'interest'         => 'required|numeric',
-            'due_amount_of'    => 'required',
+            'loan_id'          => 'required|exists:loans,id',
+            'paid_at'          => 'required|date',
+            'late_penalties'   => 'nullable|numeric|min:0',
+            'principal_amount' => 'required|numeric|min:0.01',
+            'interest'         => 'required|numeric|min:0',
+            'due_amount_of'    => 'required|exists:loan_repayments,id',
+        ], [
+            'loan_id.required' => 'Loan ID is required',
+            'loan_id.exists' => 'Invalid loan selected',
+            'principal_amount.min' => 'Principal amount must be greater than 0',
+            'late_penalties.min' => 'Late penalties cannot be negative',
+            'due_amount_of.exists' => 'Invalid repayment schedule selected',
         ]);
 
         if ($validator->fails()) {
@@ -109,13 +153,17 @@ class LoanPaymentController extends Controller {
         }
 
         DB::beginTransaction();
+        
+        // Use atomic validation with pessimistic locking to prevent race conditions
         $repayment = LoanRepayment::where('loan_id', $request->loan_id)
             ->where('status', 0)
-            ->orderBy('id', 'asc')
+            ->where('id', $request->due_amount_of)
+            ->lockForUpdate()
             ->first();
 
-        if ($repayment->id != $request->due_amount_of) {
-            return back()->with('error', _lang('Invalid Operation !'));
+        if (!$repayment) {
+            DB::rollback();
+            return back()->with('error', _lang('No pending repayment found for this loan or repayment schedule mismatch'));
         }
 
         $existing_amount = $repayment->principal_amount;
@@ -179,9 +227,9 @@ class LoanPaymentController extends Controller {
         // Log audit trail for loan payment
         AuditService::logCreated($loanpayment, 'Loan payment created: ' . $loanpayment->total_amount . ' for loan ID ' . $loan->id);
 
-        //Update Loan Balance
-        $loan->total_paid = $loan->total_paid + $request->principal_amount;
-        if ($loan->total_paid >= $loan->applied_amount) {
+        //Update Loan Balance using standardized calculation
+        $loan->total_paid = $loan->calculateRemainingPrincipal();
+        if ($loan->isFullyPaid()) {
             $loan->status = 2;
         }
         $loan->save();
@@ -189,8 +237,7 @@ class LoanPaymentController extends Controller {
         //Update Repayment Status
         $repayment->principal_amount = $request->principal_amount;
         $repayment->amount_to_pay    = $request->principal_amount + $repayment->interest;
-        //$repayment->balance          = $loan->total_payable - ($loan->total_paid + $loan->payments->sum('interest'));
-        $repayment->balance = $loan->applied_amount - $loan->total_paid;
+        $repayment->balance = $loan->calculateRemainingBalance();
         $repayment->status  = 1;
         $repayment->save();
 
@@ -287,7 +334,10 @@ class LoanPaymentController extends Controller {
                 ->get();
         }
 
-        echo json_encode(['repayments' => $repayments, 'accounts' => $accounts]);
+        return response()->json([
+            'repayments' => $repayments, 
+            'accounts' => $accounts
+        ]);
     }
 
     /**
@@ -297,6 +347,13 @@ class LoanPaymentController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function destroy($tenant, $id) {
+        $user = auth()->user();
+        
+        // Check permissions for deleting loan payments
+        if ($user->user_type === 'user' && !has_permission('loan_payment.delete')) {
+            abort(403, 'Insufficient permissions to delete loan payments');
+        }
+        
         DB::beginTransaction();
 
         $loanpayment = LoanPayment::find($id);

@@ -47,13 +47,16 @@ class ReportController extends Controller {
                 return back()->with('error', _lang('Account not found'));
             }
 
-            DB::select("SELECT ((SELECT IFNULL(SUM(amount),0) FROM transactions WHERE dr_cr = 'cr' AND member_id = $account->member_id AND savings_account_id = $account->id AND status=2 AND created_at < '$date1') - (SELECT IFNULL(SUM(amount),0) FROM transactions WHERE dr_cr = 'dr' AND member_id = $account->member_id AND savings_account_id = $account->id AND status = 2 AND created_at < '$date1')) into @openingBalance");
+            // SECURE: Use parameterized queries to prevent SQL injection
+            DB::select("SELECT ((SELECT IFNULL(SUM(amount),0) FROM transactions WHERE dr_cr = 'cr' AND member_id = ? AND savings_account_id = ? AND status=2 AND created_at < ?) - (SELECT IFNULL(SUM(amount),0) FROM transactions WHERE dr_cr = 'dr' AND member_id = ? AND savings_account_id = ? AND status = 2 AND created_at < ?)) into @openingBalance", 
+                [$account->member_id, $account->id, $date1, $account->member_id, $account->id, $date1]);
 
-            $data['report_data'] = DB::select("SELECT '$date1' trans_date,'Opening Balance' as description, 0 as 'debit', 0 as 'credit', @openingBalance as 'balance'
+            $data['report_data'] = DB::select("SELECT ? as trans_date,'Opening Balance' as description, 0 as 'debit', 0 as 'credit', @openingBalance as 'balance'
             UNION ALL
             SELECT date(trans_date), description, debit, credit, @openingBalance := @openingBalance + (credit - debit) as balance FROM
-            (SELECT date(transactions.trans_date) as trans_date, transactions.description, IF(transactions.dr_cr='dr',transactions.amount,0) as debit, IF(transactions.dr_cr='cr',transactions.amount,0) as credit FROM `transactions` JOIN savings_accounts ON savings_account_id=savings_accounts.id WHERE savings_accounts.id = $account->id AND transactions.member_id = $account->member_id AND transactions.status = 2 AND date(transactions.trans_date) >= '$date1' AND date(transactions.trans_date) <= '$date2')
-            as all_transaction");
+            (SELECT date(transactions.trans_date) as trans_date, transactions.description, IF(transactions.dr_cr='dr',transactions.amount,0) as debit, IF(transactions.dr_cr='cr',transactions.amount,0) as credit FROM `transactions` JOIN savings_accounts ON savings_account_id=savings_accounts.id WHERE savings_accounts.id = ? AND transactions.member_id = ? AND transactions.status = 2 AND date(transactions.trans_date) >= ? AND date(transactions.trans_date) <= ?)
+            as all_transaction", 
+                [$date1, $account->id, $account->member_id, $date1, $date2]);
 
             $data['date1']          = $request->date1;
             $data['date2']          = $request->date2;
@@ -103,7 +106,7 @@ class ReportController extends Controller {
                         return $query->where('account_number', $account_number);
                     });
                 })
-                ->whereRaw("date(transactions.trans_date) >= '$date1' AND date(transactions.trans_date) <= '$date2'")
+                ->whereRaw("date(transactions.trans_date) >= ? AND date(transactions.trans_date) <= ?", [$date1, $date2])
                 ->where('member_id', auth()->user()->member->id)
                 ->orderBy('transactions.trans_date', 'desc')
                 ->get();

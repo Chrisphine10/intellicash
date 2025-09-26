@@ -5,14 +5,22 @@
 	<div class="col-12">
 		<div class="alert alert-info">
 			<span>{{ _lang('Amount greater than zero will post to user account') }}</span>
-		</div> 
+		</div>
+		
+		@if(count($users) == 0)
+		<div class="alert alert-warning">
+			<span>{{ _lang('No interest calculated for the selected date range and account type') }}</span>
+		</div>
+		@endif 
 
 		<form method="post" action="{{ route('interest_calculation.interest_posting') }}">
 			@csrf
 			<div class="card">
 				<div class="card-header d-flex justify-content-between align-items-center">
 					<span class="panel-title">{{ _lang('Interest Review') }}</span>
+					@if(count($users) > 0)
 					<button class="btn btn-primary btn-xs float-right" type="submit">{{ _lang('POST INTEREST') }}</button>
+					@endif
 				</div>
 
 				<input type="hidden" name="account_type_id" value="{{ $account_type_id }}"/>
@@ -22,7 +30,22 @@
 
 				@php  $date_format = get_date_format(); @endphp
 
-				<div class="card-body">		
+				<div class="card-body">
+					@if(count($users) > 0)
+					<div class="row mb-3">
+						<div class="col-md-12">
+							<div class="alert alert-success">
+								<h5>{{ _lang('Calculation Summary') }}</h5>
+								<p><strong>{{ _lang('Account Type') }}:</strong> {{ App\Models\SavingsProduct::find($account_type_id)->name ?? 'N/A' }}</p>
+								<p><strong>{{ _lang('Interest Rate') }}:</strong> {{ App\Models\SavingsProduct::find($account_type_id)->interest_rate ?? 'N/A' }}%</p>
+								<p><strong>{{ _lang('Date Range') }}:</strong> {{ date($date_format, strtotime($start_date)) }} - {{ date($date_format, strtotime($end_date)) }}</p>
+								<p><strong>{{ _lang('Total Accounts') }}:</strong> {{ count($users) }}</p>
+								<p><strong>{{ _lang('Total Interest') }}:</strong> {{ decimalPlace(array_sum(array_column($users, 'interest')), currency()) }}</p>
+							</div>
+						</div>
+					</div>
+					@endif
+					
 					<table class="table table-bordered data-table">
 						<thead>
 						<tr>

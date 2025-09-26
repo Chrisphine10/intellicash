@@ -19,7 +19,7 @@
 					    </tr>
 					</thead>
 					<tbody>
-					    @foreach($branchs as $branch)
+					    @foreach($branches as $branch)
 					    <tr data-id="row_{{ $branch->id }}">
 							<td class='name'>{{ $branch->name }}</td>
 							<td class='contact_email'>{{ $branch->contact_email }}</td>
@@ -47,6 +47,11 @@
 					    @endforeach
 					</tbody>
 				</table>
+				
+				<!-- Pagination -->
+				<div class="d-flex justify-content-center mt-3">
+					{{ $branches->links() }}
+				</div>
 			</div>
 		</div>
 	</div>

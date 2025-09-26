@@ -17,6 +17,6 @@ class EnsureTenantAdmin {
         if (Auth::check() && Auth::user()->tenant_id == $tenant->id && Auth::user()->user_type === 'admin') {
             return $next($request);
         }
-        return redirect()->route('login');
+        return redirect()->route('tenant.login', ['tenant' => app('tenant')->slug]);
     }
 }

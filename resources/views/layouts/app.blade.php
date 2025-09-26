@@ -257,14 +257,14 @@
 								<!--Branch Switcher-->
 								@if(auth()->check() && (auth()->user()->user_type == 'admin' || auth()->user()->all_branch_access == 1))
 								<div class="dropdown">
-									<a class="dropdown-toggle btn btn-dark btn-xs" type="button" id="selectLanguage" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+									<a class="dropdown-toggle btn btn-dark btn-xs" type="button" id="selectBranch" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
 										{{ session('branch') =='' ? _lang('All Branch') : session('branch') }}
 									</a>
-									<div class="dropdown-menu dropdown-menu-right" aria-labelledby="selectLanguage">
-										<a class="dropdown-item" href="{{ route('switch_branch') }}">{{ _lang('All Branch') }}</a>
-										<a class="dropdown-item" href="{{ route('switch_branch') }}?branch_id=default&branch={{ get_option('default_branch_name', 'Main Branch') }}">{{ get_option('default_branch_name', 'Main Branch') }}</a>
+									<div class="dropdown-menu dropdown-menu-right" aria-labelledby="selectBranch">
+										<a class="dropdown-item branch-switch" href="{{ route('switch_branch_reset') }}">{{ _lang('All Branch') }}</a>
+										<a class="dropdown-item branch-switch" href="#" data-branch-id="default" data-branch-name="{{ get_option('default_branch_name', 'Main Branch') }}">{{ get_option('default_branch_name', 'Main Branch') }}</a>
 										@foreach( \App\Models\Branch::all() as $branch )
-										<a class="dropdown-item" href="{{ route('switch_branch') }}?branch_id={{ $branch->id }}&branch={{ $branch->name }}">{{ $branch->name }}</a>
+										<a class="dropdown-item branch-switch" href="#" data-branch-id="{{ $branch->id }}" data-branch-name="{{ $branch->name }}">{{ $branch->name }}</a>
 										@endforeach
 									</div>
 								</div>
@@ -274,6 +274,43 @@
 					</div>
 				</div><!-- page title area end -->
 				@endif
+
+				<script>
+				$(document).ready(function() {
+					$('.branch-switch').click(function(e) {
+						e.preventDefault();
+						
+						var branchId = $(this).data('branch-id');
+						var branchName = $(this).data('branch-name');
+						
+						if (branchId === 'default') {
+							// Reset to all branches
+							window.location.href = $(this).attr('href');
+							return;
+						}
+						
+						// Switch to specific branch
+						$.ajax({
+							url: '{{ route("switch_branch") }}',
+							method: 'POST',
+							data: {
+								branch_id: branchId,
+								_token: '{{ csrf_token() }}'
+							},
+							success: function(response) {
+								if (response.result === 'success') {
+									location.reload();
+								} else {
+									alert(response.message || 'Error switching branch');
+								}
+							},
+							error: function() {
+								alert('Error switching branch');
+							}
+						});
+					});
+				});
+				</script>
 
 				<div class="main-content-inner mt-4">
 					<div class="row">

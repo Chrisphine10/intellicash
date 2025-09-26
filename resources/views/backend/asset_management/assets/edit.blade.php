@@ -23,6 +23,11 @@
             <div class="card">
                 <div class="card-header">
                     <h4 class="card-title mb-0">{{ _lang('Edit Asset') }}: {{ $asset->name }}</h4>
+                    <div class="card-tools">
+                        <a href="{{ route('assets.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Assets') }}
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <form action="{{ route('assets.update', $asset) }}" method="POST">

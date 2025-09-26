@@ -176,6 +176,19 @@ class AuditController extends Controller
     {
         $query = AuditTrail::where('tenant_id', request()->tenant->id);
 
+        // Apply filters
+        if ($request->filled('event_type')) {
+            $query->where('event_type', $request->event_type);
+        }
+
+        if ($request->filled('auditable_type')) {
+            $query->where('auditable_type', $request->auditable_type);
+        }
+
+        if ($request->filled('user_type')) {
+            $query->where('user_type', $request->user_type);
+        }
+
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
@@ -184,24 +197,53 @@ class AuditController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        $stats = [
-            'total_events' => $query->count(),
-            'events_by_type' => $query->groupBy('event_type')
-                ->selectRaw('event_type, count(*) as count')
-                ->pluck('count', 'event_type'),
-            'events_by_user_type' => $query->groupBy('user_type')
-                ->selectRaw('user_type, count(*) as count')
-                ->pluck('count', 'user_type'),
-            'events_by_auditable_type' => $query->groupBy('auditable_type')
-                ->selectRaw('auditable_type, count(*) as count')
-                ->pluck('count', 'auditable_type'),
-            'recent_activity' => $query->with('user')
-                ->orderBy('created_at', 'desc')
-                ->limit(10)
-                ->get()
-               ];
+        // Calculate statistics
+        $totalEvents = $query->count();
+        
+        // Today's events
+        $todayEvents = (clone $query)->whereDate('created_at', today())->count();
+        
+        // This week's events (Monday to Sunday)
+        $startOfWeek = now()->startOfWeek();
+        $endOfWeek = now()->endOfWeek();
+        $weekEvents = (clone $query)->whereBetween('created_at', [$startOfWeek, $endOfWeek])->count();
+        
+        // This month's events
+        $startOfMonth = now()->startOfMonth();
+        $endOfMonth = now()->endOfMonth();
+        $monthEvents = (clone $query)->whereBetween('created_at', [$startOfMonth, $endOfMonth])->count();
 
-        return response()->json($stats);
+        // Events by type
+        $eventsByType = (clone $query)->groupBy('event_type')
+            ->selectRaw('event_type, count(*) as count')
+            ->pluck('count', 'event_type');
+
+        // Events by user type
+        $eventsByUserType = (clone $query)->groupBy('user_type')
+            ->selectRaw('user_type, count(*) as count')
+            ->pluck('count', 'user_type');
+
+        // Events by auditable type
+        $eventsByAuditableType = (clone $query)->groupBy('auditable_type')
+            ->selectRaw('auditable_type, count(*) as count')
+            ->pluck('count', 'auditable_type');
+
+        // Recent activity
+        $recentActivity = (clone $query)->with('user')
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'total_events' => $totalEvents,
+            'today_events' => $todayEvents,
+            'week_events' => $weekEvents,
+            'month_events' => $monthEvents,
+            'events_by_type' => $eventsByType,
+            'events_by_user_type' => $eventsByUserType,
+            'events_by_auditable_type' => $eventsByAuditableType,
+            'recent_activity' => $recentActivity
+        ]);
     }
 
     /**

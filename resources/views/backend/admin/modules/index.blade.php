@@ -26,6 +26,8 @@
                                                 <i class="fas fa-building fa-lg"></i>
                                             @elseif($key === 'esignature')
                                                 <i class="fas fa-signature fa-lg"></i>
+                                            @elseif($key === 'payroll')
+                                                <i class="fas fa-money-bill-wave fa-lg"></i>
                                             @else
                                                 <i class="fas fa-cog fa-lg"></i>
                                             @endif
@@ -82,6 +84,13 @@
                                     <a href="{{ route('esignature.esignature-documents.index') }}" class="btn btn-info btn-sm ms-2">
                                         <i class="fas fa-cog"></i> {{ _lang('Manage') }}
                                     </a>
+                                    @elseif($key === 'payroll' && $module['enabled'])
+                                    <a href="{{ route('modules.payroll.configure') }}" class="btn btn-info btn-sm ms-2">
+                                        <i class="fas fa-cog"></i> {{ _lang('Configure') }}
+                                    </a>
+                                    <a href="{{ route('payroll.periods.index') }}" class="btn btn-outline-primary btn-sm ms-2">
+                                        <i class="fas fa-tasks"></i> {{ _lang('Manage') }}
+                                    </a>
                                     @endif
                                 </div>
                             </div>
@@ -115,6 +124,8 @@ $(document).ready(function() {
                 url = '{{ route("modules.toggle_asset_management") }}';
             } else if (module === 'esignature') {
                 url = '{{ route("modules.toggle_esignature") }}';
+            } else if (module === 'payroll') {
+                url = '{{ route("modules.toggle_payroll") }}';
             }
             
             $.ajax({

@@ -43,8 +43,19 @@ class Loan extends Model
 
     protected static function booted()
     {
-        static::addGlobalScope('borrower_id', function (Builder $builder) {
+        // Add tenant isolation global scope
+        static::addGlobalScope('tenant', function (Builder $builder) {
+            if (auth()->check() && auth()->user()->tenant_id) {
+                $builder->where('tenant_id', auth()->user()->tenant_id);
+            }
+        });
+
+        // Add branch-level access control with tenant validation
+        static::addGlobalScope('branch_access', function (Builder $builder) {
             if (auth()->check() && auth()->user()->user_type == 'user') {
+                // Ensure tenant isolation is maintained
+                $builder->where('tenant_id', auth()->user()->tenant_id);
+                
                 if (auth()->user()->all_branch_access == 1) {
                     if (session('branch_id') != '') {
                         $branch_id = session('branch_id') == 'default' ? null : session('branch_id');
@@ -52,16 +63,42 @@ class Loan extends Model
                     }
                 } else {
                     return $builder->whereHas('borrower', function (Builder $query) {
-                        $query->where('branch_id', auth()->user()->branch_id);
+                        $query->where('branch_id', auth()->user()->branch_id)
+                              ->where('tenant_id', auth()->user()->tenant_id);
                     });
                 }
             } else {
                 if (session('branch_id') != '') {
                     $branch_id = session('branch_id') == 'default' ? null : session('branch_id');
                     return $builder->whereHas('borrower', function (Builder $query) use ($branch_id) {
-                        $query->where('branch_id', $branch_id);
+                        $query->where('branch_id', $branch_id)
+                              ->where('tenant_id', auth()->user()->tenant_id);
                     });
                 }
+            }
+        });
+
+        // Add security event monitoring
+        static::created(function ($loan) {
+            if (class_exists('App\Services\ThreatMonitoringService')) {
+                app('App\Services\ThreatMonitoringService')->monitorEvent('loan_created', [
+                    'loan_id' => $loan->id,
+                    'borrower_id' => $loan->borrower_id,
+                    'amount' => $loan->applied_amount,
+                    'tenant_id' => $loan->tenant_id,
+                    'user_id' => auth()->id()
+                ]);
+            }
+        });
+
+        static::updated(function ($loan) {
+            if (class_exists('App\Services\ThreatMonitoringService')) {
+                app('App\Services\ThreatMonitoringService')->monitorEvent('loan_updated', [
+                    'loan_id' => $loan->id,
+                    'borrower_id' => $loan->borrower_id,
+                    'tenant_id' => $loan->tenant_id,
+                    'user_id' => auth()->id()
+                ]);
             }
         });
     }
@@ -159,6 +196,51 @@ class Loan extends Model
         $date_format = get_date_format();
         $time_format = get_time_format();
         return \Carbon\Carbon::parse($value)->format("$date_format $time_format");
+    }
+
+    /**
+     * Calculate the remaining loan balance including all payments
+     * 
+     * @return float
+     */
+    public function calculateRemainingBalance()
+    {
+        $totalPaid = $this->payments->sum('total_amount');
+        return max(0, $this->total_payable - $totalPaid);
+    }
+
+    /**
+     * Calculate the remaining principal balance
+     * 
+     * @return float
+     */
+    public function calculateRemainingPrincipal()
+    {
+        $totalPaidPrincipal = $this->payments->sum('repayment_amount') - $this->payments->sum('interest');
+        return max(0, $this->applied_amount - $totalPaidPrincipal);
+    }
+
+    /**
+     * Check if loan is fully paid
+     * 
+     * @return bool
+     */
+    public function isFullyPaid()
+    {
+        return $this->calculateRemainingBalance() <= 0;
+    }
+
+    /**
+     * Get the next payment due
+     * 
+     * @return LoanRepayment|null
+     */
+    public function getNextPayment()
+    {
+        return $this->repayments()
+            ->where('status', 0)
+            ->orderBy('repayment_date', 'asc')
+            ->first();
     }
 
 }

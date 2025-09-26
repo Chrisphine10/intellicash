@@ -4,6 +4,13 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
+            <!-- Back Button -->
+            <div class="mb-3">
+                <a href="{{ route('asset-reports.index') }}" class="btn btn-secondary">
+                    <i class="fa fa-arrow-left"></i> Back to Reports
+                </a>
+            </div>
+            
             <div class="page-title-box">
                 <div class="page-title-right">
                     <ol class="breadcrumb m-0">
@@ -240,13 +247,19 @@
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">{{ _lang('Export Report') }}</h5>
+                        <h5 class="card-title mb-0">{{ _lang('Export & Print Options') }}</h5>
                         <div>
+                            <button class="btn btn-info me-2" onclick="printReport()">
+                                <i class="fas fa-print me-1"></i> {{ _lang('Print Report') }}
+                            </button>
                             <button class="btn btn-success me-2" onclick="exportToPDF()">
                                 <i class="fas fa-file-pdf me-1"></i> {{ _lang('Export PDF') }}
                             </button>
-                            <button class="btn btn-primary" onclick="exportToExcel()">
+                            <button class="btn btn-primary me-2" onclick="exportToExcel()">
                                 <i class="fas fa-file-excel me-1"></i> {{ _lang('Export Excel') }}
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportToCSV()">
+                                <i class="fas fa-file-csv me-1"></i> {{ _lang('Export CSV') }}
                             </button>
                         </div>
                     </div>
@@ -259,14 +272,84 @@
 
 @push('scripts')
 <script>
+    function printReport() {
+        // Hide buttons and other non-printable elements
+        const printElements = document.querySelectorAll('.btn, .page-title-box, .card-header:not(.report-header)');
+        printElements.forEach(el => el.style.display = 'none');
+        
+        // Print the page
+        window.print();
+        
+        // Restore elements after printing
+        printElements.forEach(el => el.style.display = '');
+    }
+
     function exportToPDF() {
-        // Implementation for PDF export
-        alert('PDF export functionality will be implemented');
+        // Create a new window with the report content
+        const printWindow = window.open('', '_blank');
+        const reportContent = document.querySelector('.container-fluid').innerHTML;
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Profit & Loss Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        .table th { background-color: #f2f2f2; }
+                        .table-active { background-color: #f8f9fa; }
+                        .text-success { color: #28a745; }
+                        .text-danger { color: #dc3545; }
+                        .text-muted { color: #6c757d; }
+                        .text-end { text-align: right; }
+                        .mb-3 { margin-bottom: 1rem; }
+                        .card-title { font-weight: bold; margin-bottom: 1rem; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Profit & Loss Report</h2>
+                    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+                    ${reportContent}
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
     }
 
     function exportToExcel() {
-        // Implementation for Excel export
-        alert('Excel export functionality will be implemented');
+        // Get table data
+        const table = document.querySelector('.table');
+        const rows = Array.from(table.querySelectorAll('tr'));
+        
+        let csvContent = '';
+        rows.forEach(row => {
+            const cells = Array.from(row.querySelectorAll('th, td'));
+            const rowData = cells.map(cell => {
+                // Clean up cell content
+                let content = cell.textContent.trim();
+                // Remove badge styling and keep only text
+                content = content.replace(/\s+/g, ' ');
+                return `"${content}"`;
+            });
+            csvContent += rowData.join(',') + '\n';
+        });
+        
+        // Create and download CSV file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'profit_loss_report.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function exportToCSV() {
+        exportToExcel(); // Same functionality as Excel export
     }
 </script>
 @endpush

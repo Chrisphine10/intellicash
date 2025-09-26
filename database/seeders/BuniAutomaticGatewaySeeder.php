@@ -72,5 +72,7 @@ class BuniAutomaticGatewaySeeder extends Seeder
                 'updated_at' => now(),
             ]);
         }
+
+        $this->command->info('Buni automatic gateway seeded successfully!');
     }
 }

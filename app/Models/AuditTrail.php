@@ -194,4 +194,119 @@ class AuditTrail extends Model
 
         return $this->user?->name;
     }
+
+    /**
+     * Scope for filtering by tenant
+     */
+    public function scopeTenant($query, $tenantId)
+    {
+        return $query->where('tenant_id', $tenantId);
+    }
+
+    /**
+     * Scope for recent events
+     */
+    public function scopeRecent($query, $days = 30)
+    {
+        return $query->where('created_at', '>=', now()->subDays($days));
+    }
+
+    /**
+     * Scope for specific user
+     */
+    public function scopeByUser($query, $userId, $userType = null)
+    {
+        $query = $query->where('user_id', $userId);
+        
+        if ($userType) {
+            $query = $query->where('user_type', $userType);
+        }
+        
+        return $query;
+    }
+
+    /**
+     * Get audit trail for a specific model
+     */
+    public static function getModelAuditTrail($modelType, $modelId, $limit = 50)
+    {
+        return static::where('auditable_type', $modelType)
+            ->where('auditable_id', $modelId)
+            ->with(['user'])
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Get audit statistics for a tenant
+     */
+    public static function getTenantStatistics($tenantId, $startDate = null, $endDate = null)
+    {
+        $query = static::where('tenant_id', $tenantId);
+        
+        if ($startDate) {
+            $query->where('created_at', '>=', $startDate);
+        }
+        
+        if ($endDate) {
+            $query->where('created_at', '<=', $endDate);
+        }
+        
+        return [
+            'total_events' => $query->count(),
+            'events_by_type' => $query->groupBy('event_type')
+                ->selectRaw('event_type, count(*) as count')
+                ->pluck('count', 'event_type'),
+            'events_by_user_type' => $query->groupBy('user_type')
+                ->selectRaw('user_type, count(*) as count')
+                ->pluck('count', 'user_type'),
+            'events_by_model' => $query->groupBy('auditable_type')
+                ->selectRaw('auditable_type, count(*) as count')
+                ->pluck('count', 'auditable_type'),
+            'recent_activity' => static::where('tenant_id', $tenantId)
+                ->with('user')
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get()
+        ];
+    }
+
+    /**
+     * Clean up old audit records
+     */
+    public static function cleanupOldRecords($days = 365)
+    {
+        $cutoffDate = now()->subDays($days);
+        
+        return static::where('created_at', '<', $cutoffDate)->delete();
+    }
+
+    /**
+     * Get module-specific audit events
+     */
+    public static function getModuleAuditEvents($module, $tenantId, $limit = 100)
+    {
+        $moduleModels = config("audit.modules.{$module}.models", []);
+        
+        if (empty($moduleModels)) {
+            return collect();
+        }
+        
+        return static::where('tenant_id', $tenantId)
+            ->whereIn('auditable_type', $moduleModels)
+            ->with(['user'])
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Check if audit logging is enabled for a module
+     */
+    public static function isModuleAuditEnabled($module)
+    {
+        return config("audit.modules.{$module}.enabled", true) && 
+               config("audit.settings.log_{$module}_module", true);
+    }
 }

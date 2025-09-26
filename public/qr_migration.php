@@ -122,7 +122,13 @@ try {
     
     echo "<h3>Next Steps</h3>";
     echo "<ol>";
-    echo "<li>Go to: <a href='../intelliwealth/modules' target='_blank'>Module Management</a></li>";
+    // Get first tenant for the link
+    $firstTenant = DB::table('tenants')->first();
+    if ($firstTenant) {
+        echo "<li>Go to: <a href='../{$firstTenant->slug}/modules' target='_blank'>Module Management</a></li>";
+    } else {
+        echo "<li>Go to: <a href='#'>No tenants found - please create a tenant first</a></li>";
+    }
     echo "<li>Enable QR Code module</li>";
     echo "<li>Configure settings as needed</li>";
     echo "<li>Test with sample transactions</li>";

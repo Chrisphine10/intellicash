@@ -243,8 +243,8 @@ class LoanController extends Controller {
                 ->get();
             $customValidation = generate_custom_field_validation($customFields);
 
-            array_merge($validationRules, $customValidation['rules']);
-            array_merge($validationMessages, $customValidation['messages']);
+            $validationRules = array_merge($validationRules, $customValidation['rules']);
+            $validationMessages = array_merge($validationMessages, $customValidation['messages']);
 
             $validator = Validator::make($request->all(), $validationRules, $validationMessages);
 
@@ -450,8 +450,24 @@ class LoanController extends Controller {
 
             DB::beginTransaction();
 
-            $loan            = Loan::where('id', $loan_id)->where('borrower_id', auth()->user()->member->id)->first();
-            $repayment       = $loan->next_payment;
+            $loan = Loan::where('id', $loan_id)->where('borrower_id', auth()->user()->member->id)->first();
+            
+            if (!$loan) {
+                DB::rollback();
+                return back()->with('error', _lang('Loan not found'));
+            }
+
+            // Use atomic validation with pessimistic locking to prevent race conditions
+            $repayment = LoanRepayment::where('loan_id', $loan_id)
+                ->where('status', 0)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$repayment) {
+                DB::rollback();
+                return back()->with('error', _lang('No pending repayment found for this loan'));
+            }
+
             $existing_amount = $repayment->principal_amount;
 
             if ($request->principal_amount < $repayment->principal_amount) {
@@ -507,9 +523,9 @@ class LoanController extends Controller {
 
             $loanpayment->save();
 
-            //Update Loan Balance
-            $loan->total_paid = $loan->total_paid + $request->principal_amount;
-            if ($loan->total_paid >= $loan->applied_amount) {
+            //Update Loan Balance using standardized calculation
+            $loan->total_paid = $loan->calculateRemainingPrincipal();
+            if ($loan->isFullyPaid()) {
                 $loan->status = 2;
             }
             $loan->save();
@@ -517,8 +533,7 @@ class LoanController extends Controller {
             //Update Repayment Status
             $repayment->principal_amount = $request->principal_amount;
             $repayment->amount_to_pay    = $request->principal_amount + $repayment->interest;
-            //$repayment->balance          = $loan->total_payable - ($loan->total_paid + $loan->payments->sum('interest'));
-            $repayment->balance = $loan->applied_amount - $loan->total_paid;
+            $repayment->balance = $loan->calculateRemainingBalance();
             $repayment->status  = 1;
             $repayment->save();
 

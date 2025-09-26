@@ -233,22 +233,30 @@ function loadStatistics() {
         data: {
             date_from: $('#date_from_filter').val(),
             date_to: $('#date_to_filter').val(),
+            event_type: $('#event_type_filter').val(),
+            auditable_type: $('#auditable_type_filter').val(),
+            user_type: $('#user_type_filter').val(),
             tenant_id: $('#tenant_filter').val()
         },
         success: function(data) {
-            $('#total_events').text(data.total_events);
+            // Total events
+            $('#total_events').text(data.total_events || 0);
             
-            // Calculate today's events
-            var today = new Date().toISOString().split('T')[0];
-            var todayEvents = 0;
-            for (var type in data.events_by_type) {
-                todayEvents += data.events_by_type[type];
-            }
-            $('#today_events').text(todayEvents);
+            // Today's events
+            $('#today_events').text(data.today_events || 0);
             
-            // You can add more specific calculations here
-            $('#week_events').text('-');
-            $('#month_events').text('-');
+            // This week's events
+            $('#week_events').text(data.week_events || 0);
+            
+            // This month's events
+            $('#month_events').text(data.month_events || 0);
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading statistics:', error);
+            $('#total_events').text('0');
+            $('#today_events').text('0');
+            $('#week_events').text('0');
+            $('#month_events').text('0');
         }
     });
 }

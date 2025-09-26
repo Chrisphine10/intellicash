@@ -16,7 +16,14 @@ class VotingSystemSeeder extends Seeder
     public function run()
     {
         // Get the first tenant
-        $tenantId = 1; // Assuming tenant ID 1 exists
+        $tenant = \App\Models\Tenant::first();
+        
+        if (!$tenant) {
+            $this->command->info('No tenants found. Skipping voting system seeding.');
+            return;
+        }
+        
+        $tenantId = $tenant->id;
         
         // Create voting positions
         $positions = [
@@ -46,8 +53,10 @@ class VotingSystemSeeder extends Seeder
             ],
         ];
 
+        $createdPositions = [];
         foreach ($positions as $positionData) {
-            VotingPosition::create($positionData);
+            $position = VotingPosition::create($positionData);
+            $createdPositions[] = $position;
         }
 
         // Get members for the tenant
@@ -79,7 +88,7 @@ class VotingSystemSeeder extends Seeder
                 'type' => 'single_winner',
                 'voting_mechanism' => 'majority',
                 'privacy_mode' => 'public',
-                'position_id' => 1, // Chairperson
+                'position_id' => $createdPositions[0]->id, // Chairperson
                 'start_date' => Carbon::now()->subDays(2),
                 'end_date' => Carbon::now()->addDays(5),
                 'status' => 'active',
@@ -94,7 +103,7 @@ class VotingSystemSeeder extends Seeder
                 'type' => 'single_winner',
                 'voting_mechanism' => 'majority',
                 'privacy_mode' => 'private',
-                'position_id' => 2, // Treasurer
+                'position_id' => $createdPositions[1]->id, // Treasurer
                 'start_date' => Carbon::now()->subDays(1),
                 'end_date' => Carbon::now()->addDays(3),
                 'status' => 'active',
@@ -109,7 +118,7 @@ class VotingSystemSeeder extends Seeder
                 'type' => 'multi_position',
                 'voting_mechanism' => 'majority',
                 'privacy_mode' => 'hybrid',
-                'position_id' => 4, // Committee Members
+                'position_id' => $createdPositions[3]->id, // Committee Members
                 'start_date' => Carbon::now()->subHours(6),
                 'end_date' => Carbon::now()->addDays(2),
                 'status' => 'active',
@@ -139,7 +148,7 @@ class VotingSystemSeeder extends Seeder
                 'type' => 'single_winner',
                 'voting_mechanism' => 'majority',
                 'privacy_mode' => 'public',
-                'position_id' => 3, // Secretary
+                'position_id' => $createdPositions[2]->id, // Secretary
                 'start_date' => Carbon::now()->subDays(10),
                 'end_date' => Carbon::now()->subDays(3),
                 'status' => 'closed',
@@ -179,51 +188,61 @@ class VotingSystemSeeder extends Seeder
             $votingMembers = $members->take(6); // 6 members voted
             
             foreach ($votingMembers as $index => $member) {
-                if ($index < 4) {
-                    // 4 members voted for first candidate
-                    Vote::create([
-                        'election_id' => $closedElection->id,
-                        'member_id' => $member->id,
-                        'candidate_id' => $candidates->first()->id,
-                        'voted_at' => Carbon::now()->subDays(5),
-                        'tenant_id' => $tenantId,
-                    ]);
-                } else {
-                    // 2 members voted for second candidate
-                    Vote::create([
-                        'election_id' => $closedElection->id,
-                        'member_id' => $member->id,
-                        'candidate_id' => $candidates->skip(1)->first()->id,
-                        'voted_at' => Carbon::now()->subDays(4),
-                        'tenant_id' => $tenantId,
-                    ]);
+                // Check if vote already exists to prevent duplicates
+                $existingVote = Vote::where('election_id', $closedElection->id)
+                    ->where('member_id', $member->id)
+                    ->first();
+                
+                if (!$existingVote) {
+                    if ($index < 4) {
+                        // 4 members voted for first candidate
+                        Vote::create([
+                            'election_id' => $closedElection->id,
+                            'member_id' => $member->id,
+                            'candidate_id' => $candidates->first()->id,
+                            'voted_at' => Carbon::now()->subDays(5),
+                            'tenant_id' => $tenantId,
+                        ]);
+                    } else {
+                        // 2 members voted for second candidate
+                        Vote::create([
+                            'election_id' => $closedElection->id,
+                            'member_id' => $member->id,
+                            'candidate_id' => $candidates->skip(1)->first()->id,
+                            'voted_at' => Carbon::now()->subDays(4),
+                            'tenant_id' => $tenantId,
+                        ]);
+                    }
                 }
             }
             
-            // Create results for closed election
-            $totalVotes = $closedElection->votes()->count();
-            $candidate1Votes = $closedElection->votes()->where('candidate_id', $candidates->first()->id)->count();
-            $candidate2Votes = $closedElection->votes()->where('candidate_id', $candidates->skip(1)->first()->id)->count();
-            
-            ElectionResult::create([
-                'election_id' => $closedElection->id,
-                'candidate_id' => $candidates->first()->id,
-                'total_votes' => $candidate1Votes,
-                'percentage' => ($candidate1Votes / $totalVotes) * 100,
-                'rank' => 1,
-                'is_winner' => true,
-                'tenant_id' => $tenantId,
-            ]);
-            
-            ElectionResult::create([
-                'election_id' => $closedElection->id,
-                'candidate_id' => $candidates->skip(1)->first()->id,
-                'total_votes' => $candidate2Votes,
-                'percentage' => ($candidate2Votes / $totalVotes) * 100,
-                'rank' => 2,
-                'is_winner' => false,
-                'tenant_id' => $tenantId,
-            ]);
+            // Create results for closed election (only if they don't exist)
+            $existingResults = ElectionResult::where('election_id', $closedElection->id)->count();
+            if ($existingResults == 0) {
+                $totalVotes = $closedElection->votes()->count();
+                $candidate1Votes = $closedElection->votes()->where('candidate_id', $candidates->first()->id)->count();
+                $candidate2Votes = $closedElection->votes()->where('candidate_id', $candidates->skip(1)->first()->id)->count();
+                
+                ElectionResult::create([
+                    'election_id' => $closedElection->id,
+                    'candidate_id' => $candidates->first()->id,
+                    'total_votes' => $candidate1Votes,
+                    'percentage' => ($candidate1Votes / $totalVotes) * 100,
+                    'rank' => 1,
+                    'is_winner' => true,
+                    'tenant_id' => $tenantId,
+                ]);
+                
+                ElectionResult::create([
+                    'election_id' => $closedElection->id,
+                    'candidate_id' => $candidates->skip(1)->first()->id,
+                    'total_votes' => $candidate2Votes,
+                    'percentage' => ($candidate2Votes / $totalVotes) * 100,
+                    'rank' => 2,
+                    'is_winner' => false,
+                    'tenant_id' => $tenantId,
+                ]);
+            }
         }
 
         $this->command->info('Voting system sample data created successfully!');

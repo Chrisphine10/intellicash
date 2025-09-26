@@ -9,7 +9,7 @@
                     <ol class="breadcrumb m-0">
                         <li class="breadcrumb-item"><a href="{{ route('dashboard.index') }}">{{ _lang('Dashboard') }}</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('asset-management.dashboard') }}">{{ _lang('Asset Management') }}</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('assets.index') }}">{{ _lang('Assets') }}</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('assets.index', ['tenant' => app('tenant')->slug]) }}">{{ _lang('Assets') }}</a></li>
                         <li class="breadcrumb-item active">{{ _lang('Create Asset') }}</li>
                     </ol>
                 </div>
@@ -23,9 +23,14 @@
             <div class="card">
                 <div class="card-header">
                     <h4 class="card-title mb-0">{{ _lang('Asset Information') }}</h4>
+                    <div class="card-tools">
+                        <a href="{{ route('assets.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Assets') }}
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <form action="{{ route('assets.store') }}" method="POST">
+                    <form action="{{ route('assets.store', ['tenant' => app('tenant')->slug]) }}" method="POST">
                         @csrf
                         
                         <div class="row">
@@ -102,26 +107,97 @@
                             @enderror
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="purchase_value">{{ _lang('Purchase Value') }} <span class="text-danger">*</span></label>
-                                    <input type="number" step="0.01" class="form-control @error('purchase_value') is-invalid @enderror" 
-                                           id="purchase_value" name="purchase_value" value="{{ old('purchase_value') }}" required>
-                                    @error('purchase_value')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                        <!-- Purchase Information -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">{{ _lang('Purchase Information') }}</h5>
                             </div>
-                            
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="current_value">{{ _lang('Current Value') }}</label>
-                                    <input type="number" step="0.01" class="form-control @error('current_value') is-invalid @enderror" 
-                                           id="current_value" name="current_value" value="{{ old('current_value') }}">
-                                    @error('current_value')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="purchase_value">{{ _lang('Purchase Value') }} <span class="text-danger">*</span></label>
+                                            <input type="number" step="0.01" class="form-control @error('purchase_value') is-invalid @enderror" 
+                                                   id="purchase_value" name="purchase_value" value="{{ old('purchase_value') }}" required>
+                                            @error('purchase_value')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="current_value">{{ _lang('Current Value') }}</label>
+                                            <input type="number" step="0.01" class="form-control @error('current_value') is-invalid @enderror" 
+                                                   id="current_value" name="current_value" value="{{ old('current_value') }}">
+                                            @error('current_value')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="payment_method_id">{{ _lang('Payment Method') }} <span class="text-danger">*</span></label>
+                                            <select class="form-control @error('payment_method_id') is-invalid @enderror" 
+                                                    id="payment_method_id" name="payment_method_id" required>
+                                                <option value="">{{ _lang('Select Payment Method') }}</option>
+                                                @foreach($paymentMethods as $paymentMethod)
+                                                    <option value="{{ $paymentMethod->id }}" {{ old('payment_method_id') == $paymentMethod->id ? 'selected' : '' }}>
+                                                        {{ $paymentMethod->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @error('payment_method_id')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <div class="form-group" id="bank_account_group" style="display: none;">
+                                            <label for="bank_account_id">{{ _lang('Bank Account') }} <span class="text-danger">*</span></label>
+                                            <select class="form-control @error('bank_account_id') is-invalid @enderror" 
+                                                    id="bank_account_id" name="bank_account_id">
+                                                <option value="">{{ _lang('Select Bank Account') }}</option>
+                                                @foreach($bankAccounts as $bankAccount)
+                                                    <option value="{{ $bankAccount->id }}" {{ old('bank_account_id') == $bankAccount->id ? 'selected' : '' }}>
+                                                        {{ $bankAccount->bank_name }} - {{ $bankAccount->account_name }} 
+                                                        ({{ $bankAccount->account_number }})
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @error('bank_account_id')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="supplier_name">{{ _lang('Supplier/Vendor Name') }}</label>
+                                            <input type="text" class="form-control @error('supplier_name') is-invalid @enderror" 
+                                                   id="supplier_name" name="supplier_name" value="{{ old('supplier_name') }}">
+                                            @error('supplier_name')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="invoice_number">{{ _lang('Invoice/Receipt Number') }}</label>
+                                            <input type="text" class="form-control @error('invoice_number') is-invalid @enderror" 
+                                                   id="invoice_number" name="invoice_number" value="{{ old('invoice_number') }}">
+                                            @error('invoice_number')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -277,7 +353,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-1"></i> {{ _lang('Create Asset') }}
                             </button>
-                            <a href="{{ route('assets.index') }}" class="btn btn-secondary">
+                            <a href="{{ route('assets.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i> {{ _lang('Cancel') }}
                             </a>
                         </div>
@@ -335,6 +411,26 @@
                 $('#lease_settings').show();
             } else {
                 $('#lease_settings').hide();
+            }
+        });
+
+        $('#payment_method_id').change(function() {
+            var selectedPaymentMethod = $(this).find('option:selected').text().toLowerCase();
+            
+            // Show bank account selection for bank-related payment methods
+            if (selectedPaymentMethod.includes('bank') || selectedPaymentMethod.includes('transfer')) {
+                $('#bank_account_group').show();
+                $('#bank_account_id').prop('required', true);
+            } else {
+                $('#bank_account_group').hide();
+                $('#bank_account_id').prop('required', false);
+            }
+        });
+
+        // Auto-fill current value with purchase value
+        $('#purchase_value').change(function() {
+            if (!$('#current_value').val()) {
+                $('#current_value').val($(this).val());
             }
         });
     });

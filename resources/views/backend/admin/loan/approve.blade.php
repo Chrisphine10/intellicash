@@ -87,37 +87,34 @@
 							</table>
 						</div>
 
-						<!-- Required Fields Section -->
+						<!-- Loan Information Display -->
 						<div class="col-lg-12">
-							<h5 class="text-primary"><i class="fas fa-edit"></i> {{ _lang('Required Information for Approval') }}</h5>
+							<h5 class="text-primary"><i class="fas fa-info-circle"></i> {{ _lang('Loan Information') }}</h5>
 							<div class="row">
 								<div class="col-lg-4">
 									<div class="form-group">
-										<label class="control-label">{{ _lang('Loan ID') }} <span class="text-danger">*</span></label>
-										<input type="text" class="form-control" name="loan_id" value="{{ old('loan_id', $loan->loan_id) }}" required>
-										@if($errors->has('loan_id'))
-											<span class="text-danger">{{ $errors->first('loan_id') }}</span>
-										@endif
+										<label class="control-label">{{ _lang('Loan ID') }}</label>
+										<input type="text" class="form-control" value="{{ $loan->loan_id }}" readonly style="background-color: #f8f9fa;">
+										<input type="hidden" name="loan_id" value="{{ $loan->loan_id }}">
+										<small class="form-text text-muted">{{ _lang('This ID is automatically generated and cannot be changed') }}</small>
 									</div>
 								</div>
 								
 								<div class="col-lg-4">
 									<div class="form-group">
-										<label class="control-label">{{ _lang('Release Date') }} <span class="text-danger">*</span></label>
-										<input type="date" class="form-control" name="release_date" value="{{ old('release_date', $loan->release_date) }}" required>
-										@if($errors->has('release_date'))
-											<span class="text-danger">{{ $errors->first('release_date') }}</span>
-										@endif
+										<label class="control-label">{{ _lang('Release Date') }}</label>
+										<input type="text" class="form-control" value="{{ $loan->release_date ? $loan->release_date : _lang('Not set') }}" readonly style="background-color: #f8f9fa;">
+										<input type="hidden" name="release_date" value="{{ $loan->getRawOriginal('release_date') }}">
+										<small class="form-text text-muted">{{ _lang('Release date was set during loan application') }}</small>
 									</div>
 								</div>
 								
 								<div class="col-lg-4">
 									<div class="form-group">
-										<label class="control-label">{{ _lang('First Payment Date') }} <span class="text-danger">*</span></label>
-										<input type="date" class="form-control" name="first_payment_date" value="{{ old('first_payment_date', $loan->first_payment_date) }}" required>
-										@if($errors->has('first_payment_date'))
-											<span class="text-danger">{{ $errors->first('first_payment_date') }}</span>
-										@endif
+										<label class="control-label">{{ _lang('First Payment Date') }}</label>
+										<input type="text" class="form-control" value="{{ $loan->first_payment_date }}" readonly style="background-color: #f8f9fa;">
+										<input type="hidden" name="first_payment_date" value="{{ $loan->getRawOriginal('first_payment_date') }}">
+										<small class="form-text text-muted">{{ _lang('Calculated based on loan terms') }}</small>
 									</div>
 								</div>
 							</div>
@@ -125,13 +122,20 @@
 
 						<div class="col-lg-12">
 							<div class="form-group">
-								<label class="control-label">{{ _lang('Credit Account') }}</label>
-								<select class="form-control auto-select" data-selected="{{ old('account_id', 'cash') }}" name="account_id" id="account_id" required>
-									<option value="cash">{{ _lang('Cash Handover') }}</option>
-									@foreach($accounts as $account)
-									<option value="{{ $account->id }}">{{ $account->account_number }} ({{ $account->savings_type->name.' - '.$account->savings_type->currency->name }})</option>
+								<label class="control-label">{{ _lang('Bank Account for Disbursement') }} <span class="text-danger">*</span></label>
+								<select class="form-control auto-select" data-selected="{{ old('bank_account_id') }}" name="bank_account_id" id="bank_account_id" required>
+									<option value="">{{ _lang('Select Bank Account') }}</option>
+									@foreach($bankAccounts as $bankAccount)
+									<option value="{{ $bankAccount->id }}" data-balance="{{ $bankAccount->current_balance }}">
+										{{ $bankAccount->bank_name }} - {{ $bankAccount->account_name }} 
+										({{ $bankAccount->account_number }}) 
+										- {{ decimalPlace($bankAccount->current_balance, currency($bankAccount->currency->name)) }}
+									</option>
 									@endforeach
 								</select>
+								<small class="form-text text-muted">
+									<i class="fas fa-info-circle"></i> {{ _lang('Select the bank account from which the loan will be disbursed') }}
+								</small>
 							</div>
 						</div>
 
@@ -152,23 +156,13 @@
 @section('script')
 <script>
 $(document).ready(function() {
-    // Add form validation
+    // Add form validation (only for bank account selection)
     $('#approve-btn').click(function(e) {
-        var loanId = $('input[name="loan_id"]').val();
-        var releaseDate = $('input[name="release_date"]').val();
-        var firstPaymentDate = $('input[name="first_payment_date"]').val();
-        var accountId = $('select[name="account_id"]').val();
+        var bankAccountId = $('select[name="bank_account_id"]').val();
         
-        if (!loanId || !releaseDate || !firstPaymentDate || !accountId) {
+        if (!bankAccountId) {
             e.preventDefault();
-            alert('Please fill in all required fields');
-            return false;
-        }
-        
-        // Check if first payment date is after release date
-        if (new Date(firstPaymentDate) <= new Date(releaseDate)) {
-            e.preventDefault();
-            alert('First Payment Date must be after Release Date');
+            alert('Please select a bank account for loan disbursement');
             return false;
         }
         

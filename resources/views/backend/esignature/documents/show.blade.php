@@ -5,6 +5,13 @@
 @section('content')
 <div class="row">
     <div class="col-lg-12">
+        <!-- Back Button -->
+        <div class="mb-3">
+            <a href="{{ route('esignature.esignature-documents.index') }}" class="btn btn-secondary">
+                <i class="fa fa-arrow-left"></i> Back to Documents
+            </a>
+        </div>
+        
         <div class="card">
             <div class="card-header">
                 <div class="row">
@@ -13,29 +20,48 @@
                         <p class="mb-0 text-muted">{{ $document->description }}</p>
                     </div>
                     <div class="col-md-4 text-right">
-                        <div class="btn-group">
-                            @if($document->status === 'draft')
-                                <a href="{{ route('esignature.esignature-documents.edit', $document->id) }}" class="btn btn-warning">
+                        <!-- Document Actions -->
+                        <div class="btn-group mb-2" role="group">
+                            <!-- Edit Actions -->
+                            @if($document->status === 'Draft')
+                                <a href="{{ route('esignature.esignature-documents.edit', $document->id) }}" class="btn btn-warning btn-sm">
                                     <i class="fa fa-edit"></i> Edit
                                 </a>
-                                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#sendModal">
-                                    <i class="fa fa-paper-plane"></i> Send for Signing
+                                <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#sendModal">
+                                    <i class="fa fa-paper-plane"></i> Send
                                 </button>
+                            @elseif($document->status === 'Sent' || $document->status === 'Expired')
+                                <a href="{{ route('esignature.esignature-documents.edit', $document->id) }}" class="btn btn-warning btn-sm">
+                                    <i class="fa fa-edit"></i> Edit Details
+                                </a>
+                                @if($document->status === 'Sent')
+                                    <button type="button" class="btn btn-info btn-sm" onclick="sendReminders({{ $document->id }})">
+                                        <i class="fa fa-bell"></i> Remind
+                                    </button>
+                                @endif
                             @endif
                             
-                            @if($document->status === 'sent' || $document->status === 'draft')
-                                <button type="button" class="btn btn-danger" onclick="cancelDocument()">
+                            <!-- Cancel Action -->
+                            @if($document->status === 'Sent' || $document->status === 'Draft')
+                                <button type="button" class="btn btn-danger btn-sm" onclick="cancelDocument()">
                                     <i class="fa fa-times"></i> Cancel
                                 </button>
                             @endif
+                        </div>
+                        
+                        <!-- View & Download Actions -->
+                        <div class="btn-group" role="group">
+                            <a href="{{ route('esignature.esignature-documents.view', $document->id) }}" class="btn btn-info btn-sm" target="_blank">
+                                <i class="fa fa-eye"></i> View
+                            </a>
                             
-                            <a href="{{ route('esignature.esignature-documents.download', $document->id) }}" class="btn btn-secondary">
+                            <a href="{{ route('esignature.esignature-documents.download', $document->id) }}" class="btn btn-secondary btn-sm">
                                 <i class="fa fa-download"></i> Download
                             </a>
                             
                             @if($document->isCompleted())
-                                <a href="{{ route('esignature.esignature-documents.download-signed', $document->id) }}" class="btn btn-success">
-                                    <i class="fa fa-file-signature"></i> Download Signed
+                                <a href="{{ route('esignature.esignature-documents.download-signed', $document->id) }}" class="btn btn-success btn-sm">
+                                    <i class="fa fa-file-signature"></i> Signed Copy
                                 </a>
                             @endif
                         </div>
@@ -323,6 +349,33 @@ function cancelDocument() {
         .catch(error => {
             console.error('Error:', error);
             alert('An error occurred while cancelling the document');
+        });
+    }
+
+    // Send reminders function
+    function sendReminders(documentId) {
+        if (!confirm('Send reminder notifications to all pending signers?')) {
+            return;
+        }
+
+        fetch(`{{ url(app('tenant')->slug . '/esignature/esignature-documents') }}/${documentId}/send-reminders`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message || 'Reminders sent successfully');
+            } else {
+                alert('Failed to send reminders');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to send reminders');
         });
     }
 }

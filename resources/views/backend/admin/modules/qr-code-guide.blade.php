@@ -63,10 +63,10 @@
   "verification_url": "public/receipt/verify/token",
   "timestamp": "2024-01-15T10:30:00Z",
   "amount": "1000.00",
-  "currency": "USD",
+  "currency": "{{ get_base_currency() }}",
   "type": "deposit",
   "status": "completed",
-  "tenant_id": "intelliwealth"
+  "tenant_id": "{{ app('tenant')->slug ?? 'tenant' }}"
 }</code></pre>
                                             </div>
                                         </div>

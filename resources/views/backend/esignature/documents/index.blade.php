@@ -23,29 +23,30 @@
                 <div class="row mb-3">
                     <div class="col-md-3">
                         <select class="form-control" id="status-filter">
-                            <option value="all">All Status</option>
-                            <option value="draft">Draft</option>
-                            <option value="sent">Sent</option>
-                            <option value="signed">Signed</option>
-                            <option value="expired">Expired</option>
-                            <option value="cancelled">Cancelled</option>
+                            <option value="all" {{ request('status') == 'all' || !request('status') ? 'selected' : '' }}>All Status</option>
+                            <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Draft</option>
+                            <option value="sent" {{ request('status') == 'sent' ? 'selected' : '' }}>Sent</option>
+                            <option value="signed" {{ request('status') == 'signed' ? 'selected' : '' }}>Signed</option>
+                            <option value="expired" {{ request('status') == 'expired' ? 'selected' : '' }}>Expired</option>
+                            <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <select class="form-control" id="type-filter">
-                            <option value="all">All Types</option>
-                            <option value="contract">Contract</option>
-                            <option value="agreement">Agreement</option>
-                            <option value="form">Form</option>
-                            <option value="policy">Policy</option>
-                            <option value="other">Other</option>
+                            <option value="all" {{ request('type') == 'all' || !request('type') ? 'selected' : '' }}>All Types</option>
+                            <option value="contract" {{ request('type') == 'contract' ? 'selected' : '' }}>Contract</option>
+                            <option value="agreement" {{ request('type') == 'agreement' ? 'selected' : '' }}>Agreement</option>
+                            <option value="form" {{ request('type') == 'form' ? 'selected' : '' }}>Form</option>
+                            <option value="policy" {{ request('type') == 'policy' ? 'selected' : '' }}>Policy</option>
+                            <option value="other" {{ request('type') == 'other' ? 'selected' : '' }}>Other</option>
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <input type="text" class="form-control" id="search-input" placeholder="Search documents...">
+                        <input type="text" class="form-control" id="search-input" placeholder="Search documents..." value="{{ request('search') }}">
                     </div>
                     <div class="col-md-2">
                         <button class="btn btn-secondary" id="filter-btn">Filter</button>
+                        <button class="btn btn-outline-secondary ml-1" id="clear-btn">Clear</button>
                     </div>
                 </div>
 
@@ -54,7 +55,7 @@
                     <div class="col-md-2">
                         <div class="card bg-primary text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->total() }}</h5>
+                                <h5>{{ $stats['total'] }}</h5>
                                 <small>Total Documents</small>
                             </div>
                         </div>
@@ -62,7 +63,7 @@
                     <div class="col-md-2">
                         <div class="card bg-info text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->where('status', 'sent')->count() }}</h5>
+                                <h5>{{ $stats['sent'] }}</h5>
                                 <small>Pending</small>
                             </div>
                         </div>
@@ -70,7 +71,7 @@
                     <div class="col-md-2">
                         <div class="card bg-success text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->where('status', 'signed')->count() }}</h5>
+                                <h5>{{ $stats['signed'] }}</h5>
                                 <small>Completed</small>
                             </div>
                         </div>
@@ -78,7 +79,7 @@
                     <div class="col-md-2">
                         <div class="card bg-warning text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->where('status', 'draft')->count() }}</h5>
+                                <h5>{{ $stats['draft'] }}</h5>
                                 <small>Draft</small>
                             </div>
                         </div>
@@ -86,7 +87,7 @@
                     <div class="col-md-2">
                         <div class="card bg-danger text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->where('status', 'expired')->count() }}</h5>
+                                <h5>{{ $stats['expired'] }}</h5>
                                 <small>Expired</small>
                             </div>
                         </div>
@@ -94,7 +95,7 @@
                     <div class="col-md-2">
                         <div class="card bg-secondary text-white">
                             <div class="card-body text-center">
-                                <h5>{{ $documents->where('status', 'cancelled')->count() }}</h5>
+                                <h5>{{ $stats['cancelled'] }}</h5>
                                 <small>Cancelled</small>
                             </div>
                         </div>
@@ -174,8 +175,8 @@
                                 <td>
                                     <div class="btn-group" role="group">
                                         <a href="{{ route('esignature.esignature-documents.show', $document->id) }}" 
-                                           class="btn btn-sm btn-info" title="View">
-                                            <i class="fa fa-eye"></i>
+                                           class="btn btn-sm btn-primary" title="Show Details">
+                                            <i class="fa fa-list"></i>
                                         </a>
                                         
                                         @if($document->status === 'draft')
@@ -191,6 +192,11 @@
                                                 <i class="fa fa-times"></i>
                                             </button>
                                         @endif
+                                        
+                                        <a href="{{ route('esignature.esignature-documents.view', $document->id) }}" 
+                                           class="btn btn-sm btn-info" title="View Document" target="_blank">
+                                            <i class="fa fa-eye"></i>
+                                        </a>
                                         
                                         <a href="{{ route('esignature.esignature-documents.download', $document->id) }}" 
                                            class="btn btn-sm btn-secondary" title="Download">
@@ -258,7 +264,7 @@ function cancelDocument(documentId) {
 $('#confirmCancel').click(function() {
     if (documentToCancel) {
         $.ajax({
-            url: `/{{ app('tenant')->slug }}/esignature/documents/${documentToCancel}/cancel`,
+            url: `{{ url(app('tenant')->slug . '/esignature/esignature-documents') }}/${documentToCancel}/cancel`,
             method: 'POST',
             data: {
                 _token: '{{ csrf_token() }}'
@@ -275,24 +281,53 @@ $('#confirmCancel').click(function() {
 });
 
 // Filter functionality
-$('#filter-btn').click(function() {
+function applyFilters() {
     const status = $('#status-filter').val();
     const type = $('#type-filter').val();
     const search = $('#search-input').val();
     
     let url = new URL(window.location);
-    url.searchParams.set('status', status);
-    url.searchParams.set('type', type);
-    url.searchParams.set('search', search);
+    
+    if (status && status !== 'all') {
+        url.searchParams.set('status', status);
+    } else {
+        url.searchParams.delete('status');
+    }
+    
+    if (type && type !== 'all') {
+        url.searchParams.set('type', type);
+    } else {
+        url.searchParams.delete('type');
+    }
+    
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
     
     window.location.href = url.toString();
-});
+}
 
-// Auto-filter on enter
+$('#filter-btn').click(applyFilters);
+
+// Auto-filter on dropdown change
+$('#status-filter, #type-filter').change(applyFilters);
+
+// Auto-filter on enter for search
 $('#search-input').keypress(function(e) {
     if (e.which === 13) {
-        $('#filter-btn').click();
+        applyFilters();
     }
+});
+
+// Clear filters
+$('#clear-btn').click(function() {
+    let url = new URL(window.location);
+    url.searchParams.delete('status');
+    url.searchParams.delete('type');
+    url.searchParams.delete('search');
+    window.location.href = url.toString();
 });
 </script>
 @endpush

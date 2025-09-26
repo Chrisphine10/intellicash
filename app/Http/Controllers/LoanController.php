@@ -1,7 +1,10 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Models\BankAccount;
+use App\Models\BankTransaction;
 use App\Models\CustomField;
+use App\Services\BankingService;
 use App\Models\Guarantor;
 use App\Models\GuarantorRequest;
 use App\Models\Loan;
@@ -39,6 +42,23 @@ class LoanController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function index(Request $request, $tenant, $status = '') {
+        // The tenant middleware already handles tenant identification and authorization
+        // Additional check for authentication
+        if (!auth()->check()) {
+            return redirect()->route('login');
+        }
+        
+        // Check if user has permission to view loans
+        // Only allow admin and staff users for admin loan management
+        if (!in_array(auth()->user()->user_type, ['admin', 'user'])) {
+            abort(403, 'Unauthorized access to loan management');
+        }
+        
+        // For staff users, check specific permissions
+        if (auth()->user()->user_type === 'user' && !has_permission('loan.view')) {
+            abort(403, 'Insufficient permissions for loan management');
+        }
+        
         if ($status == 'pending') {
             $status = 0;
         } else if ($status == 'active') {
@@ -180,8 +200,25 @@ class LoanController extends Controller {
 
         $attachment = "";
         if ($request->hasfile('attachment')) {
-            $file       = $request->file('attachment');
-            $attachment = time() . $file->getClientOriginalName();
+            $file = $request->file('attachment');
+            
+            // Validate file type and size
+            $allowedMimes = ['jpeg', 'jpg', 'png', 'pdf', 'doc', 'docx'];
+            $maxSize = 8192; // 8MB in KB
+            
+            if (!in_array($file->getClientOriginalExtension(), $allowedMimes)) {
+                return back()->with('error', _lang('Invalid file type. Only JPEG, PNG, PDF, DOC, DOCX files are allowed.'));
+            }
+            
+            if ($file->getSize() > $maxSize * 1024) {
+                return back()->with('error', _lang('File size too large. Maximum size is 8MB.'));
+            }
+            
+            // Generate secure filename
+            $extension = $file->getClientOriginalExtension();
+            $attachment = time() . '_' . uniqid() . '.' . $extension;
+            
+            // Move file to secure location
             $file->move(public_path() . "/uploads/media/", $attachment);
         }
 
@@ -274,6 +311,22 @@ class LoanController extends Controller {
     public function show(Request $request, $tenant, $id) {
         $assets = ['datatable'];
         $loan            = Loan::find($id);
+        
+        if (!$loan) {
+            abort(404, 'Loan not found');
+        }
+        
+        // Check if user has permission to view this loan
+        // Only allow admin and staff users for admin loan management
+        if (!in_array(auth()->user()->user_type, ['admin', 'user'])) {
+            abort(403, 'Unauthorized access to this loan');
+        }
+        
+        // For staff users, check specific permissions
+        if (auth()->user()->user_type === 'user' && !has_permission('loan.view')) {
+            abort(403, 'Insufficient permissions to view this loan');
+        }
+        
         $loancollaterals = LoanCollateral::where('loan_id', $loan->id)
             ->orderBy("id", "desc")
             ->get();
@@ -307,34 +360,26 @@ class LoanController extends Controller {
             $alert_col = 'col-lg-6 offset-lg-3';
             $loan      = Loan::find($id);
 
-            $accounts = SavingsAccount::with('savings_type.currency')
-                ->where('member_id', $loan->borrower_id)
+            // Get bank accounts for loan disbursement (not member savings accounts)
+            $bankAccounts = BankAccount::with('currency')
+                ->active()
+                ->byCurrency($loan->currency_id)
                 ->get();
 
             if ($loan->status == 1) {
                 abort(403);
             }
 
-            return view('backend.admin.loan.approve', compact('loan', 'accounts', 'alert_col'));
+            return view('backend.admin.loan.approve', compact('loan', 'bankAccounts', 'alert_col'));
         }
 
         \Log::info('Processing loan approval POST', ['request_data' => $request->all()]);
         
-        // Validate required fields
+        // Validate required fields (loan_id, release_date, and first_payment_date are now read-only)
         $validator = Validator::make($request->all(), [
-            'loan_id' => 'required|string|max:30|unique:loans,loan_id,' . $id,
-            'release_date' => 'required|date',
-            'first_payment_date' => 'required|date|after:release_date',
-            'account_id' => 'required',
+            'bank_account_id' => 'required',
         ], [
-            'loan_id.required' => 'Loan ID is required',
-            'loan_id.unique' => 'This Loan ID is already taken',
-            'release_date.required' => 'Release Date is required',
-            'release_date.date' => 'Release Date must be a valid date',
-            'first_payment_date.required' => 'First Payment Date is required',
-            'first_payment_date.date' => 'First Payment Date must be a valid date',
-            'first_payment_date.after' => 'First Payment Date must be after Release Date',
-            'account_id.required' => 'Credit Account is required',
+            'bank_account_id.required' => 'Bank Account is required for loan disbursement',
         ]);
 
         if ($validator->fails()) {
@@ -355,56 +400,52 @@ class LoanController extends Controller {
                 return back()->with('error', _lang('Loan has already been approved'));
             }
 
-            // Update loan with new values
-            $loan->loan_id = $request->loan_id;
-            $loan->release_date = $request->release_date;
-            $loan->first_payment_date = $request->first_payment_date;
-            $loan->save();
+            // Loan information is already set during application, no need to update
+            // The loan_id, release_date, and first_payment_date are read-only during approval
 
-        //Deduct Loan Processing Fee
-        $account = SavingsAccount::where('id', $loan->debit_account_id)
+        // Validate bank account for loan disbursement
+        $bankAccount = BankAccount::find($request->bank_account_id);
+        
+        if (!$bankAccount) {
+            return back()->with('error', _lang('Invalid bank account selected'));
+        }
+
+        // Check if bank account has sufficient balance
+        if (!$bankAccount->hasSufficientBalance($loan->applied_amount)) {
+            return back()->with('error', _lang('Insufficient balance in selected bank account. Available: ') . $bankAccount->formatted_balance);
+        }
+
+        // Get member's savings account for processing fees (if needed)
+        $memberAccount = SavingsAccount::where('id', $loan->debit_account_id)
             ->where('member_id', $loan->borrower_id)
             ->first();
 
-        if (! $account) {
-            $account = SavingsAccount::where('member_id', $loan->borrower_id)->first();
-
-            if (! $account) {
-                return back()->with('error', _lang('No account found for deducting loan processing fee'));
-            }
-        }
-
-        //Check if account is valid
-        if ($request->account_id != 'cash') {
-            $account = SavingsAccount::where('id', $request->account_id)
-                ->where('member_id', $loan->borrower_id)
-                ->first();
-
-            if (! $account) {
-                return back()->with('error', _lang('Invalid account !'));
-            }
+        if (!$memberAccount) {
+            $memberAccount = SavingsAccount::where('member_id', $loan->borrower_id)->first();
         }
 
         $loanProduct = $loan->loan_product;
 
-        //Check Account has enough balance for deducting fee
-        $convertedAmount = convert_currency($loan->currency->name, $account->savings_type->currency->name, $loan->applied_amount);
+        // Process loan fees from member account (if available)
+        if ($memberAccount) {
+            $convertedAmount = convert_currency($loan->currency->name, $memberAccount->savings_type->currency->name, $loan->applied_amount);
 
-        $charge = 0;
-        $charge += $loanProduct->loan_application_fee_type == 1 ? ($loanProduct->loan_application_fee / 100) * $convertedAmount : $loanProduct->loan_application_fee;
-        $charge += $loanProduct->loan_insurance_fee_type == 1 ? ($loanProduct->loan_insurance_fee / 100) * $convertedAmount : $loanProduct->loan_insurance_fee;
+            $charge = 0;
+            $charge += $loanProduct->loan_application_fee_type == 1 ? ($loanProduct->loan_application_fee / 100) * $convertedAmount : $loanProduct->loan_application_fee;
+            $charge += $loanProduct->loan_insurance_fee_type == 1 ? ($loanProduct->loan_insurance_fee / 100) * $convertedAmount : $loanProduct->loan_insurance_fee;
 
-        if (get_account_balance($account->id, $loan->borrower_id) < $charge) {
-            return back()->with('error', _lang('Insufficient balance for deducting loan application and insurance fee !'));
+            if (get_account_balance($memberAccount->id, $loan->borrower_id) < $charge) {
+                return back()->with('error', _lang('Insufficient balance for deducting loan application and insurance fee !'));
+            }
+
+            //Deduct Loan Processing Fee
+            process_loan_fee('loan_processing_fee', $loan->borrower_id, $memberAccount->id, $convertedAmount, $loanProduct->loan_processing_fee, $loanProduct->loan_processing_fee_type, $loan->id);
         }
-
-        //Deduct Loan Processing Fee
-        process_loan_fee('loan_processing_fee', $loan->borrower_id, $account->id, $convertedAmount, $loanProduct->loan_processing_fee, $loanProduct->loan_processing_fee_type, $loan->id);
 
         $loan->status           = 1;
         $loan->approved_date    = date('Y-m-d');
         $loan->approved_user_id = Auth::id();
-        $loan->disburse_method  = $request->account_id == 'cash' ? 'cash' : 'account';
+        $loan->disburse_method  = 'bank_account';
         $loan->save();
 
         // Create Loan Repayments
@@ -447,21 +488,39 @@ class LoanController extends Controller {
             $loan_repayment->save();
         }
 
-        if ($request->account_id != 'cash') {
-            //Transfer money to use account
-            $transaction                     = new Transaction();
-            $transaction->trans_date         = now();
-            $transaction->member_id          = $loan->borrower_id;
-            $transaction->savings_account_id = $request->account_id;
-            $transaction->amount             = $loan->applied_amount;
-            $transaction->dr_cr              = 'cr';
-            $transaction->type               = 'Loan';
-            $transaction->method             = 'Manual';
-            $transaction->status             = 2;
-            $transaction->description        = 'Loan approved and disbursed';
-            $transaction->created_user_id    = auth()->id();
-            $transaction->loan_id            = $loan->id;
+        // Process loan disbursement using BankingService
+        $bankingService = new BankingService();
+        $disbursementSuccess = $bankingService->processLoanDisbursement(
+            $bankAccount->id,
+            $loan->applied_amount,
+            $loan->borrower_id,
+            $loan->id,
+            'Loan disbursement to ' . $loan->borrower->first_name . ' ' . $loan->borrower->last_name
+        );
+
+        if (!$disbursementSuccess) {
+            DB::rollback();
+            return back()->with('error', _lang('Failed to process loan disbursement'));
+        }
+
+        // Create member transaction record (if member has savings account)
+        if ($memberAccount) {
+            $transaction = new Transaction();
+            $transaction->trans_date = now();
+            $transaction->member_id = $loan->borrower_id;
+            $transaction->savings_account_id = $memberAccount->id;
+            $transaction->amount = $loan->applied_amount;
+            $transaction->dr_cr = 'cr'; // Credit to member account
+            $transaction->type = 'Loan';
+            $transaction->method = 'Manual';
+            $transaction->status = 2;
+            $transaction->description = 'Loan approved and disbursed from bank account';
+            $transaction->created_user_id = auth()->id();
+            $transaction->loan_id = $loan->id;
             $transaction->save();
+
+            // Process bank account transaction for member account
+            $bankingService->processMemberTransaction($transaction);
         }
 
             DB::commit();
@@ -670,15 +729,36 @@ class LoanController extends Controller {
     }
 
     public function upcoming_loan_repayments(Request $request) {
-        $startDate      = Carbon::today();
-        $endDate        = Carbon::today()->addDays(7);
-        $loanRepayments = LoanRepayment::with('loan')
-            ->whereBetween('repayment_date', [$startDate, $endDate])
-            ->where('status', 0)
-            ->get();
+        try {
+            // Fix date range logic - start from tomorrow, end 7 days from today
+            $startDate = Carbon::today()->addDay();
+            $endDate = Carbon::today()->addDays(7);
+            
+            // Fix relationship loading to include borrower and currency
+            $loanRepayments = LoanRepayment::with(['loan.borrower', 'loan.currency'])
+                ->whereBetween('repayment_date', [$startDate, $endDate])
+                ->where('status', 0)
+                ->orderBy('repayment_date', 'asc')
+                ->paginate(50); // Add pagination for large datasets
 
-        $assets = ['datatable'];
-        return view('backend.admin.loan.upcoming_loan_repayments', compact('loanRepayments', 'startDate', 'endDate', 'assets'));
+            $assets = ['datatable'];
+            return view('backend.admin.loan.upcoming_loan_repayments', compact('loanRepayments', 'startDate', 'endDate', 'assets'));
+            
+        } catch (\Exception $e) {
+            \Log::error('Error fetching upcoming loan repayments: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id()
+            ]);
+            
+            // Return empty collection on error
+            $loanRepayments = collect();
+            $startDate = Carbon::today()->addDay();
+            $endDate = Carbon::today()->addDays(7);
+            $assets = ['datatable'];
+            
+            return view('backend.admin.loan.upcoming_loan_repayments', compact('loanRepayments', 'startDate', 'endDate', 'assets'))
+                ->with('error', _lang('An error occurred while loading upcoming loan repayments. Please try again.'));
+        }
     }
 
     /**

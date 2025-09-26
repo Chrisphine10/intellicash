@@ -7,7 +7,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="card-title">{{ _lang('Assets Available for Lease') }}</h4>
                 <div>
-                    <a href="{{ route('assets.index') }}" class="btn btn-secondary btn-sm">
+                    <a href="{{ route('assets.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
                         <i class="fas fa-arrow-left"></i> {{ _lang('Back to Assets') }}
                     </a>
                     <a href="{{ route('asset-leases.create') }}" class="btn btn-primary btn-sm">
@@ -66,14 +66,14 @@
                                                 {{ _lang('Actions') }}
                                             </button>
                                             <div class="dropdown-menu">
-                                                <a class="dropdown-item" href="{{ route('assets.show', $asset) }}">
+                                                <a class="dropdown-item" href="{{ route('assets.show', ['tenant' => app('tenant')->slug, 'asset' => $asset]) }}">
                                                     <i class="fas fa-eye"></i> {{ _lang('View Details') }}
                                                 </a>
-                                                <a class="dropdown-item" href="{{ route('assets.lease-form', $asset) }}">
+                                                <a class="dropdown-item" href="{{ route('assets.lease-form', ['tenant' => app('tenant')->slug, 'asset' => $asset]) }}">
                                                     <i class="fas fa-handshake"></i> {{ _lang('Create Lease') }}
                                                 </a>
                                                 <div class="dropdown-divider"></div>
-                                                <a class="dropdown-item" href="{{ route('assets.edit', $asset) }}">
+                                                <a class="dropdown-item" href="{{ route('assets.edit', ['tenant' => app('tenant')->slug, 'asset' => $asset]) }}">
                                                     <i class="fas fa-edit"></i> {{ _lang('Edit Asset') }}
                                                 </a>
                                             </div>

@@ -23,6 +23,11 @@
             <div class="card">
                 <div class="card-header">
                     <h4 class="card-title mb-0">{{ _lang('Maintenance Information') }}</h4>
+                    <div class="card-tools">
+                        <a href="{{ route('asset-maintenance.index') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Maintenance') }}
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <form action="{{ route('asset-maintenance.store') }}" method="POST">

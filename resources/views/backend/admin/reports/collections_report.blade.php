@@ -8,6 +8,11 @@
         <div class="card">
             <div class="card-header">
                 <span class="card-title">{{ _lang('Collections Report') }}</span>
+                <div class="card-tools">
+                    <a href="{{ url()->previous() }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 @if(!isset($report_data))
@@ -40,12 +45,30 @@
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label class="control-label">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary form-control">{{ _lang('Generate Report') }}</button>
+                                <button type="submit" class="btn btn-primary form-control">
+                                    <i class="fas fa-chart-bar"></i> {{ _lang('Generate Report') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <a href="{{ url()->previous() }}" class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> {{ _lang('Back') }}
+                                </a>
                             </div>
                         </div>
                     </div>
                 </form>
                 @else
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <a href="{{ route('reports.collections_report') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Filter') }}
+                        </a>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col-md-12">
                         <div class="table-responsive">

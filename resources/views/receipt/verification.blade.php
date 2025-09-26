@@ -27,7 +27,7 @@
                                     </tr>
                                     <tr>
                                         <td><strong>{{ _lang('Amount') }}</strong></td>
-                                        <td>{{ decimalPlace($verification['transaction']['amount'], currency('USD')) }}</td>
+                                        <td>{{ decimalPlace($verification['transaction']['amount'], currency($verification['transaction']['currency'] ?? get_base_currency())) }}</td>
                                     </tr>
                                     <tr>
                                         <td><strong>{{ _lang('Type') }}</strong></td>

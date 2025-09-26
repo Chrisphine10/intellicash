@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\VslaLoanCalculator;
 use App\Models\VslaTransaction;
 use App\Models\VslaMeeting;
 use App\Models\Member;
@@ -117,8 +118,14 @@ class VslaTransactionsController extends Controller
             'meeting_id' => 'required|exists:vsla_meetings,id',
             'member_id' => 'required|exists:members,id',
             'transaction_type' => 'required|in:share_purchase,loan_issuance,loan_repayment,penalty_fine,welfare_contribution',
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => 'required|numeric|min:0.01|max:1000000', // FIXED: Added reasonable upper limit
             'description' => 'nullable|string|max:1000',
+        ], [
+            'amount.min' => _lang('Amount must be greater than zero'),
+            'amount.max' => _lang('Amount exceeds maximum limit'),
+            'transaction_type.in' => _lang('Invalid transaction type'),
+            'member_id.exists' => _lang('Selected member does not exist'),
+            'meeting_id.exists' => _lang('Selected meeting does not exist'),
         ]);
 
         if ($validator->fails()) {
@@ -157,15 +164,28 @@ class VslaTransactionsController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             
-            // Log the detailed error for debugging
-            \Log::error('VSLA Transaction Creation Error: ' . $e->getMessage(), [
+            // FIXED: Enhanced error logging with detailed context
+            \Log::error('VSLA Transaction Creation Error', [
                 'exception' => $e,
                 'request_data' => $request->all(),
                 'user_id' => auth()->id(),
-                'tenant_id' => $tenant->id ?? null
+                'tenant_id' => $tenant->id ?? null,
+                'transaction_type' => $request->transaction_type ?? 'unknown',
+                'member_id' => $request->member_id ?? null,
+                'amount' => $request->amount ?? null,
+                'trace' => $e->getTraceAsString()
             ]);
             
             $errorMessage = $e->getMessage();
+            
+            // FIXED: Provide more specific error messages based on exception type
+            if (strpos($errorMessage, 'No active cycle') !== false) {
+                $errorMessage = _lang('No active VSLA cycle found. Please create or activate a cycle first.');
+            } elseif (strpos($errorMessage, 'VSLA') !== false && strpos($errorMessage, 'Account') !== false) {
+                $errorMessage = _lang('VSLA account setup incomplete. Please contact administrator.');
+            } elseif (strpos($errorMessage, 'Insufficient balance') !== false) {
+                $errorMessage = _lang('Insufficient balance for this transaction.');
+            }
             
             if ($request->ajax()) {
                 return response()->json(['result' => 'error', 'message' => $errorMessage]);
@@ -384,9 +404,9 @@ class VslaTransactionsController extends Controller
         // Generate loan ID
         $loanId = $loanProduct->loan_id_prefix . $loanProduct->starting_loan_id;
         
-        // Calculate total payable (simple calculation for VSLA)
-        $interestAmount = ($vslaTransaction->amount * $loanProduct->interest_rate) / 100;
-        $totalPayable = $vslaTransaction->amount + $interestAmount;
+        // Calculate total payable based on loan product interest type
+        // FIXED: Use centralized loan calculator for consistency
+        $totalPayable = VslaLoanCalculator::calculateTotalPayable($vslaTransaction->amount, $loanProduct);
         
         // Create loan
         $loan = Loan::create([
@@ -1242,5 +1262,18 @@ class VslaTransactionsController extends Controller
             'bank_account_id' => null,
             'status' => 'pending',
         ]);
+    }
+
+    /**
+     * Calculate loan total payable based on loan product interest type
+     * FIXED: Now uses centralized VslaLoanCalculator service
+     *
+     * @param float $amount
+     * @param \App\Models\LoanProduct $loanProduct
+     * @return float
+     */
+    private function calculateLoanTotalPayable($amount, $loanProduct)
+    {
+        return VslaLoanCalculator::calculateTotalPayable($amount, $loanProduct);
     }
 }

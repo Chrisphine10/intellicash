@@ -21,6 +21,8 @@ class AssetLeaseController extends Controller
      */
     public function index(Request $request)
     {
+        $this->authorize('viewAny', \App\Models\AssetLease::class);
+        
         $tenant = app('tenant');
         
         if (!$tenant->isAssetManagementEnabled()) {
@@ -74,6 +76,8 @@ class AssetLeaseController extends Controller
      */
     public function create()
     {
+        $this->authorize('create', \App\Models\AssetLease::class);
+        
         $tenant = app('tenant');
         $assets = Asset::where('tenant_id', $tenant->id)->availableForLease()->with('category')->get();
         $members = Member::where('tenant_id', $tenant->id)->active()->get();
@@ -86,6 +90,8 @@ class AssetLeaseController extends Controller
      */
     public function store(Request $request)
     {
+        $this->authorize('create', \App\Models\AssetLease::class);
+        
         $request->validate([
             'asset_id' => 'required|exists:assets,id',
             'member_id' => 'required|exists:members,id',

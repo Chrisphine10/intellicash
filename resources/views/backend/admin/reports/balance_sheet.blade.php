@@ -10,7 +10,7 @@
                 <span class="card-title">{{ _lang('Balance Sheet') }}</span>
             </div>
             <div class="card-body">
-                @if(!isset($assets))
+                @if(!isset($balance_sheet_data))
                 <form class="validate" method="post" action="{{ route('reports.balance_sheet') }}">
                     @csrf
                     <div class="row">
@@ -26,12 +26,47 @@
                                 <button type="submit" class="btn btn-primary form-control">{{ _lang('Generate Report') }}</button>
                             </div>
                         </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="control-label">&nbsp;</label>
+                                <button type="submit" name="export" value="1" class="btn btn-success form-control">{{ _lang('Export to CSV') }}</button>
+                            </div>
+                        </div>
                     </div>
                 </form>
                 @else
                 <div class="row">
                     <div class="col-md-12">
-                        <h4>{{ _lang('Balance Sheet as of') }} {{ $as_of_date }}</h4>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4>{{ _lang('Balance Sheet as of') }} {{ $as_of_date }}</h4>
+                            <div>
+                                <a href="{{ route('reports.balance_sheet') }}" class="btn btn-secondary btn-sm">{{ _lang('Back to Form') }}</a>
+                                <form method="post" action="{{ route('reports.balance_sheet') }}" style="display: inline;">
+                                    @csrf
+                                    <input type="hidden" name="as_of_date" value="{{ $as_of_date }}">
+                                    <input type="hidden" name="export" value="1">
+                                    <button type="submit" class="btn btn-success btn-sm">{{ _lang('Export to CSV') }}</button>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        @if(isset($error))
+                        <div class="alert alert-warning">
+                            <strong>{{ _lang('Warning') }}:</strong> {{ $error }}
+                        </div>
+                        @endif
+                        
+                        @if(isset($debug))
+                        <div class="alert alert-info">
+                            <strong>{{ _lang('Debug Information') }}:</strong><br>
+                            Date: {{ $debug['as_of_date'] }}<br>
+                            Tenant ID: {{ $debug['tenant_id'] }}<br>
+                            Asset Management: {{ $debug['asset_management_enabled'] ? 'Enabled' : 'Disabled' }}<br>
+                            Assets: {{ $debug['assets_count'] }}<br>
+                            Loans: {{ $debug['loans_count'] }}<br>
+                            Bank Accounts: {{ $debug['bank_accounts_count'] }}
+                        </div>
+                        @endif
                         
                         <div class="row">
                             <div class="col-md-6">
@@ -53,13 +88,23 @@
                                                 <td>{{ _lang('Loan Portfolio') }}</td>
                                                 <td class="text-right">{{ decimalPlace($assets['loan_portfolio'], currency()) }}</td>
                                             </tr>
+                                            @if($asset_management_enabled)
                                             <tr>
                                                 <td>{{ _lang('Fixed Assets') }}</td>
                                                 <td class="text-right">{{ decimalPlace($assets['fixed_assets'], currency()) }}</td>
                                             </tr>
+                                            <tr>
+                                                <td>{{ _lang('Lease Receivables') }}</td>
+                                                <td class="text-right">{{ decimalPlace($assets['lease_receivables'], currency()) }}</td>
+                                            </tr>
+                                            @endif
+                                            <tr>
+                                                <td>{{ _lang('Other Assets') }}</td>
+                                                <td class="text-right">{{ decimalPlace($assets['other_assets'], currency()) }}</td>
+                                            </tr>
                                             <tr class="table-primary">
                                                 <td><strong>{{ _lang('Total Assets') }}</strong></td>
-                                                <td class="text-right"><strong>{{ decimalPlace(array_sum($assets), currency()) }}</strong></td>
+                                                <td class="text-right"><strong>{{ decimalPlace($total_assets, currency()) }}</strong></td>
                                             </tr>
                                         </table>
                                     </div>
@@ -85,9 +130,17 @@
                                                 <td>{{ _lang('Borrowings') }}</td>
                                                 <td class="text-right">{{ decimalPlace($liabilities['borrowings'], currency()) }}</td>
                                             </tr>
+                                            <tr>
+                                                <td>{{ _lang('Accrued Expenses') }}</td>
+                                                <td class="text-right">{{ decimalPlace($liabilities['accrued_expenses'], currency()) }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td>{{ _lang('Other Liabilities') }}</td>
+                                                <td class="text-right">{{ decimalPlace($liabilities['other_liabilities'], currency()) }}</td>
+                                            </tr>
                                             <tr class="table-success">
                                                 <td><strong>{{ _lang('Total Liabilities') }}</strong></td>
-                                                <td class="text-right"><strong>{{ decimalPlace(array_sum($liabilities), currency()) }}</strong></td>
+                                                <td class="text-right"><strong>{{ decimalPlace($total_liabilities, currency()) }}</strong></td>
                                             </tr>
                                             
                                             <tr>
@@ -102,16 +155,64 @@
                                                 <td>{{ _lang('Capital') }}</td>
                                                 <td class="text-right">{{ decimalPlace($equity['capital'], currency()) }}</td>
                                             </tr>
+                                            <tr>
+                                                <td>{{ _lang('Reserves') }}</td>
+                                                <td class="text-right">{{ decimalPlace($equity['reserves'], currency()) }}</td>
+                                            </tr>
+                                            {{-- Asset Purchase Adjustment is now handled by proper financial transactions --}}
                                             <tr class="table-info">
                                                 <td><strong>{{ _lang('Total Equity') }}</strong></td>
-                                                <td class="text-right"><strong>{{ decimalPlace(array_sum($equity), currency()) }}</strong></td>
+                                                <td class="text-right"><strong>{{ decimalPlace($total_equity, currency()) }}</strong></td>
                                             </tr>
                                             
                                             <tr class="table-warning">
                                                 <td><strong>{{ _lang('Total Liabilities & Equity') }}</strong></td>
-                                                <td class="text-right"><strong>{{ decimalPlace(array_sum($liabilities) + array_sum($equity), currency()) }}</strong></td>
+                                                <td class="text-right"><strong>{{ decimalPlace($total_liabilities + $total_equity, currency()) }}</strong></td>
                                             </tr>
                                         </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Balance Sheet Summary -->
+                        <div class="row mt-4">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h5>{{ _lang('Balance Sheet Summary') }}</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="text-center">
+                                                    <h6>{{ _lang('Total Assets') }}</h6>
+                                                    <h4 class="text-primary">{{ decimalPlace($total_assets, currency()) }}</h4>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="text-center">
+                                                    <h6>{{ _lang('Total Liabilities') }}</h6>
+                                                    <h4 class="text-danger">{{ decimalPlace($total_liabilities, currency()) }}</h4>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="text-center">
+                                                    <h6>{{ _lang('Total Equity') }}</h6>
+                                                    <h4 class="text-success">{{ decimalPlace($total_equity, currency()) }}</h4>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @if($total_assets != ($total_liabilities + $total_equity))
+                                        <div class="alert alert-warning mt-3">
+                                            <strong>{{ _lang('Warning') }}:</strong> {{ _lang('Balance sheet does not balance. Assets') }} ({{ decimalPlace($total_assets, currency()) }}) 
+                                            {{ _lang('do not equal Liabilities + Equity') }} ({{ decimalPlace($total_liabilities + $total_equity, currency()) }})
+                                        </div>
+                                        @else
+                                        <div class="alert alert-success mt-3">
+                                            <strong>{{ _lang('Success') }}:</strong> {{ _lang('Balance sheet is balanced correctly.') }}
+                                        </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>

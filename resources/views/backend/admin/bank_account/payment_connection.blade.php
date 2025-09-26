@@ -9,7 +9,7 @@
                 <p class="text-muted">{{ _lang('Connect a payment method to enable automated withdrawals for this bank account') }}</p>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ route('bank_accounts.payment.connect', $bankAccount->id) }}" id="payment-connection-form">
+                <form method="POST" action="{{ route('bank_accounts.payment.connect.store', $bankAccount->id) }}" id="payment-connection-form">
                     @csrf
                     
                     <div class="row">

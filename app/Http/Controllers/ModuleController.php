@@ -64,6 +64,11 @@ class ModuleController extends Controller
                 'description' => 'Electronic signature management for documents and agreements',
                 'enabled' => $tenant->esignature_enabled ?? false,
             ],
+            'payroll' => [
+                'name' => 'Payroll Module',
+                'description' => 'Comprehensive payroll management for employees and staff',
+                'enabled' => $tenant->isPayrollEnabled(),
+            ],
         ];
         
         return view('backend.admin.modules.index', compact('modules'));
@@ -1077,6 +1082,151 @@ class ModuleController extends Controller
         // For now, we'll just log the activation
         // In the future, you can add default E-Signature settings here
         \Log::info('E-Signature module settings provisioned for tenant: ' . $tenant->id);
+    }
+
+    /**
+     * Toggle Payroll module status
+     */
+    public function togglePayroll(Request $request)
+    {
+        // Check permission - only admin can toggle modules
+        if (!is_admin()) {
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('Permission denied!')]);
+            }
+            return back()->with('error', _lang('Permission denied!'));
+        }
+        
+        $tenant = app('tenant');
+        $enabled = $request->boolean('enabled');
+        
+        // Check if already in the desired state
+        if ($tenant->isPayrollEnabled() == $enabled) {
+            $message = $enabled ? 'Payroll module is already enabled' : 'Payroll module is already disabled';
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'info', 'message' => _lang($message)]);
+            }
+            
+            return back()->with('info', _lang($message));
+        }
+        
+        DB::beginTransaction();
+        
+        try {
+            $tenant->payroll_enabled = $enabled;
+            $tenant->save();
+            
+            if ($enabled) {
+                $this->provisionPayrollModule($tenant);
+            }
+            
+            DB::commit();
+            
+            $message = $enabled ? 'Payroll module activated successfully' : 'Payroll module deactivated successfully';
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'success', 'message' => _lang($message)]);
+            }
+            
+            return back()->with('success', _lang($message));
+            
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('Payroll Module Toggle Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            if ($request->ajax()) {
+                return response()->json(['result' => 'error', 'message' => _lang('An error occurred while updating the module: ') . $e->getMessage()]);
+            }
+            
+            return back()->with('error', _lang('An error occurred while updating the module: ') . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Provision Payroll module when activated
+     */
+    private function provisionPayrollModule($tenant)
+    {
+        try {
+            // Create default payroll deductions and benefits
+            $this->createDefaultPayrollDeductions($tenant);
+            $this->createDefaultPayrollBenefits($tenant);
+            
+            // Log Payroll module activation
+            \Log::info('Payroll module activated for tenant: ' . $tenant->id);
+            
+        } catch (\Exception $e) {
+            \Log::error('Payroll Module Provision Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Create default payroll deductions
+     */
+    private function createDefaultPayrollDeductions($tenant)
+    {
+        \App\Models\PayrollDeduction::createDefaultDeductions($tenant->id, auth()->id());
+    }
+    
+    /**
+     * Create default payroll benefits
+     */
+    private function createDefaultPayrollBenefits($tenant)
+    {
+        \App\Models\PayrollBenefit::createDefaultBenefits($tenant->id, auth()->id());
+    }
+
+    /**
+     * Show Payroll module configuration
+     */
+    public function configurePayroll()
+    {
+        // Check permission - only admin can configure modules
+        if (!is_admin()) {
+            return back()->with('error', _lang('Permission denied!'));
+        }
+        
+        $tenant = app('tenant');
+        
+        // Get current employee account type setting
+        $employeeAccountType = get_tenant_option('employee_account_type', 'system_users', $tenant->id);
+        
+        return view('backend.admin.modules.payroll.configure', compact('employeeAccountType'));
+    }
+
+    /**
+     * Update Payroll module configuration
+     */
+    public function updatePayrollConfig(Request $request)
+    {
+        // Check permission - only admin can configure modules
+        if (!is_admin()) {
+            return back()->with('error', _lang('Permission denied!'));
+        }
+        
+        $request->validate([
+            'employee_account_type' => 'required|in:system_users,member_accounts',
+        ]);
+        
+        $tenant = app('tenant');
+        
+        try {
+            // Update the tenant setting
+            update_tenant_option('employee_account_type', $request->employee_account_type, $tenant->id);
+            
+            return back()->with('success', _lang('Payroll module configuration updated successfully'));
+            
+        } catch (\Exception $e) {
+            \Log::error('Payroll Module Configuration Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return back()->with('error', _lang('An error occurred while updating the configuration: ') . $e->getMessage());
+        }
     }
 
 }

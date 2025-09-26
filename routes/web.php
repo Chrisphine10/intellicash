@@ -46,6 +46,11 @@ use App\Http\Controllers\BankTransactionController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\ApiModuleController;
+use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\PayrollDeductionController;
+use App\Http\Controllers\PayrollBenefitController;
+use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\Member\AuditController as MemberAuditController;
 use App\Http\Controllers\SystemAdmin\AuditController as SystemAdminAuditController;
 use App\Http\Controllers\VotingController;
@@ -199,10 +204,10 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::resource('languages', LanguageController::class);
 
                 //Utility Controller
-                Route::match(['get', 'post'], 'general_settings/{store?}', [UtilityController::class, 'settings'])->name('settings.update_settings');
-                Route::post('upload_logo', [UtilityController::class, 'upload_logo'])->name('settings.uplaod_logo');
-                Route::post('remove_cache', [UtilityController::class, 'remove_cache'])->name('settings.remove_cache');
-                Route::post('send_test_email', [UtilityController::class, 'send_test_email'])->name('settings.send_test_email');
+                Route::match(['get', 'post'], 'general_settings/{store?}', [UtilityController::class, 'settings'])->name('settings.update_settings')->middleware('throttle:10,1');
+                Route::post('upload_logo', [UtilityController::class, 'upload_logo'])->name('settings.uplaod_logo')->middleware('throttle:5,1');
+                Route::post('remove_cache', [UtilityController::class, 'remove_cache'])->name('settings.remove_cache')->middleware('throttle:3,1');
+                Route::post('send_test_email', [UtilityController::class, 'send_test_email'])->name('settings.send_test_email')->middleware('throttle:3,1');
 
                 //Data Backup
                 Route::get('backups', [BackupController::class, 'index'])->name('backup.index');
@@ -277,8 +282,10 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('esignature-documents/{id}/audit-trail', [App\Http\Controllers\ESignatureController::class, 'auditTrail'])->name('esignature-documents.audit-trail');
                 Route::post('esignature-documents/{id}/send', [App\Http\Controllers\ESignatureController::class, 'send'])->name('esignature-documents.send');
                 Route::post('esignature-documents/{id}/cancel', [App\Http\Controllers\ESignatureController::class, 'cancel'])->name('esignature-documents.cancel');
+                Route::post('esignature-documents/{id}/send-reminders', [App\Http\Controllers\ESignatureController::class, 'sendReminders'])->name('esignature-documents.send-reminders');
                 Route::get('esignature-documents/{id}/download', [App\Http\Controllers\ESignatureController::class, 'download'])->name('esignature-documents.download');
                 Route::get('esignature-documents/{id}/download-signed', [App\Http\Controllers\ESignatureController::class, 'downloadSigned'])->name('esignature-documents.download-signed');
+                Route::get('esignature-documents/{id}/view', [App\Http\Controllers\ESignatureController::class, 'view'])->name('esignature-documents.view');
                 Route::resource('esignature-documents', App\Http\Controllers\ESignatureController::class);
                 
                 // Fields
@@ -403,11 +410,11 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::post('permission/store', [PermissionController::class, 'store'])->name('permission.store');
 
                 //Tenant Settings Controller
-                Route::post('settings/upload_logo', [TenantSettingsController::class, 'upload_logo'])->name('settings.upload_logo');
-                Route::post('settings/send_test_email', [TenantSettingsController::class, 'send_test_email'])->name('settings.send_test_email');
-                Route::post('settings/store_email_settings', [TenantSettingsController::class, 'store_email_settings'])->name('settings.store_email_settings');
-                Route::post('settings/store_currency_settings', [TenantSettingsController::class, 'store_currency_settings'])->name('settings.store_currency_settings');
-                Route::post('settings/store_general_settings', [TenantSettingsController::class, 'store_general_settings'])->name('settings.store_general_settings');
+                Route::post('settings/upload_logo', [TenantSettingsController::class, 'upload_logo'])->name('settings.upload_logo')->middleware('throttle:5,1');
+                Route::post('settings/send_test_email', [TenantSettingsController::class, 'send_test_email'])->name('settings.send_test_email')->middleware('throttle:3,1');
+                Route::post('settings/store_email_settings', [TenantSettingsController::class, 'store_email_settings'])->name('settings.store_email_settings')->middleware('throttle:10,1');
+                Route::post('settings/store_currency_settings', [TenantSettingsController::class, 'store_currency_settings'])->name('settings.store_currency_settings')->middleware('throttle:10,1');
+                Route::post('settings/store_general_settings', [TenantSettingsController::class, 'store_general_settings'])->name('settings.store_general_settings')->middleware('throttle:10,1');
                 Route::get('settings', [TenantSettingsController::class, 'index'])->name('settings.index');
 
                 //Module Management
@@ -423,6 +430,71 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::get('modules/qr-code/guide', [App\Http\Controllers\ModuleController::class, 'qrCodeGuide'])->name('modules.qr_code.guide');
                 Route::post('modules/qr-code/update', [App\Http\Controllers\ModuleController::class, 'updateQrCodeConfig'])->name('modules.qr_code.update');
                 Route::post('modules/qr-code/test-ethereum', [App\Http\Controllers\ModuleController::class, 'testEthereumConnection'])->name('modules.qr_code.test_ethereum');
+                Route::post('modules/toggle-payroll', [App\Http\Controllers\ModuleController::class, 'togglePayroll'])->name('modules.toggle_payroll');
+                
+                //Payroll Module Configuration
+                Route::get('modules/payroll/configure', [App\Http\Controllers\ModuleController::class, 'configurePayroll'])->name('modules.payroll.configure');
+                Route::post('modules/payroll/update', [App\Http\Controllers\ModuleController::class, 'updatePayrollConfig'])->name('modules.payroll.update');
+
+                // Payroll Module Routes
+                Route::prefix('payroll')->middleware(['payroll_module'])->group(function () {
+                    // Payroll Periods
+                    Route::resource('periods', PayrollController::class)->names([
+                        'index' => 'payroll.periods.index',
+                        'create' => 'payroll.periods.create',
+                        'store' => 'payroll.periods.store',
+                        'show' => 'payroll.periods.show',
+                        'edit' => 'payroll.periods.edit',
+                        'update' => 'payroll.periods.update',
+                        'destroy' => 'payroll.periods.destroy',
+                    ]);
+                    Route::post('periods/{id}/process', [PayrollController::class, 'process'])->name('payroll.periods.process')->middleware('payroll_rate_limit:5,5');
+                    Route::post('periods/{id}/complete', [PayrollController::class, 'complete'])->name('payroll.periods.complete')->middleware('payroll_rate_limit:3,10');
+                    Route::post('periods/{id}/cancel', [PayrollController::class, 'cancel'])->name('payroll.periods.cancel')->middleware('payroll_rate_limit:3,10');
+                    Route::post('periods/{id}/add-employee', [PayrollController::class, 'addEmployee'])->name('payroll.periods.add-employee')->middleware('payroll_rate_limit:20,1');
+                    Route::post('periods/{id}/remove-employee', [PayrollController::class, 'removeEmployee'])->name('payroll.periods.remove-employee')->middleware('payroll_rate_limit:20,1');
+                    Route::get('periods/{id}/report', [PayrollController::class, 'report'])->name('payroll.periods.report');
+                    Route::get('periods/{id}/export/{format?}', [PayrollController::class, 'export'])->name('payroll.periods.export');
+
+                    // Employees
+                    Route::resource('employees', EmployeeController::class)->names([
+                        'index' => 'payroll.employees.index',
+                        'create' => 'payroll.employees.create',
+                        'store' => 'payroll.employees.store',
+                        'show' => 'payroll.employees.show',
+                        'edit' => 'payroll.employees.edit',
+                        'update' => 'payroll.employees.update',
+                        'destroy' => 'payroll.employees.destroy',
+                    ]);
+                    Route::post('employees/{id}/toggle-status', [EmployeeController::class, 'toggleStatus'])->name('payroll.employees.toggle-status');
+                    Route::get('employees/{id}/payroll-history', [EmployeeController::class, 'payrollHistory'])->name('payroll.employees.payroll-history');
+                    Route::get('employees/{id}/deductions', [EmployeeController::class, 'deductions'])->name('payroll.employees.deductions');
+                    Route::post('employees/{id}/deductions', [EmployeeController::class, 'assignDeductions'])->name('payroll.employees.assign-deductions');
+                    Route::get('employees/{id}/benefits', [EmployeeController::class, 'benefits'])->name('payroll.employees.benefits');
+                    Route::post('employees/{id}/benefits', [EmployeeController::class, 'assignBenefits'])->name('payroll.employees.assign-benefits');
+
+                    // Payroll Deductions
+                    Route::get('deductions', [PayrollDeductionController::class, 'index'])->name('payroll.deductions.index');
+                    Route::get('deductions/create', [PayrollDeductionController::class, 'create'])->name('payroll.deductions.create');
+                    Route::post('deductions', [PayrollDeductionController::class, 'store'])->name('payroll.deductions.store');
+                    Route::get('deductions/{id}', [PayrollDeductionController::class, 'show'])->name('payroll.deductions.show');
+                    Route::get('deductions/{id}/edit', [PayrollDeductionController::class, 'edit'])->name('payroll.deductions.edit');
+                    Route::put('deductions/{id}', [PayrollDeductionController::class, 'update'])->name('payroll.deductions.update');
+                    Route::delete('deductions/{id}', [PayrollDeductionController::class, 'destroy'])->name('payroll.deductions.destroy');
+                    Route::post('deductions/{id}/toggle-status', [PayrollDeductionController::class, 'toggleStatus'])->name('payroll.deductions.toggle-status');
+                    Route::post('deductions/create-defaults', [PayrollDeductionController::class, 'createDefaults'])->name('payroll.deductions.create-defaults');
+
+                    // Payroll Benefits
+                    Route::get('benefits', [PayrollBenefitController::class, 'index'])->name('payroll.benefits.index');
+                    Route::get('benefits/create', [PayrollBenefitController::class, 'create'])->name('payroll.benefits.create');
+                    Route::post('benefits', [PayrollBenefitController::class, 'store'])->name('payroll.benefits.store');
+                    Route::get('benefits/{id}', [PayrollBenefitController::class, 'show'])->name('payroll.benefits.show');
+                    Route::get('benefits/{id}/edit', [PayrollBenefitController::class, 'edit'])->name('payroll.benefits.edit');
+                    Route::put('benefits/{id}', [PayrollBenefitController::class, 'update'])->name('payroll.benefits.update');
+                    Route::delete('benefits/{id}', [PayrollBenefitController::class, 'destroy'])->name('payroll.benefits.destroy');
+                    Route::post('benefits/{id}/toggle-status', [PayrollBenefitController::class, 'toggleStatus'])->name('payroll.benefits.toggle-status');
+                    Route::post('benefits/create-defaults', [PayrollBenefitController::class, 'createDefaults'])->name('payroll.benefits.create-defaults');
+                });
 
                 // Asset Management Module Routes
                 Route::prefix('asset-management')->middleware(['asset_module'])->group(function () {
@@ -436,6 +508,8 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                     Route::get('assets/available-for-lease', [App\Http\Controllers\AssetController::class, 'availableForLease'])->name('assets.available-for-lease');
                     Route::get('assets/{asset}/lease-form', [App\Http\Controllers\AssetController::class, 'leaseForm'])->name('assets.lease-form');
                     Route::post('assets/{asset}/create-lease', [App\Http\Controllers\AssetController::class, 'createLease'])->name('assets.create-lease');
+                    Route::get('assets/{asset}/sell', [App\Http\Controllers\AssetController::class, 'sell'])->name('assets.sell');
+                    Route::post('assets/{asset}/process-sale', [App\Http\Controllers\AssetController::class, 'processSale'])->name('assets.process-sale');
                     Route::resource('assets', App\Http\Controllers\AssetController::class);
 
                     // Asset Leases
@@ -443,6 +517,13 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                     Route::post('asset-leases/{lease}/cancel', [App\Http\Controllers\AssetLeaseController::class, 'cancel'])->name('asset-leases.cancel');
                     Route::post('asset-leases/{lease}/mark-overdue', [App\Http\Controllers\AssetLeaseController::class, 'markOverdue'])->name('asset-leases.mark-overdue');
                     Route::resource('asset-leases', App\Http\Controllers\AssetLeaseController::class);
+
+                    // Lease Requests (Admin)
+                    Route::post('lease-requests/{leaseRequest}/approve', [App\Http\Controllers\LeaseRequestController::class, 'approve'])->name('lease-requests.approve');
+                    Route::post('lease-requests/{leaseRequest}/reject', [App\Http\Controllers\LeaseRequestController::class, 'reject'])->name('lease-requests.reject');
+                    Route::get('lease-requests/available-assets', [App\Http\Controllers\LeaseRequestController::class, 'getAvailableAssets'])->name('lease-requests.available-assets');
+                    Route::get('lease-requests/asset-details', [App\Http\Controllers\LeaseRequestController::class, 'getAssetDetails'])->name('lease-requests.asset-details');
+                    Route::resource('lease-requests', App\Http\Controllers\LeaseRequestController::class);
 
                     // Asset Maintenance
                     Route::get('asset-maintenance/overdue', [App\Http\Controllers\AssetMaintenanceController::class, 'overdue'])->name('asset-maintenance.overdue');
@@ -616,18 +697,20 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 //Bank Accounts
                 Route::resource('bank_accounts', BankAccountController::class)->middleware("demo:PUT|PATCH|DELETE");
                 
-                //Bank Account Payment Methods
-                Route::get('bank_accounts/{bankAccount}/payment/connect', [App\Http\Controllers\BankAccountPaymentController::class, 'showConnectionForm'])->name('bank_accounts.payment.connect');
-                Route::post('bank_accounts/{bankAccount}/payment/connect', [App\Http\Controllers\BankAccountPaymentController::class, 'connectPaymentMethod'])->name('bank_accounts.payment.connect');
-                Route::delete('bank_accounts/{bankAccount}/payment/disconnect', [App\Http\Controllers\BankAccountPaymentController::class, 'disconnectPaymentMethod'])->name('bank_accounts.payment.disconnect');
-                Route::get('bank_accounts/payment/config/form', [App\Http\Controllers\BankAccountPaymentController::class, 'getPaymentConfigForm'])->name('bank_accounts.payment.config.form');
-                Route::post('bank_accounts/{bankAccount}/payment/test', [App\Http\Controllers\BankAccountPaymentController::class, 'testConnection'])->name('bank_accounts.payment.test');
+                //Payment Methods Management
+                Route::resource('payment_methods', PaymentMethodController::class)->middleware("demo:PUT|PATCH|DELETE");
+                Route::get('payment_methods/config/form', [PaymentMethodController::class, 'getConfigForm'])->name('payment_methods.config.form');
+                Route::post('payment_methods/{id}/test', [PaymentMethodController::class, 'testConnection'])->name('payment_methods.test');
                 
-                //Withdrawal Request Management
+                //Withdrawal Request Management - with rate limiting
                 Route::get('withdrawal_requests', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'index'])->name('admin.withdrawal_requests.index');
                 Route::get('withdrawal_requests/{id}', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'show'])->name('admin.withdrawal_requests.show');
-                Route::post('withdrawal_requests/{id}/approve', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'approve'])->name('admin.withdrawal_requests.approve');
-                Route::post('withdrawal_requests/{id}/reject', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject'])->name('admin.withdrawal_requests.reject');
+                Route::post('withdrawal_requests/{id}/approve', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'approve'])
+                    ->name('admin.withdrawal_requests.approve')
+                    ->middleware('throttle:admin-withdraw');
+                Route::post('withdrawal_requests/{id}/reject', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject'])
+                    ->name('admin.withdrawal_requests.reject')
+                    ->middleware('throttle:admin-withdraw');
                 Route::get('withdrawal_requests/statistics', [App\Http\Controllers\Admin\WithdrawalRequestController::class, 'statistics'])->name('admin.withdrawal_requests.statistics');
 
                 //Bank Transaction
@@ -799,6 +882,12 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::match(['get', 'post'], 'loans/payment/{loan_id}', [App\Http\Controllers\Customer\LoanController::class, 'loan_payment'])->name('loans.loan_payment');
                 Route::get('loans/my_loans', [App\Http\Controllers\Customer\LoanController::class, 'index'])->name('loans.my_loans');
 
+                // Lease Requests (Customer)
+                Route::get('lease-requests/my-requests', [App\Http\Controllers\LeaseRequestController::class, 'memberRequests'])->name('lease-requests.member.index');
+                Route::get('lease-requests/my-requests/{leaseRequest}', [App\Http\Controllers\LeaseRequestController::class, 'memberShow'])->name('lease-requests.member.show');
+                Route::get('lease-requests/create', [App\Http\Controllers\LeaseRequestController::class, 'create'])->name('lease-requests.member.create');
+                Route::post('lease-requests', [App\Http\Controllers\LeaseRequestController::class, 'store'])->name('lease-requests.member.store');
+
                 //Advanced Loan Application Routes (for authenticated members only)
                 // Route::get('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'showApplicationForm'])->name('loan_application.form');
                 // Route::post('/loan-application', [App\Http\Controllers\PublicLoanApplicationController::class, 'storeApplication'])->name('loan_application.store');
@@ -816,9 +905,11 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 Route::match(['get', 'post'], 'deposit/instant_deposit/{id}', [App\Http\Controllers\Customer\DepositController::class, 'automatic_deposit'])->name('deposit.automatic_deposit');
                 Route::get('deposit/instant_methods', [App\Http\Controllers\Customer\DepositController::class, 'automatic_methods'])->name('deposit.automatic_methods');
 
-                //Withdraw Money
+                //Withdraw Money - with rate limiting
                 Route::get('withdraw/offline_methods', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_methods'])->name('withdraw.manual_methods');
-                Route::match(['get', 'post'], 'withdraw/offline_withdraw/{id}/{otp?}', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_withdraw'])->name('withdraw.manual_withdraw');
+                Route::match(['get', 'post'], 'withdraw/offline_withdraw/{id}/{otp?}', [App\Http\Controllers\Customer\WithdrawController::class, 'manual_withdraw'])
+                    ->name('withdraw.manual_withdraw')
+                    ->middleware('throttle:withdraw');
                 Route::get('withdraw/history', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalHistory'])->name('withdraw.history');
                 Route::get('withdraw/requests', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalRequests'])->name('withdraw.requests');
                 Route::get('withdraw/request_details/{id}', [App\Http\Controllers\Customer\WithdrawController::class, 'withdrawalRequestDetails'])->name('withdraw.request_details');
@@ -867,14 +958,11 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
         }
     })->name('switch_language');
 
-    Route::get('switch_branch', function () {
-        if (isset($_GET['branch']) && isset($_GET['branch_id'])) {
-            session(['branch' => $_GET['branch'], 'branch_id' => $_GET['branch_id']]);
-        } else {
-            request()->session()->forget(['branch', 'branch_id']);
-        }
+    Route::post('switch_branch', [BranchController::class, 'switchBranch'])->name('switch_branch');
+    Route::get('switch_branch_reset', function () {
+        request()->session()->forget(['branch', 'branch_id']);
         return back();
-    })->name('switch_branch');
+    })->name('switch_branch_reset');
 
     Route::get('tenants/check-tenant-slug/{ignoreId?}', [TenantController::class, 'checkSlug'])->name('check-slug');
 
@@ -903,6 +991,8 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
 //Dashboard Widget
 Route::get('dashboard/json_expense_by_category', [DashboardController::class, 'json_expense_by_category'])->middleware('auth');
 Route::get('dashboard/json_deposit_withdraw_analytics/{currency_id?}', [DashboardController::class, 'json_deposit_withdraw_analytics'])->middleware('auth');
+Route::get('dashboard/analytics_data', [DashboardController::class, 'analytics_data'])->name('dashboard.analytics_data')->middleware('auth');
+Route::post('dashboard/clear_cache', [DashboardController::class, 'clearCache'])->middleware('auth');
 
 Route::get('admin/dashboard/json_package_wise_subscription', [SuperAdminDashboardController::class, 'json_package_wise_subscription'])->middleware('auth');
 Route::get('admin/dashboard/json_yearly_revenue', [SuperAdminDashboardController::class, 'json_yearly_revenue'])->middleware('auth');
@@ -956,16 +1046,16 @@ Route::get('test-esignature/{id}', function($id) {
 })->name('test.esignature');
 
     Route::prefix('{tenant}')->middleware(['tenant'])->group(function () {
-        //Public E-Signature Routes (no authentication required)
-        Route::prefix('esignature-public')->name('esignature.public.')->group(function () {
+        //Public E-Signature Routes (no authentication required) with rate limiting
+        Route::prefix('esignature-public')->name('esignature.public.')->middleware(['esignature.rate.limit:5,10'])->group(function () {
             Route::get('sign/{token}', [App\Http\Controllers\PublicESignatureController::class, 'showSigningPage'])->name('sign');
-            Route::post('sign/{token}', [App\Http\Controllers\PublicESignatureController::class, 'submitSignature'])->name('submit');
+            Route::post('sign/{token}', [App\Http\Controllers\PublicESignatureController::class, 'submitSignature'])->middleware(['esignature.rate.limit:3,5'])->name('submit');
             Route::get('success/{token}', [App\Http\Controllers\PublicESignatureController::class, 'success'])->name('success');
-            Route::post('decline/{token}', [App\Http\Controllers\PublicESignatureController::class, 'decline'])->name('decline');
+            Route::post('decline/{token}', [App\Http\Controllers\PublicESignatureController::class, 'decline'])->middleware(['esignature.rate.limit:2,5'])->name('decline');
             Route::get('declined/{token}', [App\Http\Controllers\PublicESignatureController::class, 'declined'])->name('declined');
-            Route::get('download/{token}', [App\Http\Controllers\PublicESignatureController::class, 'downloadDocument'])->name('download-document');
-            Route::get('fields/{token}', [App\Http\Controllers\PublicESignatureController::class, 'getFields'])->name('fields');
-            Route::post('validate-field/{token}', [App\Http\Controllers\PublicESignatureController::class, 'validateField'])->name('validate-field');
+            Route::get('download/{token}', [App\Http\Controllers\PublicESignatureController::class, 'downloadDocument'])->middleware(['esignature.rate.limit:5,10'])->name('download-document');
+            Route::get('fields/{token}', [App\Http\Controllers\PublicESignatureController::class, 'getFields'])->middleware(['esignature.rate.limit:10,5'])->name('fields');
+            Route::post('validate-field/{token}', [App\Http\Controllers\PublicESignatureController::class, 'validateField'])->middleware(['esignature.rate.limit:20,5'])->name('validate-field');
         });
 
         
@@ -1328,8 +1418,8 @@ Route::get('api-test', function () {
 });
 
 // Test tenant API route without tenant middleware
-Route::get('intelliwealth/api/test-direct', function () {
-    $tenant = \App\Models\Tenant::where('slug', 'intelliwealth')->first();
+Route::get('{tenant}/api/test-direct', function ($tenantSlug) {
+    $tenant = \App\Models\Tenant::where('slug', $tenantSlug)->first();
     if (!$tenant) {
         return response()->json(['error' => 'Tenant not found'], 404);
     }
@@ -1360,6 +1450,20 @@ Route::get('middleware-test', function () {
         'timestamp' => now()
     ]);
 });
+
+// PWA Routes
+Route::get('/manifest.json', [App\Http\Controllers\PWAController::class, 'manifest'])->name('pwa.manifest');
+Route::get('/pwa/status', [App\Http\Controllers\PWAController::class, 'getStatus'])->name('pwa.status');
+Route::get('/pwa/install-prompt', [App\Http\Controllers\PWAController::class, 'showInstallPrompt'])->name('pwa.install-prompt');
+Route::get('/offline', function() {
+    return response()->file(public_path('offline'));
+})->name('pwa.offline');
+
+// Push Notification Routes
+Route::post('/push/register', [App\Http\Controllers\PushNotificationController::class, 'register'])->name('push.register');
+Route::post('/push/unregister', [App\Http\Controllers\PushNotificationController::class, 'unregister'])->name('push.unregister');
+Route::get('/push/status', [App\Http\Controllers\PushNotificationController::class, 'status'])->name('push.status');
+Route::post('/push/test', [App\Http\Controllers\PushNotificationController::class, 'test'])->name('push.test');
 
 // Catch-all route moved to end to avoid conflicts with tenant routes
 if (env('APP_INSTALLED', true)) {

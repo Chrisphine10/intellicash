@@ -7,18 +7,28 @@ use App\Models\ESignatureSignature;
 use App\Models\ESignatureField;
 use App\Models\ESignatureAuditTrail;
 use App\Services\ESignatureService;
+use App\Services\ESignatureSecurityService;
+use App\Services\ESignatureFileSecurityService;
 use App\Mail\ESignatureDocumentSigned;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class PublicESignatureController extends Controller
 {
     protected $eSignatureService;
+    protected $securityService;
+    protected $fileSecurityService;
 
-    public function __construct(ESignatureService $eSignatureService)
-    {
+    public function __construct(
+        ESignatureService $eSignatureService,
+        ESignatureSecurityService $securityService,
+        ESignatureFileSecurityService $fileSecurityService
+    ) {
         $this->eSignatureService = $eSignatureService;
+        $this->securityService = $securityService;
+        $this->fileSecurityService = $fileSecurityService;
     }
 
     /**
@@ -54,47 +64,108 @@ class PublicESignatureController extends Controller
     }
 
     /**
-     * Process the signature submission
+     * Process the signature submission with enhanced security
      */
     public function submitSignature(Request $request, string $token)
     {
-        $signature = ESignatureSignature::where('signature_token', $token)->firstOrFail();
-        
-        // Check if signature is valid
-        if (!$signature->canBeSigned()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This signature request is no longer valid.'
-            ], 400);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'signature_data' => 'required|string',
-            'signature_type' => 'required|string|in:drawn,typed,uploaded',
-            'fields' => 'nullable|array',
-            'fields.*.field_id' => 'required|integer',
-            'fields.*.value' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed.',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
-            // Validate and save field values
+            $signature = ESignatureSignature::where('signature_token', $token)->firstOrFail();
+            
+            // Check if signature is valid
+            if (!$signature->canBeSigned()) {
+                Log::warning('Invalid signature attempt', [
+                    'token' => $token,
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This signature request is no longer valid.'
+                ], 400);
+            }
+
+            // Enhanced validation with security checks
+            $validator = Validator::make($request->all(), [
+                'signature_data' => 'required|string|max:10485760', // 10MB max
+                'signature_type' => 'required|string|in:drawn,typed,uploaded',
+                'signature_hash' => 'required|string|size:64', // SHA-256 hash
+                'fields' => 'nullable|array',
+                'fields.*.field_id' => 'required|integer',
+                'fields.*.value' => 'required|string|max:1000',
+            ]);
+
+            if ($validator->fails()) {
+                Log::warning('Signature validation failed', [
+                    'token' => $token,
+                    'errors' => $validator->errors(),
+                    'ip' => $request->ip()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Validate signature data format and security
+            if (!$signature->validateSignature($request->signature_data, $request->signature_type)) {
+                Log::warning('Invalid signature data format', [
+                    'token' => $token,
+                    'signature_type' => $request->signature_type,
+                    'ip' => $request->ip()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid signature data format.'
+                ], 422);
+            }
+
+            // Validate signature hash
+            if (!$signature->verifySignatureHash($request->signature_data, $request->signature_hash)) {
+                Log::warning('Signature hash verification failed', [
+                    'token' => $token,
+                    'ip' => $request->ip()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Signature verification failed.'
+                ], 422);
+            }
+
+            // Validate signature image if uploaded
+            if ($request->signature_type === 'uploaded') {
+                if (!$this->fileSecurityService->validateSignatureImage($request->signature_data)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid signature image.'
+                    ], 422);
+                }
+            }
+
+            // Sanitize and validate field values
             $filledFields = [];
             if ($request->has('fields')) {
                 foreach ($request->fields as $fieldData) {
                     $field = ESignatureField::find($fieldData['field_id']);
                     if ($field && $field->assigned_to === $signature->signer_email) {
-                        if ($field->validateValue($fieldData['value'])) {
-                            $field->update(['field_value' => $fieldData['value']]);
-                            $filledFields[$field->field_name] = $fieldData['value'];
+                        // Sanitize input
+                        $sanitizedValue = $this->securityService->sanitizeInput($fieldData['value']);
+                        
+                        if ($field->validateValue($sanitizedValue)) {
+                            $field->update(['field_value' => $sanitizedValue]);
+                            $filledFields[$field->field_name] = $sanitizedValue;
                         } else {
+                            Log::warning('Invalid field value', [
+                                'field_id' => $field->id,
+                                'field_label' => $field->field_label,
+                                'value' => $fieldData['value'],
+                                'token' => $token
+                            ]);
+                            
                             return response()->json([
                                 'success' => false,
                                 'message' => "Invalid value for field: {$field->field_label}"
@@ -104,21 +175,29 @@ class PublicESignatureController extends Controller
                 }
             }
 
-            // Prepare signature data
+            // Encrypt signature data before storage
+            $encryptedSignatureData = $signature->encryptSignatureData($request->signature_data);
+
+            // Prepare signature data with security metadata
             $signatureData = [
-                'signature' => $request->signature_data,
+                'signature' => $encryptedSignatureData,
                 'fields' => $filledFields,
                 'metadata' => [
                     'signed_at' => now()->toISOString(),
                     'signature_type' => $request->signature_type,
                     'fields_count' => count($filledFields),
+                    'signature_hash' => $request->signature_hash,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'browser_info' => $this->securityService->parseBrowserInfo($request->userAgent()),
+                    'device_info' => $this->securityService->parseDeviceInfo($request->userAgent()),
                 ]
             ];
 
-            // Mark signature as signed
+            // Mark signature as signed with enhanced security
             $signature->markAsSigned($signatureData, $request->signature_type);
 
-            // Log audit trail
+            // Log comprehensive audit trail
             ESignatureAuditTrail::logDocumentSigned($signature);
 
             // Check if document is fully signed
@@ -130,8 +209,22 @@ class PublicESignatureController extends Controller
                 ]);
 
                 // Send completion notification to sender
-                Mail::to($document->sender_email)->send(new ESignatureDocumentSigned($document));
+                try {
+                    Mail::to($document->sender_email)->send(new ESignatureDocumentSigned($document));
+                } catch (\Exception $e) {
+                    Log::error('Failed to send completion email', [
+                        'document_id' => $document->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
+
+            Log::info('Document signed successfully', [
+                'signature_id' => $signature->id,
+                'document_id' => $document->id,
+                'signer_email' => $signature->signer_email,
+                'ip' => $request->ip()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -140,9 +233,15 @@ class PublicESignatureController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Signature submission failed', [
+                'token' => $token,
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to process signature: ' . $e->getMessage()
+                'message' => 'An error occurred while processing your signature. Please try again.'
             ], 500);
         }
     }

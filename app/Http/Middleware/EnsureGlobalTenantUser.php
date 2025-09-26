@@ -53,6 +53,6 @@ class EnsureGlobalTenantUser
 
             return $next($request);
         }
-        return redirect()->route('login');
+        return redirect()->route('tenant.login', ['tenant' => $tenant->slug]);
     }
 }

@@ -25,6 +25,7 @@ class Transaction extends Model {
         'loan_id',
         'savings_account_id',
         'bank_account_id',
+        'payment_method_id',
         'amount',
         'dr_cr',
         'type',
@@ -44,13 +45,19 @@ class Transaction extends Model {
 
     public function account() {
         return $this->belongsTo('App\Models\SavingsAccount', 'savings_account_id')
-            ->withoutGlobalScopes()
+            ->where('tenant_id', $this->tenant_id)
             ->withDefault();
     }
 
     public function bankAccount() {
         return $this->belongsTo('App\Models\BankAccount', 'bank_account_id')
-            ->withoutGlobalScopes()
+            ->where('tenant_id', $this->tenant_id)
+            ->withDefault();
+    }
+
+    public function paymentMethod() {
+        return $this->belongsTo('App\Models\PaymentMethod', 'payment_method_id')
+            ->where('tenant_id', $this->tenant_id)
             ->withDefault();
     }
 

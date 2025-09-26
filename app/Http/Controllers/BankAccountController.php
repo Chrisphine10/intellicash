@@ -16,6 +16,7 @@ class BankAccountController extends Controller {
      * @return void
      */
     public function __construct() {
+        $this->middleware('tenant.admin');
         date_default_timezone_set(get_timezone());
     }
 

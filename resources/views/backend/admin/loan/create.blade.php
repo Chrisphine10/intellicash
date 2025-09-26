@@ -6,6 +6,11 @@
 		<div class="card">
 			<div class="card-header text-center">
 				<span class="panel-title">{{ _lang('Add New Loan') }}</span>
+				<div class="card-tools">
+					<a href="{{ route('loans.index') }}" class="btn btn-secondary btn-sm">
+						<i class="fas fa-arrow-left"></i> {{ _lang('Back to Loans') }}
+					</a>
+				</div>
 			</div>
 			<div class="card-body">
 				<form method="post" class="validate" autocomplete="off" action="{{ route('loans.store') }}" enctype="multipart/form-data">

@@ -3,177 +3,91 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;
 use Illuminate\Http\Request;
-use Illuminate\Session\TokenMismatchException;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Log;
+use App\Services\SecurityService;
 
-class EnhancedCsrfProtection extends Middleware
+class EnhancedCsrfProtection
 {
-    /**
-     * The URIs that should be excluded from CSRF verification.
-     *
-     * @var array<int, string>
-     */
-    protected $except = [
-        '*/callback/instamojo',
-        'subscription_callback/instamojo',
-        'api/*',
-    ];
+    protected $securityService;
 
-    /**
-     * Create a new middleware instance.
-     *
-     * @param  \Illuminate\Contracts\Foundation\Application  $app
-     * @param  \Illuminate\Contracts\Encryption\Encrypter  $encrypter
-     * @return void
-     */
-    public function __construct($app, $encrypter)
+    public function __construct(SecurityService $securityService)
     {
-        parent::__construct($app, $encrypter);
+        $this->securityService = $securityService;
     }
 
     /**
      * Handle an incoming request.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     * @return \Symfony\Component\HttpFoundation\Response
-     *
-     * @throws \Illuminate\Session\TokenMismatchException
+     * @param  \Closure  $next
+     * @return mixed
      */
-    public function handle($request, Closure $next)
+    public function handle(Request $request, Closure $next)
     {
-        // Skip CSRF for API routes
-        if ($request->is('api/*')) {
+        // Skip CSRF for API routes and certain callbacks
+        if ($this->shouldSkipCsrf($request)) {
             return $next($request);
         }
 
-        // Skip CSRF for excluded URIs
-        if ($this->shouldPassThrough($request)) {
-            return $next($request);
+        // Check for CSRF token
+        if (!$request->has('_token') && !$request->header('X-CSRF-TOKEN')) {
+            $this->securityService->monitorEvent('csrf_token_missing', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'user_id' => auth()->id(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'CSRF token missing'], 419);
+            }
+
+            return redirect()->back()->with('error', 'Security token missing. Please try again.');
         }
 
-        // Enhanced CSRF validation
-        if (!$this->tokensMatch($request)) {
-            $this->logCsrfViolation($request);
-            throw new TokenMismatchException('CSRF token mismatch.');
-        }
+        // Validate CSRF token
+        if (!hash_equals(session()->token(), $request->input('_token'))) {
+            $this->securityService->monitorEvent('csrf_token_mismatch', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'user_id' => auth()->id(),
+                'expected_token' => substr(session()->token(), 0, 10) . '...',
+                'received_token' => substr($request->input('_token'), 0, 10) . '...',
+            ]);
 
-        // Regenerate CSRF token for additional security
-        $this->regenerateToken($request);
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Invalid security token'], 419);
+            }
+
+            return redirect()->back()->with('error', 'Invalid security token. Please try again.');
+        }
 
         return $next($request);
     }
 
     /**
-     * Check if the request should pass through CSRF verification
+     * Determine if CSRF protection should be skipped
      */
-    protected function shouldPassThrough($request): bool
+    protected function shouldSkipCsrf(Request $request): bool
     {
-        foreach ($this->except as $except) {
-            if ($request->is($except)) {
+        $skipPaths = [
+            'api/',
+            'callback/',
+            'webhook/',
+            'payment/',
+        ];
+
+        $path = $request->path();
+        foreach ($skipPaths as $skipPath) {
+            if (str_starts_with($path, $skipPath)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    /**
-     * Check if the CSRF tokens match
-     */
-    protected function tokensMatch($request): bool
-    {
-        $token = $this->getTokenFromRequest($request);
-        
-        return is_string($request->session()->token()) &&
-               is_string($token) &&
-               hash_equals($request->session()->token(), $token);
-    }
-
-    /**
-     * Get the CSRF token from the request
-     */
-    protected function getTokenFromRequest($request): ?string
-    {
-        $token = $request->input('_token') ?: $request->header('X-CSRF-TOKEN');
-
-        if (!$token && $header = $request->header('X-XSRF-TOKEN')) {
-            $token = $this->encrypter->decrypt($header, false);
-        }
-
-        return $token;
-    }
-
-    /**
-     * Regenerate CSRF token for additional security
-     */
-    protected function regenerateToken($request): void
-    {
-        if ($request->session()->has('_token')) {
-            $request->session()->regenerateToken();
-        }
-    }
-
-    /**
-     * Log CSRF violation attempts
-     */
-    protected function logCsrfViolation($request): void
-    {
-        \Log::warning('CSRF token mismatch detected', [
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'url' => $request->fullUrl(),
-            'method' => $request->method(),
-            'user_id' => auth()->id(),
-            'timestamp' => now(),
-        ]);
-    }
-
-    /**
-     * Add CSRF token to response
-     */
-    public function addCookieToResponse($request, $response)
-    {
-        $response->headers->setCookie(
-            $this->newCookie($request, $this->getCookieConfig())
-        );
-
-        return $response;
-    }
-
-    /**
-     * Create a new CSRF cookie
-     */
-    protected function newCookie($request, $config)
-    {
-        return cookie(
-            $config['name'] ?? 'XSRF-TOKEN',
-            $request->session()->token(),
-            $config['expires'] ?? 0,
-            $config['path'] ?? '/',
-            $config['domain'] ?? null,
-            $request->secure(),
-            $config['http_only'] ?? true,
-            $config['raw'] ?? false,
-            $config['same_site'] ?? 'strict'
-        );
-    }
-
-    /**
-     * Get cookie configuration
-     */
-    protected function getCookieConfig()
-    {
-        return [
-            'name' => 'XSRF-TOKEN',
-            'expires' => 0,
-            'path' => '/',
-            'domain' => null,
-            'http_only' => true,
-            'raw' => false,
-            'same_site' => 'strict'
-        ];
     }
 }

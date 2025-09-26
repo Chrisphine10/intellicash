@@ -9,7 +9,7 @@
                     <ol class="breadcrumb m-0">
                         <li class="breadcrumb-item"><a href="{{ route('dashboard.index') }}">{{ _lang('Dashboard') }}</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('asset-management.dashboard') }}">{{ _lang('Asset Management') }}</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index') }}">{{ _lang('Leases') }}</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}">{{ _lang('Leases') }}</a></li>
                         <li class="breadcrumb-item active">{{ _lang('Edit Lease') }}</li>
                     </ol>
                 </div>
@@ -25,7 +25,7 @@
                     <h4 class="card-title mb-0">{{ _lang('Edit Lease') }} #{{ $lease->id }}</h4>
                 </div>
                 <div class="card-body">
-                    <form action="{{ route('asset-leases.update', $lease) }}" method="POST">
+                    <form action="{{ route('asset-leases.update', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id ?? 0]) }}" method="POST">
                         @csrf
                         @method('PUT')
                         
@@ -162,7 +162,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-1"></i> {{ _lang('Update Lease') }}
                             </button>
-                            <a href="{{ route('asset-leases.show', $lease) }}" class="btn btn-secondary">
+                            <a href="{{ route('asset-leases.show', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id ?? 0]) }}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i> {{ _lang('Cancel') }}
                             </a>
                         </div>
@@ -197,11 +197,18 @@
                     <h4 class="card-title mb-0">{{ _lang('Asset Information') }}</h4>
                 </div>
                 <div class="card-body">
-                    <div class="text-center">
-                        <h5>{{ $lease->asset->name }}</h5>
-                        <p class="text-muted">{{ $lease->asset->asset_code }}</p>
-                        <span class="badge badge-secondary">{{ $lease->asset->category->name }}</span>
-                    </div>
+                    @if($lease->asset)
+                        <div class="text-center">
+                            <h5>{{ $lease->asset->name }}</h5>
+                            <p class="text-muted">{{ $lease->asset->asset_code }}</p>
+                            <span class="badge badge-secondary">{{ $lease->asset->category->name }}</span>
+                        </div>
+                    @else
+                        <div class="text-center">
+                            <h5 class="text-muted">{{ _lang('Asset not found') }}</h5>
+                            <p class="text-muted">{{ _lang('The associated asset has been deleted or is unavailable') }}</p>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

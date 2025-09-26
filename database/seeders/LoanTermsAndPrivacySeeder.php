@@ -17,6 +17,11 @@ class LoanTermsAndPrivacySeeder extends Seeder
     {
         $tenants = Tenant::all();
         
+        if ($tenants->isEmpty()) {
+            $this->command->info('No tenants found. Skipping loan terms and privacy seeding.');
+            return;
+        }
+        
         foreach ($tenants as $tenant) {
             // Get the first admin user for this tenant
             $adminUser = User::where('tenant_id', $tenant->id)
@@ -24,6 +29,7 @@ class LoanTermsAndPrivacySeeder extends Seeder
                 ->first();
             
             if (!$adminUser) {
+                $this->command->warn("No admin user found for tenant {$tenant->id}. Skipping...");
                 continue;
             }
             

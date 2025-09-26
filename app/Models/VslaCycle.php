@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\VslaLoanCalculator;
 use App\Traits\MultiTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -258,14 +259,16 @@ class VslaCycle extends Model
 
     /**
      * Calculate actual loan interest earned during the cycle
+     * FIXED: Improved performance with eager loading and better error handling
      */
     private function calculateActualLoanInterest()
     {
         $cycleStart = $this->start_date;
         $cycleEnd = $this->end_date ?? now();
 
-        // Get all loans issued during this cycle
-        $cycleLoans = Loan::where('tenant_id', $this->tenant_id)
+        // FIXED: Use eager loading to prevent N+1 queries
+        $cycleLoans = Loan::with('loan_product')
+            ->where('tenant_id', $this->tenant_id)
             ->where('release_date', '>=', $cycleStart)
             ->where('release_date', '<=', $cycleEnd)
             ->where('status', 2) // Active loans
@@ -274,9 +277,22 @@ class VslaCycle extends Model
         $totalInterestEarned = 0;
 
         foreach ($cycleLoans as $loan) {
-            // Calculate interest earned on this loan during the cycle
-            $loanInterest = $this->calculateLoanInterestForPeriod($loan, $cycleStart, $cycleEnd);
-            $totalInterestEarned += $loanInterest;
+            try {
+                // Calculate interest earned on this loan during the cycle
+                $loanInterest = $this->calculateLoanInterestForPeriod($loan, $cycleStart, $cycleEnd);
+                $totalInterestEarned += $loanInterest;
+            } catch (\Exception $e) {
+                // Log error but continue processing other loans
+                \Log::error('VSLA Loan Interest Calculation Error', [
+                    'loan_id' => $loan->id,
+                    'cycle_id' => $this->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                
+                // Continue with next loan instead of failing entire calculation
+                continue;
+            }
         }
 
         return $totalInterestEarned;
@@ -284,6 +300,7 @@ class VslaCycle extends Model
 
     /**
      * Calculate interest earned on a specific loan for a given period
+     * FIXED: Corrected loan end date calculation and improved logic
      */
     private function calculateLoanInterestForPeriod($loan, $startDate, $endDate)
     {
@@ -294,9 +311,15 @@ class VslaCycle extends Model
         $interestRate = $loan->loan_product->interest_rate / 100;
         $principalAmount = $loan->applied_amount;
         
-        // Calculate the number of days the loan was active during the cycle
+        // Calculate the actual loan period within the cycle
         $loanStartDate = max($loan->release_date, $startDate);
-        $loanEndDate = min($loan->first_payment_date ?? $endDate, $endDate);
+        
+        // FIXED: Use proper loan maturity date instead of first_payment_date
+        $loanMaturityDate = $loan->maturity_date ?? 
+                           ($loan->first_payment_date ? $loan->first_payment_date->addDays($loan->loan_product->term * 30) : null) ??
+                           $loan->release_date->addDays($loan->loan_product->term * 30);
+        
+        $loanEndDate = min($loanMaturityDate, $endDate);
         
         if ($loanStartDate >= $loanEndDate) {
             return 0;
@@ -304,28 +327,14 @@ class VslaCycle extends Model
 
         $daysActive = $loanStartDate->diffInDays($loanEndDate);
         
-        // Calculate interest based on loan product type
-        switch ($loan->loan_product->interest_type) {
-            case 'flat_rate':
-                // Flat rate: interest calculated on original principal
-                return ($principalAmount * $interestRate * $daysActive) / 365;
-                
-            case 'reducing_amount':
-                // Reducing balance: calculate based on remaining principal
-                $remainingPrincipal = max(0, $principalAmount - $loan->total_paid);
-                return ($remainingPrincipal * $interestRate * $daysActive) / 365;
-                
-            case 'one_time':
-                // One-time interest: only if loan was fully repaid during cycle
-                if ($loan->total_paid >= $loan->total_payable) {
-                    return $loan->total_payable - $principalAmount;
-                }
-                return 0;
-                
-            default:
-                // Default to simple interest calculation
-                return ($principalAmount * $interestRate * $daysActive) / 365;
-        }
+        // FIXED: Use centralized loan calculator for consistency
+        return VslaLoanCalculator::calculateInterestForPeriod(
+            $principalAmount, 
+            $interestRate, 
+            $daysActive, 
+            $loan->loan_product->interest_type,
+            $loan->total_paid
+        );
     }
 
     /**

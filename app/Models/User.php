@@ -111,4 +111,51 @@ class User extends Authenticatable implements MustVerifyEmail {
         $this->notify(new UserResetPasswordNotification($token));
     }
 
+    // Relationships
+    public function employee()
+    {
+        return $this->hasOne(Employee::class, 'user_id');
+    }
+
+    /**
+     * Check if user has a specific permission
+     *
+     * @param string|array $abilities
+     * @param array $arguments
+     * @return bool
+     */
+    public function can($abilities, $arguments = [])
+    {
+        // If user is tenant owner or superadmin, they have all permissions
+        if ($this->tenant_owner == 1 || $this->user_type === 'superadmin') {
+            return true;
+        }
+
+        // Handle array of abilities
+        if (is_array($abilities)) {
+            foreach ($abilities as $ability) {
+                if (!$this->hasPermission($ability)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Handle single ability
+        return $this->hasPermission($abilities);
+    }
+
+    /**
+     * Check if user has a specific permission through their role
+     *
+     * @param string $permission
+     * @return bool
+     */
+    public function hasPermission($permission)
+    {
+        return $this->role->permissions()
+            ->where('permission', $permission)
+            ->exists();
+    }
+
 }

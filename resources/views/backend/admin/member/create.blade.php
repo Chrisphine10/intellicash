@@ -8,6 +8,11 @@
 			<div class="card">
 				<div class="card-header">
 					<span class="header-title">{{ _lang('Add New Member') }}</span>
+					<div class="card-tools">
+						<a href="{{ route('members.index') }}" class="btn btn-secondary btn-sm">
+							<i class="fas fa-arrow-left"></i> {{ _lang('Back to Members') }}
+						</a>
+					</div>
 				</div>
 				<div class="card-body">
 					<div class="row">

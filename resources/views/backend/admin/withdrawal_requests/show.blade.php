@@ -90,20 +90,20 @@
                         <table class="table table-sm">
                             <tr>
                                 <td><strong>{{ _lang('Name') }}:</strong></td>
-                                <td>{{ $requirements['recipient_details']['name'] ?? 'N/A' }}</td>
+                                <td>{{ e($requirements['recipient_details']['name'] ?? 'N/A') }}</td>
                             </tr>
                             <tr>
                                 <td><strong>{{ _lang('Mobile') }}:</strong></td>
-                                <td>{{ $requirements['recipient_details']['mobile'] ?? 'N/A' }}</td>
+                                <td>{{ e($requirements['recipient_details']['mobile'] ?? 'N/A') }}</td>
                             </tr>
                             <tr>
                                 <td><strong>{{ _lang('Account Number') }}:</strong></td>
-                                <td>{{ $requirements['recipient_details']['account_number'] ?? 'N/A' }}</td>
+                                <td>{{ e($requirements['recipient_details']['account_number'] ?? 'N/A') }}</td>
                             </tr>
                             @if(isset($requirements['recipient_details']['bank_code']))
                             <tr>
                                 <td><strong>{{ _lang('Bank Code') }}:</strong></td>
-                                <td>{{ $requirements['recipient_details']['bank_code'] }}</td>
+                                <td>{{ e($requirements['recipient_details']['bank_code']) }}</td>
                             </tr>
                             @endif
                         </table>
@@ -116,7 +116,7 @@
                     <div class="col-md-12">
                         <div class="alert alert-danger">
                             <h6 class="text-danger">{{ _lang('Rejection Reason') }}</h6>
-                            <p>{{ $requirements['rejection_reason'] }}</p>
+                            <p>{{ e($requirements['rejection_reason']) }}</p>
                         </div>
                     </div>
                 </div>

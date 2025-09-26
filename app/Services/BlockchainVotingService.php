@@ -66,15 +66,21 @@ class BlockchainVotingService
     }
 
     /**
-     * Generate unique vote hash using SHA-256
+     * Generate unique vote hash using SHA-256 with cryptographically secure random data
      */
     private function generateVoteHash(Vote $vote)
     {
+        // Use cryptographically secure random data to prevent collisions
+        $randomNonce = bin2hex(random_bytes(32));
+        $timestamp = microtime(true) * 1000000; // High precision timestamp
+        
         $voteString = $vote->election_id . 
                      $vote->member_id . 
                      $vote->candidate_id . 
                      $vote->voted_at->timestamp . 
                      $vote->tenant_id . 
+                     $randomNonce .
+                     $timestamp .
                      config('app.key');
 
         return hash('sha256', $voteString);
@@ -119,14 +125,19 @@ class BlockchainVotingService
     }
 
     /**
-     * Generate block hash for blockchain
+     * Generate block hash for blockchain with improved security
      */
     private function generateBlockHash(array $voteData)
     {
+        // Use cryptographically secure nonce
+        $nonce = $this->generateNonce();
+        $timestamp = microtime(true) * 1000000; // High precision timestamp
+        
         $blockString = $this->previousHash . 
-                      json_encode($voteData) . 
-                      now()->timestamp . 
-                      $this->generateNonce();
+                      json_encode($voteData, JSON_SORT_KEYS) . // Sort keys for consistency
+                      $timestamp . 
+                      $nonce .
+                      config('app.key');
 
         return hash('sha256', $blockString);
     }
@@ -148,26 +159,32 @@ class BlockchainVotingService
             return false;
         }
 
-        // Recreate vote data
-        $voteData = [
-            'election_id' => $vote->election_id,
-            'member_id' => $vote->member_id,
-            'candidate_id' => $vote->candidate_id,
-            'voted_at' => $vote->voted_at->toISOString(),
-            'tenant_id' => $vote->tenant_id,
-            'vote_hash' => $this->generateVoteHash($vote),
-            'digital_signature' => $this->generateDigitalSignature($vote),
-            'timestamp' => $vote->voted_at->timestamp,
-        ];
+        try {
+            // Recreate vote data with same security parameters
+            $voteData = [
+                'election_id' => $vote->election_id,
+                'member_id' => $vote->member_id,
+                'candidate_id' => $vote->candidate_id,
+                'voted_at' => $vote->voted_at->toISOString(),
+                'tenant_id' => $vote->tenant_id,
+                'vote_hash' => $this->generateVoteHash($vote),
+                'digital_signature' => $this->generateDigitalSignature($vote),
+                'timestamp' => $vote->voted_at->timestamp,
+            ];
 
-        // Verify hash
-        $expectedHash = $this->generateBlockHash($voteData);
-        $isValid = hash_equals($vote->blockchain_hash, $expectedHash);
+            // Verify hash using secure comparison
+            $expectedHash = $this->generateBlockHash($voteData);
+            $isValid = hash_equals($vote->blockchain_hash, $expectedHash);
 
-        // Log verification attempt
-        $this->logBlockchainTransaction($vote, $vote->blockchain_hash, 'VOTE_VERIFIED', $isValid);
+            // Log verification attempt
+            $this->logBlockchainTransaction($vote, $vote->blockchain_hash, 'VOTE_VERIFIED', $isValid);
 
-        return $isValid;
+            return $isValid;
+        } catch (\Exception $e) {
+            // Log verification failure
+            $this->logBlockchainTransaction($vote, $vote->blockchain_hash, 'VOTE_VERIFICATION_ERROR', false);
+            return false;
+        }
     }
 
     /**

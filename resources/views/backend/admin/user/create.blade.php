@@ -7,6 +7,11 @@
         <div class="card">
             <div class="card-header">
                 <span class="panel-title">{{ _lang('Add New User') }}</span>
+                <div class="card-tools">
+                    <a href="{{ route('users.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back to Users') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="post" class="validate" autocomplete="off" action="{{ route('users.store') }}"
@@ -34,7 +39,15 @@
                             <div class="form-group row">
                                 <label class="col-xl-3 col-form-label">{{ _lang('Password') }}</label>
                                 <div class="col-xl-9">
-                                    <input type="password" class="form-control" name="password" value="" required>
+                                    <input type="password" class="form-control" name="password" value="" required minlength="8">
+                                    <small class="text-muted">{{ _lang('Password must be at least 8 characters long') }}</small>
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
+                                <label class="col-xl-3 col-form-label">{{ _lang('Confirm Password') }}</label>
+                                <div class="col-xl-9">
+                                    <input type="password" class="form-control" name="password_confirmation" value="" required minlength="8">
                                 </div>
                             </div>
 
@@ -163,7 +176,7 @@
 <script>
 $(document).ready(function() {
     // Initialize phone input
-    var input = document.querySelector("#phone");
+    var input = document.querySelector("#mobile");
     if (input) {
         window.intlTelInput(input, {
             initialCountry: "auto",
@@ -181,52 +194,180 @@ $(document).ready(function() {
         });
     }
 
-    // Debug: Check if elements exist
-    console.log('User type element found:', $('#user_type').length);
-    console.log('Role ID element found:', $('#role_id').length);
-    
-    // Handle user type change to enable/disable role selection
-    $(document).on('change', '#user_type', function() {
-        var userType = $(this).val();
+    // Enhanced user type and role selection logic
+    function updateRoleSelection() {
+        var userType = $('#user_type').val();
         var roleSelect = $('#role_id');
+        var roleHelpText = $('#role-help-text');
         
-        console.log('User type changed to:', userType);
+        // Remove existing help text
+        if (roleHelpText.length) {
+            roleHelpText.remove();
+        }
         
         if (userType === 'user') {
             // Enable role selection for regular users
             roleSelect.prop('disabled', false);
             roleSelect.attr('required', true);
-            console.log('Role dropdown enabled for user type');
+            roleSelect.closest('.form-group').find('.col-xl-9').append(
+                '<small id="role-help-text" class="text-info"><i class="ti-info-alt"></i> ' + 
+                '{{ _lang("Regular users need a role to define their permissions") }}</small>'
+            );
         } else if (userType === 'admin') {
             // Disable role selection for admins
             roleSelect.prop('disabled', true);
             roleSelect.removeAttr('required');
             roleSelect.val('');
-            console.log('Role dropdown disabled for admin type');
+            roleSelect.closest('.form-group').find('.col-xl-9').append(
+                '<small id="role-help-text" class="text-success"><i class="ti-check"></i> ' + 
+                '{{ _lang("Admins have full access and do not need role assignment") }}</small>'
+            );
         } else {
             // Disable if no selection
             roleSelect.prop('disabled', true);
             roleSelect.removeAttr('required');
             roleSelect.val('');
-            console.log('Role dropdown disabled - no user type selected');
+        }
+        
+        // Re-validate the form
+        if (typeof $('form.validate').parsley !== 'undefined') {
+            $('form.validate').parsley().validate();
+        }
+    }
+    
+    // Handle user type change
+    $('#user_type').on('change', updateRoleSelection);
+    
+    // Initialize on page load
+    updateRoleSelection();
+    
+    // Password confirmation validation
+    $('input[name="password_confirmation"]').on('input', function() {
+        var password = $('input[name="password"]').val();
+        var confirmation = $(this).val();
+        
+        if (password && confirmation && password !== confirmation) {
+            $(this).addClass('is-invalid');
+            if (!$(this).next('.invalid-feedback').length) {
+                $(this).after('<div class="invalid-feedback">{{ _lang("Password confirmation does not match") }}</div>');
+            }
+        } else {
+            $(this).removeClass('is-invalid');
+            $(this).next('.invalid-feedback').remove();
         }
     });
-
-    // Also try direct event binding
-    $('#user_type').on('change', function() {
-        console.log('Direct event binding triggered');
-        var userType = $(this).val();
-        var roleSelect = $('#role_id');
+    
+    // Real-time password strength indicator
+    $('input[name="password"]').on('input', function() {
+        var password = $(this).val();
+        var strengthIndicator = $('#password-strength');
         
-        if (userType === 'user') {
-            roleSelect.prop('disabled', false);
-            roleSelect.attr('required', true);
+        if (!strengthIndicator.length) {
+            $(this).after('<div id="password-strength" class="mt-1"></div>');
+            strengthIndicator = $('#password-strength');
+        }
+        
+        var strength = 0;
+        var feedback = [];
+        
+        if (password.length >= 8) strength++;
+        else feedback.push('{{ _lang("At least 8 characters") }}');
+        
+        if (/[A-Z]/.test(password)) strength++;
+        else feedback.push('{{ _lang("One uppercase letter") }}');
+        
+        if (/[a-z]/.test(password)) strength++;
+        else feedback.push('{{ _lang("One lowercase letter") }}');
+        
+        if (/[0-9]/.test(password)) strength++;
+        else feedback.push('{{ _lang("One number") }}');
+        
+        if (/[^A-Za-z0-9]/.test(password)) strength++;
+        else feedback.push('{{ _lang("One special character") }}');
+        
+        var strengthText = '';
+        var strengthClass = '';
+        
+        if (strength <= 2) {
+            strengthText = '{{ _lang("Weak") }}';
+            strengthClass = 'text-danger';
+        } else if (strength <= 3) {
+            strengthText = '{{ _lang("Fair") }}';
+            strengthClass = 'text-warning';
+        } else if (strength <= 4) {
+            strengthText = '{{ _lang("Good") }}';
+            strengthClass = 'text-info';
         } else {
-            roleSelect.prop('disabled', true);
-            roleSelect.removeAttr('required');
-            if (userType !== 'user') {
-                roleSelect.val('');
-            }
+            strengthText = '{{ _lang("Strong") }}';
+            strengthClass = 'text-success';
+        }
+        
+        strengthIndicator.html(
+            '<small class="' + strengthClass + '">' +
+            '<i class="ti-shield"></i> ' + strengthText +
+            (feedback.length > 0 ? ' - ' + feedback.join(', ') : '') +
+            '</small>'
+        );
+    });
+    
+    // Form submission validation
+    $('form.validate').on('submit', function(e) {
+        var isValid = true;
+        var errors = [];
+        
+        // Check password confirmation
+        var password = $('input[name="password"]').val();
+        var confirmation = $('input[name="password_confirmation"]').val();
+        
+        if (password !== confirmation) {
+            errors.push('{{ _lang("Password confirmation does not match") }}');
+            isValid = false;
+        }
+        
+        // Check role requirement for users
+        var userType = $('#user_type').val();
+        var roleId = $('#role_id').val();
+        
+        if (userType === 'user' && !roleId) {
+            errors.push('{{ _lang("Role is required for regular users") }}');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            
+            // Show errors
+            var errorHtml = '<div class="alert alert-danger"><ul class="mb-0">';
+            errors.forEach(function(error) {
+                errorHtml += '<li>' + error + '</li>';
+            });
+            errorHtml += '</ul></div>';
+            
+            // Remove existing error alerts
+            $('.alert-danger').remove();
+            
+            // Add new error alert
+            $('form.validate').prepend(errorHtml);
+            
+            // Scroll to top
+            $('html, body').animate({ scrollTop: 0 }, 500);
+            
+            return false;
+        }
+    });
+    
+    // Toggle optional fields
+    $('.toggle-optional-fields').on('click', function(e) {
+        e.preventDefault();
+        var $this = $(this);
+        var $fields = $('.optional-field');
+        
+        if ($fields.is(':visible')) {
+            $fields.slideUp();
+            $this.text('{{ _lang("Show Optional Fields") }}');
+        } else {
+            $fields.slideDown();
+            $this.text('{{ _lang("Hide Optional Fields") }}');
         }
     });
 });

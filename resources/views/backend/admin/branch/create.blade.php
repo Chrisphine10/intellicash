@@ -6,6 +6,11 @@
 		<div class="card">
 			<div class="card-header">
 				<span class="header-title">{{ _lang('Add New Branch') }}</span>
+				<div class="card-tools">
+					<a href="{{ route('branches.index') }}" class="btn btn-secondary btn-sm">
+						<i class="fas fa-arrow-left"></i> {{ _lang('Back to Branches') }}
+					</a>
+				</div>
 			</div>
 			<div class="card-body">
 			    <form method="post" class="validate" autocomplete="off" action="{{ route('branches.store') }}" enctype="multipart/form-data">

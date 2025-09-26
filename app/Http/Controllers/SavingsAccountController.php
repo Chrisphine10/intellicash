@@ -46,32 +46,59 @@ class SavingsAccountController extends Controller {
     }
 
     public function get_table_data() {
-        $savingsaccounts = SavingsAccount::with(['member', 'savings_type.currency'])
-            ->select('savings_accounts.*')
-            ->withoutGlobalScopes(['status'])
+        // Use DB query builder for complete control over column selection
+        $savingsaccounts = DB::table('savings_accounts')
+            ->select([
+                'savings_accounts.id',
+                'savings_accounts.account_number',
+                'savings_accounts.member_id',
+                'savings_accounts.savings_product_id',
+                'savings_accounts.status as account_status',
+                'savings_accounts.opening_balance',
+                'savings_accounts.description',
+                'savings_accounts.created_at',
+                'savings_accounts.updated_at',
+                'members.first_name as member_first_name',
+                'members.last_name as member_last_name',
+                'savings_products.name as savings_type_name',
+                'currency.name as currency_name'
+            ])
+            ->leftJoin('members', 'savings_accounts.member_id', '=', 'members.id')
+            ->leftJoin('savings_products', 'savings_accounts.savings_product_id', '=', 'savings_products.id')
+            ->leftJoin('currency', 'savings_products.currency_id', '=', 'currency.id')
+            ->where('savings_accounts.status', '!=', 0)
             ->orderBy("savings_accounts.id", "desc");
 
-        return Datatables::eloquent($savingsaccounts)
-            ->editColumn('member.first_name', function ($savingsaccount) {
-                return $savingsaccount->member->first_name . ' ' . $savingsaccount->member->last_name;
+        return Datatables::of($savingsaccounts)
+            ->editColumn('member_first_name', function ($savingsaccount) {
+                return $savingsaccount->member_first_name . ' ' . $savingsaccount->member_last_name;
             })
-            ->editColumn('status', function ($savingsaccount) {
-                return status($savingsaccount->status);
+            ->editColumn('account_status', function ($savingsaccount) {
+                return status($savingsaccount->account_status);
             })
-            ->filterColumn('member.first_name', function ($query, $keyword) {
-                $query->whereHas('member', function ($query) use ($keyword) {
-                    return $query->where("first_name", "like", "{$keyword}%")
-                        ->orWhere("last_name", "like", "{$keyword}%");
+            ->filterColumn('member_first_name', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where("members.first_name", "like", "{$keyword}%")
+                      ->orWhere("members.last_name", "like", "{$keyword}%");
                 });
             }, true)
+            ->filterColumn('account_number', function ($query, $keyword) {
+                $query->where('savings_accounts.account_number', 'like', "{$keyword}%");
+            })
+            ->filterColumn('savings_type_name', function ($query, $keyword) {
+                $query->where('savings_products.name', 'like', "{$keyword}%");
+            })
+            ->filterColumn('account_status', function ($query, $keyword) {
+                $query->where('savings_accounts.status', 'like', "{$keyword}%");
+            })
             ->addColumn('action', function ($savingsaccount) {
                 return '<div class="dropdown text-center">'
                 . '<button class="btn btn-primary btn-xs dropdown-toggle" type="button" data-toggle="dropdown">' . _lang('Action')
                 . '&nbsp;</button>'
                 . '<div class="dropdown-menu">'
-                . '<a class="dropdown-item ajax-modal" href="' . route('savings_accounts.edit', $savingsaccount['id']) . '" data-title="' . _lang('Account Details') . '"><i class="ti-pencil-alt"></i> ' . _lang('Edit') . '</a>'
-                . '<a class="dropdown-item ajax-modal" href="' . route('savings_accounts.show', $savingsaccount['id']) . '" data-title="' . _lang('Update Account') . '"><i class="ti-eye"></i>  ' . _lang('View') . '</a>'
-                . '<form action="' . route('savings_accounts.destroy', $savingsaccount['id']) . '" method="post">'
+                . '<a class="dropdown-item ajax-modal" href="' . route('savings_accounts.edit', $savingsaccount->id) . '" data-title="' . _lang('Account Details') . '"><i class="ti-pencil-alt"></i> ' . _lang('Edit') . '</a>'
+                . '<a class="dropdown-item ajax-modal" href="' . route('savings_accounts.show', $savingsaccount->id) . '" data-title="' . _lang('Update Account') . '"><i class="ti-eye"></i>  ' . _lang('View') . '</a>'
+                . '<form action="' . route('savings_accounts.destroy', $savingsaccount->id) . '" method="post">'
                 . csrf_field()
                 . '<input name="_method" type="hidden" value="DELETE">'
                 . '<button class="dropdown-item btn-remove" type="submit"><i class="ti-trash"></i> ' . _lang('Delete') . '</button>'
@@ -82,7 +109,7 @@ class SavingsAccountController extends Controller {
             ->setRowId(function ($savingsaccount) {
                 return "row_" . $savingsaccount->id;
             })
-            ->rawColumns(['status', 'action'])
+            ->rawColumns(['account_status', 'action'])
             ->make(true);
     }
 
@@ -189,7 +216,11 @@ class SavingsAccountController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function show(Request $request, $tenant, $id) {
-        $savingsaccount = SavingsAccount::with('savings_type.currency', 'member')->withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for savings account access
+        $savingsaccount = SavingsAccount::with('savings_type.currency', 'member')
+                                        ->where('tenant_id', app('tenant')->id)
+                                        ->where('id', $id)
+                                        ->firstOrFail();
         if (! $request->ajax()) {
             return view('backend.admin.savings_accounts.view', compact('savingsaccount', 'id'));
         } else {
@@ -204,7 +235,10 @@ class SavingsAccountController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function edit(Request $request, $tenant, $id) {
-        $savingsaccount = SavingsAccount::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for savings account operations
+        $savingsaccount = SavingsAccount::where('tenant_id', app('tenant')->id)
+                                        ->where('id', $id)
+                                        ->firstOrFail();
         if (! $request->ajax()) {
             return back();
         } else {
@@ -241,7 +275,10 @@ class SavingsAccountController extends Controller {
             }
         }
 
-        $savingsaccount                     = SavingsAccount::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Use proper authorization check instead of bypassing global scopes
+        $savingsaccount = SavingsAccount::where('tenant_id', app('tenant')->id)
+                                        ->where('id', $id)
+                                        ->firstOrFail();
         $savingsaccount->account_number     = $request->input('account_number');
         $savingsaccount->member_id          = $request->input('member_id');
         $savingsaccount->savings_product_id = $request->input('savings_product_id');
@@ -266,7 +303,10 @@ class SavingsAccountController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function destroy($tenant, $id) {
-        $savingsaccount = SavingsAccount::withoutGlobalScopes(['status'])->find($id);
+        // SECURE: Add tenant validation for savings account operations
+        $savingsaccount = SavingsAccount::where('tenant_id', app('tenant')->id)
+                                        ->where('id', $id)
+                                        ->firstOrFail();
         $savingsaccount->delete();
         return redirect()->route('savings_accounts.index')->with('success', _lang('Deleted Successfully'));
     }

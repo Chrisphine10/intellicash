@@ -54,6 +54,13 @@ class SeedRolesForTenants extends Command
             // Create default roles for the tenant
             $roles = [
                 [
+                    'name' => 'Admin',
+                    'description' => 'Tenant Administrator with full access to all features',
+                    'tenant_id' => $tenant->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                [
                     'name' => 'Manager',
                     'description' => 'Manager role with full access to most features',
                     'tenant_id' => $tenant->id,
@@ -84,7 +91,7 @@ class SeedRolesForTenants extends Command
             ];
 
             DB::table('roles')->insert($roles);
-            $this->info("  - Created 4 default roles for tenant {$tenant->name}");
+            $this->info("  - Created 5 default roles for tenant {$tenant->name}");
             
             // Get the created roles to assign permissions
             $createdRoles = DB::table('roles')->where('tenant_id', $tenant->id)->get();
@@ -107,6 +114,9 @@ class SeedRolesForTenants extends Command
         $permissions = [];
         
         switch ($role->name) {
+            case 'Admin':
+                $permissions = $this->getAdminPermissions();
+                break;
             case 'Manager':
                 $permissions = $this->getManagerPermissions();
                 break;
@@ -132,6 +142,185 @@ class SeedRolesForTenants extends Command
         }
         
         $this->info("    - Assigned " . count($permissions) . " permissions to {$role->name} role");
+    }
+    
+    /**
+     * Get Admin permissions (Full access to all features including system administration)
+     */
+    private function getAdminPermissions()
+    {
+        return [
+            // Dashboard - All widgets
+            'dashboard.index',
+            'dashboard.total_customer_widget',
+            'dashboard.deposit_requests_widget',
+            'dashboard.withdraw_requests_widget',
+            'dashboard.loan_requests_widget',
+            'dashboard.pending_loans_widget',
+            'dashboard.overdue_loans_widget',
+            'dashboard.total_loans_widget',
+            'dashboard.total_savings_widget',
+            'dashboard.total_deposits_widget',
+            'dashboard.total_withdrawals_widget',
+            'dashboard.recent_transactions_widget',
+            'dashboard.due_repayments_widget',
+            'dashboard.loan_balances_widget',
+            
+            // Members - Full access
+            'members.index',
+            'members.create',
+            'members.store',
+            'members.show',
+            'members.edit',
+            'members.update',
+            'members.destroy',
+            'members.get_table_data',
+            
+            // Users - Full access (Admin only)
+            'users.index',
+            'users.create',
+            'users.store',
+            'users.show',
+            'users.edit',
+            'users.update',
+            'users.destroy',
+            'users.get_table_data',
+            
+            // Roles - Full access (Admin only)
+            'roles.index',
+            'roles.create',
+            'roles.store',
+            'roles.show',
+            'roles.edit',
+            'roles.update',
+            'roles.destroy',
+            
+            // Permissions - Full access (Admin only)
+            'permission.show',
+            'permission.store',
+            
+            // Loans - Full access
+            'loans.index',
+            'loans.create',
+            'loans.store',
+            'loans.show',
+            'loans.edit',
+            'loans.update',
+            'loans.destroy',
+            'loans.get_table_data',
+            'loans.filter',
+            'loans.approve',
+            'loans.reject',
+            'loans.disburse',
+            
+            // Loan Products - Full access
+            'loan_products.index',
+            'loan_products.create',
+            'loan_products.store',
+            'loan_products.edit',
+            'loan_products.update',
+            'loan_products.destroy',
+            
+            // Loan Repayments - Full access
+            'loan_repayments.index',
+            'loan_repayments.create',
+            'loan_repayments.store',
+            'loan_repayments.show',
+            'loan_repayments.edit',
+            'loan_repayments.update',
+            'loan_repayments.destroy',
+            'loan_repayments.get_table_data',
+            
+            // Savings Accounts - Full access
+            'savings_accounts.index',
+            'savings_accounts.create',
+            'savings_accounts.store',
+            'savings_accounts.show',
+            'savings_accounts.edit',
+            'savings_accounts.update',
+            'savings_accounts.destroy',
+            'savings_accounts.get_table_data',
+            
+            // Savings Products - Full access
+            'savings_products.index',
+            'savings_products.create',
+            'savings_products.store',
+            'savings_products.edit',
+            'savings_products.update',
+            'savings_products.destroy',
+            
+            // Transactions - Full access
+            'transactions.index',
+            'transactions.create',
+            'transactions.store',
+            'transactions.show',
+            'transactions.edit',
+            'transactions.update',
+            'transactions.destroy',
+            'transactions.get_table_data',
+            
+            // Deposit Requests - Full access
+            'deposit_requests.index',
+            'deposit_requests.create',
+            'deposit_requests.store',
+            'deposit_requests.show',
+            'deposit_requests.edit',
+            'deposit_requests.update',
+            'deposit_requests.destroy',
+            'deposit_requests.get_table_data',
+            'deposit_requests.approve',
+            'deposit_requests.reject',
+            
+            // Withdraw Requests - Full access
+            'withdraw_requests.index',
+            'withdraw_requests.create',
+            'withdraw_requests.store',
+            'withdraw_requests.show',
+            'withdraw_requests.edit',
+            'withdraw_requests.update',
+            'withdraw_requests.destroy',
+            'withdraw_requests.get_table_data',
+            'withdraw_requests.approve',
+            'withdraw_requests.reject',
+            
+            // Branches - Full access
+            'branches.index',
+            'branches.create',
+            'branches.store',
+            'branches.show',
+            'branches.edit',
+            'branches.update',
+            'branches.destroy',
+            
+            // Currency - Full access
+            'currency.index',
+            'currency.create',
+            'currency.store',
+            'currency.show',
+            'currency.edit',
+            'currency.update',
+            'currency.destroy',
+            
+            // Settings - Full access
+            'settings.index',
+            'settings.update',
+            
+            // Reports - Full access
+            'reports.index',
+            'reports.members',
+            'reports.loans',
+            'reports.savings',
+            'reports.transactions',
+            'reports.deposits',
+            'reports.withdrawals',
+            
+            // Audit - Full access
+            'audit.index',
+            'audit.show',
+            'audit.get_table_data',
+            'audit.statistics',
+            'audit.export',
+        ];
     }
     
     /**

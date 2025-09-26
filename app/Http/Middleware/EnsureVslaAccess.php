@@ -35,7 +35,7 @@ class EnsureVslaAccess
         
         // Check if user is authenticated
         if (!Auth::check()) {
-            return redirect()->route('login');
+            return redirect()->route('tenant.login', ['tenant' => app('tenant')->slug]);
         }
         
         $user = Auth::user();

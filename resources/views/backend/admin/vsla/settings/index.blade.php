@@ -13,15 +13,7 @@
                     <span class="msg"></span>
                 </div>
                 
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>{{ _lang('Note:') }}</strong> {{ _lang('Loan interest rates and penalties are managed through the Loan Products section. VSLA settings focus on meeting frequency, contribution amounts, and member roles.') }}
-                </div>
                 
-                <div class="alert alert-warning" id="meeting_days_help" style="display: none;">
-                    <i class="fas fa-calendar-alt"></i>
-                    <strong>{{ _lang('Meeting Days Selection:') }}</strong> {{ _lang('Select "Custom (specify days)" from the Meeting Frequency dropdown above to choose specific days of the week for VSLA meetings. You can select multiple days for groups that meet more than once per week.') }}
-                </div>
                 
                 <form method="post" action="{{ route('vsla.settings.update') }}" class="settings-submit">
                     @csrf
@@ -593,12 +585,7 @@ $(document).ready(function() {
             });
         }
         
-        // Show/hide help alert
-        if (frequency === 'custom') {
-            $('#meeting_days_help').slideDown(300);
-        } else {
-            $('#meeting_days_help').slideUp(300);
-        }
+        // Help alert removed as requested
     }
     
     // Function to validate meeting days selection

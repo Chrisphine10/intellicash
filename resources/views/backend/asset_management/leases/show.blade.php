@@ -9,7 +9,7 @@
                     <ol class="breadcrumb m-0">
                         <li class="breadcrumb-item"><a href="{{ route('dashboard.index') }}">{{ _lang('Dashboard') }}</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('asset-management.dashboard') }}">{{ _lang('Asset Management') }}</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index') }}">{{ _lang('Leases') }}</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}">{{ _lang('Leases') }}</a></li>
                         <li class="breadcrumb-item active">{{ _lang('Lease Details') }}</li>
                     </ol>
                 </div>
@@ -26,20 +26,20 @@
                         <h4 class="card-title mb-0">{{ _lang('Lease Information') }}</h4>
                         <div>
                             @if($lease->status === 'active')
-                                <form action="{{ route('asset-leases.complete', $lease) }}" method="POST" class="d-inline">
+                                <form action="{{ route('asset-leases.complete', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline">
                                     @csrf
                                     <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Are you sure you want to complete this lease?')">
                                         <i class="fas fa-check me-1"></i> {{ _lang('Complete Lease') }}
                                     </button>
                                 </form>
-                                <form action="{{ route('asset-leases.cancel', $lease) }}" method="POST" class="d-inline">
+                                <form action="{{ route('asset-leases.cancel', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST" class="d-inline">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to cancel this lease?')">
                                         <i class="fas fa-times me-1"></i> {{ _lang('Cancel Lease') }}
                                     </button>
                                 </form>
                             @endif
-                            <a href="{{ route('asset-leases.index') }}" class="btn btn-secondary btn-sm">
+                            <a href="{{ route('asset-leases.index', ['tenant' => app('tenant')->slug]) }}" class="btn btn-secondary btn-sm">
                                 <i class="fas fa-arrow-left me-1"></i> {{ _lang('Back') }}
                             </a>
                         </div>
@@ -57,13 +57,23 @@
                                 <tr>
                                     <td><strong>{{ _lang('Asset') }}:</strong></td>
                                     <td>
-                                        <a href="{{ route('assets.show', $lease->asset) }}">{{ $lease->asset->name }}</a>
-                                        <br><small class="text-muted">{{ $lease->asset->asset_code }}</small>
+                                        @if($lease->asset)
+                                            <a href="{{ route('assets.show', ['tenant' => app('tenant')->slug, 'asset' => $lease->asset->id]) }}">{{ $lease->asset->name }}</a>
+                                            <br><small class="text-muted">{{ $lease->asset->asset_code }}</small>
+                                        @else
+                                            <span class="text-muted">{{ _lang('Asset not found') }}</span>
+                                        @endif
                                     </td>
                                 </tr>
                                 <tr>
                                     <td><strong>{{ _lang('Member') }}:</strong></td>
-                                    <td>{{ $lease->member->first_name }} {{ $lease->member->last_name }}</td>
+                                    <td>
+                                        @if($lease->member)
+                                            {{ $lease->member->first_name }} {{ $lease->member->last_name }}
+                                        @else
+                                            <span class="text-muted">{{ _lang('Member not found') }}</span>
+                                        @endif
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><strong>{{ _lang('Start Date') }}:</strong></td>
@@ -172,22 +182,28 @@
                 <div class="card-body">
                     <div class="d-grid gap-2">
                         @if($lease->status === 'active')
-                            <form action="{{ route('asset-leases.complete', $lease) }}" method="POST">
+                            <form action="{{ route('asset-leases.complete', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST">
                                 @csrf
                                 <button type="submit" class="btn btn-success w-100" onclick="return confirm('Are you sure you want to complete this lease?')">
                                     <i class="fas fa-check me-1"></i> {{ _lang('Complete Lease') }}
                                 </button>
                             </form>
-                            <form action="{{ route('asset-leases.cancel', $lease) }}" method="POST">
+                            <form action="{{ route('asset-leases.cancel', ['tenant' => app('tenant')->slug, 'lease' => $lease->id ?? 0]) }}" method="POST">
                                 @csrf
                                 <button type="submit" class="btn btn-danger w-100" onclick="return confirm('Are you sure you want to cancel this lease?')">
                                     <i class="fas fa-times me-1"></i> {{ _lang('Cancel Lease') }}
                                 </button>
                             </form>
                         @endif
-                        <a href="{{ route('asset-leases.edit', $lease) }}" class="btn btn-primary">
-                            <i class="fas fa-edit me-1"></i> {{ _lang('Edit Lease') }}
-                        </a>
+                        @if($lease->id)
+                            <a href="{{ route('asset-leases.edit', ['tenant' => app('tenant')->slug, 'asset_lease' => $lease->id]) }}" class="btn btn-primary">
+                                <i class="fas fa-edit me-1"></i> {{ _lang('Edit Lease') }}
+                            </a>
+                        @else
+                            <button class="btn btn-primary" disabled>
+                                <i class="fas fa-edit me-1"></i> {{ _lang('Edit Lease') }}
+                            </button>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -232,24 +248,31 @@
                     <h4 class="card-title mb-0">{{ _lang('Asset Information') }}</h4>
                 </div>
                 <div class="card-body">
-                    <div class="text-center">
-                        <h5>{{ $lease->asset->name }}</h5>
-                        <p class="text-muted">{{ $lease->asset->asset_code }}</p>
-                        <span class="badge badge-secondary">{{ $lease->asset->category->name }}</span>
-                    </div>
-                    <hr>
-                    <div class="row text-center">
-                        <div class="col-6">
-                            <div class="border-end">
-                                <h6 class="text-primary">{{ formatAmount($lease->asset->purchase_value) }}</h6>
-                                <p class="text-muted mb-0">{{ _lang('Purchase Value') }}</p>
+                    @if($lease->asset)
+                        <div class="text-center">
+                            <h5>{{ $lease->asset->name }}</h5>
+                            <p class="text-muted">{{ $lease->asset->asset_code }}</p>
+                            <span class="badge badge-secondary">{{ $lease->asset->category->name }}</span>
+                        </div>
+                        <hr>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="border-end">
+                                    <h6 class="text-primary">{{ formatAmount($lease->asset->purchase_value) }}</h6>
+                                    <p class="text-muted mb-0">{{ _lang('Purchase Value') }}</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="text-success">{{ formatAmount($lease->asset->current_value) }}</h6>
+                                <p class="text-muted mb-0">{{ _lang('Current Value') }}</p>
                             </div>
                         </div>
-                        <div class="col-6">
-                            <h6 class="text-success">{{ formatAmount($lease->asset->current_value) }}</h6>
-                            <p class="text-muted mb-0">{{ _lang('Current Value') }}</p>
+                    @else
+                        <div class="text-center">
+                            <h5 class="text-muted">{{ _lang('Asset not found') }}</h5>
+                            <p class="text-muted">{{ _lang('The associated asset has been deleted or is unavailable') }}</p>
                         </div>
-                    </div>
+                    @endif
                 </div>
             </div>
         </div>

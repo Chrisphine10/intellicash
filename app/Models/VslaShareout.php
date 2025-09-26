@@ -139,11 +139,9 @@ class VslaShareout extends Model
             : 0;
 
         // Calculate profit share (percentage of total available profit)
-        // Profit = Total available - (shares + welfare + penalties)
-        $totalProfit = $cycle->total_available_for_shareout - 
-                      $cycle->total_shares_contributed - 
-                      $cycle->total_welfare_contributed - 
-                      $cycle->total_penalties_collected;
+        // FIXED: Corrected profit calculation logic
+        // Profit = Loan interest earned (this is the actual VSLA profit)
+        $totalProfit = $cycle->total_loan_interest_earned;
         
         $profitShare = max(0, $totalProfit * $sharePercentage);
 

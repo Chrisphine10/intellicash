@@ -25,7 +25,7 @@ class LoanCalculator
 
     private function getDurationInYears(): float
     {
-        // Parse the term_period, e.g. "+7 day", "+3 month", "+1 year"
+        // Parse the term_period, e.g. "+7 day", "+3 month", "+1 year", or just "days", "months", "years"
         // Remove the leading "+" if present
         $term_period_clean = ltrim($this->term_period, '+');
 
@@ -33,11 +33,18 @@ class LoanCalculator
         preg_match('/(\d+)\s*(day|month|year)s?/', $term_period_clean, $matches);
 
         if (! $matches) {
-            throw new \Exception("Invalid term_period format: " . $this->term_period);
+            // Try to match just the unit without number (e.g., "days", "months", "years")
+            preg_match('/(day|month|year)s?/', $term_period_clean, $unitMatches);
+            if ($unitMatches) {
+                $intervalCount = 1; // Default to 1 if no number specified
+                $intervalUnit = strtolower($unitMatches[1]);
+            } else {
+                throw new \Exception("Invalid term_period format: " . $this->term_period);
+            }
+        } else {
+            $intervalCount = (int) $matches[1];
+            $intervalUnit  = strtolower($matches[2]);
         }
-
-        $intervalCount = (int) $matches[1];
-        $intervalUnit  = strtolower($matches[2]);
 
         // Calculate total duration in years
         switch ($intervalUnit) {
@@ -56,6 +63,34 @@ class LoanCalculator
             default:
                 throw new \Exception("Unsupported interval unit: " . $intervalUnit);
         }
+    }
+
+    /**
+     * Convert term_period to strtotime compatible format
+     */
+    private function getStrtotimeFormat(): string
+    {
+        // Parse the term_period, e.g. "+7 day", "+3 month", "+1 year", or just "days", "months", "years"
+        $term_period_clean = ltrim($this->term_period, '+');
+
+        // Split into number and unit
+        preg_match('/(\d+)\s*(day|month|year)s?/', $term_period_clean, $matches);
+
+        if (! $matches) {
+            // Try to match just the unit without number (e.g., "days", "months", "years")
+            preg_match('/(day|month|year)s?/', $term_period_clean, $unitMatches);
+            if ($unitMatches) {
+                $intervalCount = 1; // Default to 1 if no number specified
+                $intervalUnit = strtolower($unitMatches[1]);
+            } else {
+                throw new \Exception("Invalid term_period format: " . $this->term_period);
+            }
+        } else {
+            $intervalCount = (int) $matches[1];
+            $intervalUnit  = strtolower($matches[2]);
+        }
+
+        return "+{$intervalCount} {$intervalUnit}";
     }
 
     public function get_flat_rate()
@@ -91,7 +126,7 @@ class LoanCalculator
                 'balance'          => max($balance, 0),
             ];
 
-            $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+            $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
         }
 
         return $schedule;
@@ -122,7 +157,7 @@ class LoanCalculator
     //             'balance'          => $balance,
     //         ];
 
-    //         $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+    //         $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
     //     }
 
     //     return $data;
@@ -130,30 +165,36 @@ class LoanCalculator
 
     public function get_fixed_rate()
     {
-        $this->payable_amount = ((($this->interest_rate / 100) * $this->amount) * $this->term) + $this->amount;
-        $date                 = $this->first_payment_date;
-        $principal_amount     = $this->amount / $this->term;
-        $amount_to_pay        = $principal_amount + (($this->interest_rate / 100) * $this->amount);
-        $interest             = (($this->interest_rate / 100) * $this->loan_amount);
-        $balance              = $this->amount;
-        $penalty              = ($this->late_payment_penalties / 100) * $principal_amount;
-        //$balance              = $this->payable_amount;
-        //$interest             = (($this->interest_rate / 100) * $this->amount);
-        //$penalty              = (($this->late_payment_penalties / 100) * $this->amount);
+        $principal = $this->amount;
+        $rate = $this->interest_rate / 100;
+        $duration_in_years = $this->getDurationInYears();
+        
+        // Calculate total interest based on duration
+        $total_interest = $principal * $rate * $duration_in_years;
+        $total_payable = $principal + $total_interest;
+        
+        $this->payable_amount = $total_payable;
+        
+        $date = $this->first_payment_date;
+        $principal_amount = $principal / $this->term;
+        $interest_per_term = $total_interest / $this->term;
+        $amount_to_pay = $principal_amount + $interest_per_term;
+        $penalty = ($this->late_payment_penalties / 100) * $principal_amount;
+        $balance = $principal;
 
         $data = [];
         for ($i = 0; $i < $this->term; $i++) {
             $balance = $balance - $principal_amount;
-            $data[]  = [
+            $data[] = [
                 'date'             => $date,
                 'amount_to_pay'    => $amount_to_pay,
                 'penalty'          => $penalty,
                 'principal_amount' => $principal_amount,
-                'interest'         => $interest,
-                'balance'          => $balance,
+                'interest'         => $interest_per_term,
+                'balance'          => max($balance, 0),
             ];
 
-            $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+            $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
         }
 
         return $data;
@@ -191,7 +232,7 @@ class LoanCalculator
                 'balance'          => $balance,
             ];
 
-            $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+            $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
         }
 
         return $data;
@@ -219,7 +260,7 @@ class LoanCalculator
             'balance'          => $balance,
         ];
 
-        $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+        $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
 
         return $data;
     }
@@ -257,7 +298,7 @@ class LoanCalculator
                 'balance'          => $balance,
             ];
 
-            $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+            $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
         }
 
         return $data;
@@ -303,7 +344,7 @@ class LoanCalculator
                 'balance'          => max($balance, 0),
             ];
             
-            $date = date("Y-m-d", strtotime($this->term_period, strtotime($date)));
+            $date = date("Y-m-d", strtotime($this->getStrtotimeFormat(), strtotime($date)));
         }
         
         return $schedule;
@@ -523,8 +564,8 @@ class LoanCalculator
                     
                 case 'rate':
                 case 'interest_rate':
-                    if (!is_numeric($value) || $value < 0 || $value > 1) {
-                        $errors[] = "Invalid interest rate: {$value} (must be between 0 and 1)";
+                    if (!is_numeric($value) || $value < 0 || $value > 100) {
+                        $errors[] = "Invalid interest rate: {$value} (must be between 0 and 100)";
                     }
                     break;
                     

@@ -7,8 +7,19 @@ use Twilio\Rest\Client;
 class TextMessage {
 
     public function send($to, $message) {
-        if ($to < 8 || $to == null) {
-            return;
+        // Enhanced phone number validation
+        if (!$this->validatePhoneNumber($to)) {
+            \Log::warning('Invalid phone number provided for SMS', ['phone' => $to]);
+            return false;
+        }
+        
+        // Sanitize message content
+        $message = $this->sanitizeMessage($message);
+        
+        // Check rate limiting
+        if (!$this->checkRateLimit($to)) {
+            \Log::warning('SMS rate limit exceeded', ['phone' => $to]);
+            return false;
         }
 
         if (app()->bound('tenant')) {
@@ -165,7 +176,87 @@ class TextMessage {
         ]);
 
         $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $error = curl_error($curl);
         curl_close($curl);
+        
+        // Enhanced error handling and logging
+        if ($error) {
+            \Log::error('Africa\'s Talking SMS Error', [
+                'error' => $error,
+                'phone' => $to,
+                'message_length' => strlen($message)
+            ]);
+            return false;
+        }
+        
+        if ($httpCode !== 200) {
+            \Log::error('Africa\'s Talking SMS HTTP Error', [
+                'http_code' => $httpCode,
+                'response' => $response,
+                'phone' => $to
+            ]);
+            return false;
+        }
+        
+        \Log::info('Africa\'s Talking SMS sent successfully', [
+            'phone' => $to,
+            'message_length' => strlen($message),
+            'response' => $response
+        ]);
+        
+        return true;
+    }
+    
+    /**
+     * Validate phone number format and security
+     */
+    private function validatePhoneNumber($phone) {
+        if (empty($phone) || strlen($phone) < 8) {
+            return false;
+        }
+        
+        // Remove any non-numeric characters except + at the beginning
+        $cleaned = preg_replace('/[^0-9+]/', '', $phone);
+        
+        // Check for suspicious patterns
+        if (preg_match('/^(\+?1?[0-9]{10,15})$/', $cleaned)) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Sanitize SMS message content
+     */
+    private function sanitizeMessage($message) {
+        // Remove potential XSS and injection attempts
+        $message = strip_tags($message);
+        $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+        
+        // Limit message length
+        if (strlen($message) > 160) {
+            $message = substr($message, 0, 157) . '...';
+        }
+        
+        return $message;
+    }
+    
+    /**
+     * Check SMS rate limiting
+     */
+    private function checkRateLimit($phone) {
+        $key = 'sms_rate_limit_' . md5($phone);
+        $attempts = \Cache::get($key, 0);
+        
+        // Allow max 5 SMS per phone per hour
+        if ($attempts >= 5) {
+            return false;
+        }
+        
+        \Cache::put($key, $attempts + 1, 3600); // 1 hour
+        return true;
     }
 
 }

@@ -16,8 +16,23 @@ class SMS {
 
         try {
             $sms = new TextMessage();
-            $sms->send($message->getRecipient(), $message->getContent());
-        } catch (\Exception $e) {}
-
+            $result = $sms->send($message->getRecipient(), $message->getContent());
+            
+            if (!$result) {
+                \Log::warning('SMS delivery failed', [
+                    'recipient' => $message->getRecipient(),
+                    'notification_type' => get_class($notification),
+                    'notifiable_id' => $notifiable->id ?? 'unknown'
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::error('SMS Channel Exception', [
+                'error' => $e->getMessage(),
+                'recipient' => $message->getRecipient(),
+                'notification_type' => get_class($notification),
+                'notifiable_id' => $notifiable->id ?? 'unknown',
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
     }
 }

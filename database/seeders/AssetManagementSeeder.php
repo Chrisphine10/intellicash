@@ -14,11 +14,21 @@ class AssetManagementSeeder extends Seeder
     public function run($tenantId = null)
     {
         if (!$tenantId) {
-            return;
+            // Get the first tenant
+            $tenant = \App\Models\Tenant::first();
+            
+            if (!$tenant) {
+                $this->command->info('No tenants found. Skipping asset management seeding.');
+                return;
+            }
+            
+            $tenantId = $tenant->id;
         }
 
         $this->seedAssetCategories($tenantId);
         $this->seedSampleAssets($tenantId);
+        
+        $this->command->info('Asset management data seeded successfully!');
     }
 
     /**
@@ -120,7 +130,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Toyota Corolla 2020',
                 'asset_code' => 'VEH-0001',
                 'description' => 'Reliable sedan for transportation and lease',
-                'purchase_price' => 25000.00,
+                'purchase_value' => 25000.00,
                 'current_value' => 22000.00,
                 'purchase_date' => '2020-01-15',
                 'warranty_expiry' => '2025-01-15',
@@ -138,7 +148,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Honda Motorcycle CBR150',
                 'asset_code' => 'VEH-0002',
                 'description' => 'Fuel-efficient motorcycle for quick transportation',
-                'purchase_price' => 3500.00,
+                'purchase_value' => 3500.00,
                 'current_value' => 3000.00,
                 'purchase_date' => '2021-03-10',
                 'warranty_expiry' => '2024-03-10',
@@ -159,7 +169,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Dell OptiPlex 7090 Desktop',
                 'asset_code' => 'OFF-0001',
                 'description' => 'High-performance desktop computer for office work',
-                'purchase_price' => 1200.00,
+                'purchase_value' => 1200.00,
                 'current_value' => 800.00,
                 'purchase_date' => '2022-05-20',
                 'warranty_expiry' => '2025-05-20',
@@ -177,7 +187,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'HP LaserJet Pro Printer',
                 'asset_code' => 'OFF-0002',
                 'description' => 'Professional laser printer for office documents',
-                'purchase_price' => 450.00,
+                'purchase_value' => 450.00,
                 'current_value' => 300.00,
                 'purchase_date' => '2021-08-15',
                 'warranty_expiry' => '2024-08-15',
@@ -198,7 +208,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Large Event Tent (20x30ft)',
                 'asset_code' => 'EVE-0001',
                 'description' => 'Weather-resistant tent for outdoor events',
-                'purchase_price' => 800.00,
+                'purchase_value' => 800.00,
                 'current_value' => 650.00,
                 'purchase_date' => '2020-12-01',
                 'warranty_expiry' => null,
@@ -216,7 +226,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Folding Chairs Set (50 pieces)',
                 'asset_code' => 'EVE-0002',
                 'description' => 'Stackable chairs for events and meetings',
-                'purchase_price' => 500.00,
+                'purchase_value' => 500.00,
                 'current_value' => 400.00,
                 'purchase_date' => '2021-02-28',
                 'warranty_expiry' => null,
@@ -237,7 +247,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Cooperative Main Building',
                 'asset_code' => 'REA-0001',
                 'description' => 'Main office building and meeting hall',
-                'purchase_price' => 150000.00,
+                'purchase_value' => 150000.00,
                 'current_value' => 180000.00,
                 'purchase_date' => '2018-06-01',
                 'warranty_expiry' => null,
@@ -258,7 +268,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Government Bond Portfolio',
                 'asset_code' => 'INV-0001',
                 'description' => 'Low-risk government bonds for stable returns',
-                'purchase_price' => 50000.00,
+                'purchase_value' => 50000.00,
                 'current_value' => 52500.00,
                 'purchase_date' => '2022-01-01',
                 'warranty_expiry' => null,
@@ -282,7 +292,7 @@ class AssetManagementSeeder extends Seeder
                 'name' => 'Mutual Fund Investment',
                 'asset_code' => 'INV-0002',
                 'description' => 'Diversified equity mutual fund portfolio',
-                'purchase_price' => 30000.00,
+                'purchase_value' => 30000.00,
                 'current_value' => 33600.00,
                 'purchase_date' => '2021-07-15',
                 'warranty_expiry' => null,

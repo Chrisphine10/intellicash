@@ -49,7 +49,7 @@
 			{ data : 'first_name', name : 'first_name' },
 			{ data : 'last_name', name : 'last_name' },
 			{ data : 'email', name : 'email' },
-			{ data : 'branch.name', name : 'branch.name' },
+			{ data : 'branch_name', name : 'branch_name' },
 			{ data : "action", name : "action" },
 		],
 		responsive: true,

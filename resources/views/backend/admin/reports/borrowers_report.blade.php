@@ -8,6 +8,11 @@
         <div class="card">
             <div class="card-header">
                 <span class="card-title">{{ _lang('Borrowers Report') }}</span>
+                <div class="card-tools">
+                    <a href="{{ url()->previous() }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 @if(!isset($report_data))
@@ -52,13 +57,30 @@
                     <div class="row">
                         <div class="col-md-12">
                             <div class="form-group">
-                                <button type="submit" class="btn btn-primary">{{ _lang('Generate Report') }}</button>
-                                <a href="{{ route('reports.export.borrowers_report') }}" class="btn btn-success ml-2">{{ _lang('Export CSV') }}</a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-chart-bar"></i> {{ _lang('Generate Report') }}
+                                </button>
+                                <a href="{{ route('reports.export.borrowers_report') }}" class="btn btn-success ml-2">
+                                    <i class="fas fa-download"></i> {{ _lang('Export CSV') }}
+                                </a>
+                                <a href="{{ url()->previous() }}" class="btn btn-secondary ml-2">
+                                    <i class="fas fa-arrow-left"></i> {{ _lang('Back') }}
+                                </a>
                             </div>
                         </div>
                     </div>
                 </form>
                 @else
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <a href="{{ route('reports.borrowers_report') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> {{ _lang('Back to Filter') }}
+                        </a>
+                        <a href="{{ route('reports.export.borrowers_report') }}" class="btn btn-success ml-2">
+                            <i class="fas fa-download"></i> {{ _lang('Export CSV') }}
+                        </a>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col-md-12">
                         <div class="table-responsive">

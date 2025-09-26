@@ -8,31 +8,45 @@ use Illuminate\Http\Response;
 class PWAController extends Controller
 {
     /**
-     * Generate dynamic PWA manifest
+     * Generate dynamic PWA manifest for native app experience
      */
     public function manifest()
     {
-        // Check if user is authenticated and redirect to member dashboard
-        $startUrl = '/';
-        if (auth()->check() && auth()->user()->user_type == 'customer') {
-            $startUrl = '/dashboard?mobile=1';
+        // Enhanced member-focused start URL
+        $startUrl = '/dashboard?mobile=1';
+        if (!auth()->check() || auth()->user()->user_type !== 'customer') {
+            $startUrl = '/login?mobile=1';
         }
 
         $manifest = [
-            'name' => get_tenant_option('pwa_app_name', get_tenant_option('business_name', get_option('site_title', config('app.name')))),
+            'name' => get_tenant_option('pwa_app_name', get_tenant_option('business_name', 'IntelliCash Member App')),
             'short_name' => get_tenant_option('pwa_short_name', get_tenant_option('business_name', 'IntelliCash')),
-            'description' => get_tenant_option('pwa_description', 'Progressive Web App for IntelliCash - Manage your finances efficiently'),
+            'description' => get_tenant_option('pwa_description', 'Your personal financial management app - Manage loans, transactions, and savings with ease'),
             'start_url' => $startUrl,
-            'display' => get_tenant_option('pwa_display_mode', 'standalone'),
-            'background_color' => get_tenant_option('pwa_background_color', '#ffffff'),
+            'display' => 'standalone',
+            'orientation' => 'portrait-primary',
             'theme_color' => get_tenant_option('pwa_theme_color', get_tenant_option('primary_color', '#007bff')),
-            'orientation' => get_tenant_option('pwa_orientation', 'portrait-primary'),
+            'background_color' => get_tenant_option('pwa_background_color', '#ffffff'),
             'scope' => '/',
             'lang' => get_option('language', 'en'),
-            'categories' => ['finance', 'business', 'productivity'],
+            'categories' => ['finance', 'productivity', 'business'],
             'icons' => $this->getIcons(),
             'shortcuts' => $this->getShortcuts(),
             'screenshots' => $this->getScreenshots(),
+            'prefer_related_applications' => false,
+            'edge_side_panel' => [
+                'preferred_width' => 400
+            ],
+            'launch_handler' => [
+                'client_mode' => 'focus-existing'
+            ],
+            'handle_links' => 'preferred',
+            'protocol_handlers' => [
+                [
+                    'protocol' => 'web+intellicash',
+                    'url' => '/dashboard?mobile=1&action=%s'
+                ]
+            ]
         ];
 
         // Add service worker if enabled
@@ -41,7 +55,8 @@ class PWAController extends Controller
         }
 
         return response()->json($manifest)
-            ->header('Content-Type', 'application/manifest+json');
+            ->header('Content-Type', 'application/manifest+json')
+            ->header('Cache-Control', 'public, max-age=3600');
     }
 
     /**
@@ -78,7 +93,7 @@ class PWAController extends Controller
     }
 
     /**
-     * Get PWA shortcuts configuration
+     * Get PWA shortcuts configuration for native app experience
      */
     private function getShortcuts()
     {
@@ -90,12 +105,13 @@ class PWAController extends Controller
                 $shortcuts[] = [
                     'name' => 'Dashboard',
                     'short_name' => 'Dashboard',
-                    'description' => 'View your dashboard',
+                    'description' => 'View your account overview',
                     'url' => '/dashboard?mobile=1',
                     'icons' => [
                         [
                             'src' => '/public/uploads/media/pwa-icon-96x96.png',
-                            'sizes' => '96x96'
+                            'sizes' => '96x96',
+                            'type' => 'image/png'
                         ]
                     ]
                 ];
@@ -105,12 +121,13 @@ class PWAController extends Controller
                 $shortcuts[] = [
                     'name' => 'Transactions',
                     'short_name' => 'Transactions',
-                    'description' => 'View transactions',
-                    'url' => '/transactions?mobile=1',
+                    'description' => 'View transaction history',
+                    'url' => '/transactions/index?mobile=1',
                     'icons' => [
                         [
                             'src' => '/public/uploads/media/pwa-icon-96x96.png',
-                            'sizes' => '96x96'
+                            'sizes' => '96x96',
+                            'type' => 'image/png'
                         ]
                     ]
                 ];
@@ -120,12 +137,13 @@ class PWAController extends Controller
                 $shortcuts[] = [
                     'name' => 'My Loans',
                     'short_name' => 'Loans',
-                    'description' => 'View your loans',
+                    'description' => 'Check loan status and payments',
                     'url' => '/loans/my_loans?mobile=1',
                     'icons' => [
                         [
                             'src' => '/public/uploads/media/pwa-icon-96x96.png',
-                            'sizes' => '96x96'
+                            'sizes' => '96x96',
+                            'type' => 'image/png'
                         ]
                     ]
                 ];
@@ -133,14 +151,15 @@ class PWAController extends Controller
 
             if (get_tenant_option('pwa_shortcut_deposit', 1)) {
                 $shortcuts[] = [
-                    'name' => 'Deposit',
-                    'short_name' => 'Deposit',
-                    'description' => 'Make a deposit',
+                    'name' => 'Make Payment',
+                    'short_name' => 'Pay',
+                    'description' => 'Make deposits and payments',
                     'url' => '/deposit/automatic_methods?mobile=1',
                     'icons' => [
                         [
                             'src' => '/public/uploads/media/pwa-icon-96x96.png',
-                            'sizes' => '96x96'
+                            'sizes' => '96x96',
+                            'type' => 'image/png'
                         ]
                     ]
                 ];
@@ -150,12 +169,13 @@ class PWAController extends Controller
                 $shortcuts[] = [
                     'name' => 'Profile',
                     'short_name' => 'Profile',
-                    'description' => 'View your profile',
+                    'description' => 'Manage your profile settings',
                     'url' => '/profile/edit?mobile=1',
                     'icons' => [
                         [
                             'src' => '/public/uploads/media/pwa-icon-96x96.png',
-                            'sizes' => '96x96'
+                            'sizes' => '96x96',
+                            'type' => 'image/png'
                         ]
                     ]
                 ];
@@ -166,37 +186,35 @@ class PWAController extends Controller
     }
 
     /**
-     * Get PWA screenshots configuration
+     * Get PWA screenshots for app stores
      */
     private function getScreenshots()
     {
         $screenshots = [];
-
-        // Desktop screenshot
-        if (file_exists(public_path('uploads/media/pwa-screenshot-desktop.png'))) {
-            $screenshots[] = [
-                'src' => '/public/uploads/media/pwa-screenshot-desktop.png',
-                'sizes' => '1280x720',
-                'type' => 'image/png',
-                'form_factor' => 'wide'
-            ];
+        
+        // Add screenshots if they exist
+        $screenshotSizes = [
+            ['width' => 1280, 'height' => 720, 'form_factor' => 'wide'],
+            ['width' => 750, 'height' => 1334, 'form_factor' => 'narrow']
+        ];
+        
+        foreach ($screenshotSizes as $size) {
+            $filename = "pwa-screenshot-{$size['width']}x{$size['height']}.png";
+            if (file_exists(public_path("uploads/media/{$filename}"))) {
+                $screenshots[] = [
+                    'src' => "/public/uploads/media/{$filename}",
+                    'sizes' => "{$size['width']}x{$size['height']}",
+                    'type' => 'image/png',
+                    'form_factor' => $size['form_factor']
+                ];
+            }
         }
-
-        // Mobile screenshot
-        if (file_exists(public_path('uploads/media/pwa-screenshot-mobile.png'))) {
-            $screenshots[] = [
-                'src' => '/public/uploads/media/pwa-screenshot-mobile.png',
-                'sizes' => '750x1334',
-                'type' => 'image/png',
-                'form_factor' => 'narrow'
-            ];
-        }
-
+        
         return $screenshots;
     }
 
     /**
-     * Show PWA installation prompt
+     * Show PWA install prompt
      */
     public function showInstallPrompt()
     {
@@ -204,15 +222,26 @@ class PWAController extends Controller
     }
 
     /**
-     * Get PWA status for API
+     * Get PWA status for enhanced native app features
      */
     public function getStatus()
     {
         return response()->json([
-            'enabled' => get_option('pwa_enabled', 1),
+            'enabled' => get_tenant_option('pwa_enabled', 1),
+            'installed' => request()->header('X-Mobile-App') == '1',
+            'version' => '4.0',
+            'features' => [
+                'offline_support' => true,
+                'push_notifications' => true,
+                'background_sync' => true,
+                'native_gestures' => true,
+                'haptic_feedback' => true,
+                'pull_to_refresh' => true,
+                'swipe_navigation' => true
+            ],
             'installable' => $this->isInstallable(),
-            'offline_support' => get_option('pwa_offline_support', 1),
-            'cache_strategy' => get_option('pwa_cache_strategy', 'cache-first')
+            'offline_support' => get_tenant_option('pwa_offline_support', 1),
+            'cache_strategy' => get_tenant_option('pwa_cache_strategy', 'cache-first')
         ]);
     }
 
@@ -221,7 +250,7 @@ class PWAController extends Controller
      */
     private function isInstallable()
     {
-        return get_option('pwa_enabled', 1) && 
+        return get_tenant_option('pwa_enabled', 1) && 
                file_exists(public_path('uploads/media/pwa-icon-192x192.png')) &&
                file_exists(public_path('uploads/media/pwa-icon-512x512.png'));
     }

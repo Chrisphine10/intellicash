@@ -32,6 +32,8 @@ class LoanProduct extends Model {
         'loan_application_fee_type',
         'loan_processing_fee',
         'loan_processing_fee_type',
+        'loan_insurance_fee',
+        'loan_insurance_fee_type',
     ];
 
 

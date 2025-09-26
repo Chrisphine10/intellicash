@@ -14,6 +14,16 @@
 	<a href="{{ route('loans.calculator') }}"><i class="fas fa-calculator"></i><span>{{ _lang('Loan Calculator') }}</span></a>
 </li>
 
+@if(app('tenant')->isAssetManagementEnabled())
+<li>
+	<a href="javascript: void(0);"><i class="fas fa-building"></i><span>{{ _lang('Asset Leasing') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+	<ul class="nav-second-level" aria-expanded="false">
+        <li class="nav-item"><a class="nav-link" href="{{ route('lease-requests.member.index') }}">{{ _lang('My Lease Requests') }}</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ route('lease-requests.member.create') }}">{{ _lang('Request Asset Lease') }}</a></li>
+	</ul>
+</li>
+@endif
+
 <li>
 	<a href="javascript: void(0);"><i class="fas fa-exchange-alt"></i><span>{{ _lang('Transfer Money') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
 	<ul class="nav-second-level" aria-expanded="false">

@@ -316,8 +316,8 @@
 		ajax: _tenant_url + '/members/get_member_transaction_data/{{ $member->id }}',
 		"columns" : [
 			{ data : 'trans_date', name : 'trans_date' },
-			{ data : 'member.first_name', name : 'member.first_name' },
-			{ data : 'account.account_number', name : 'account.account_number' },
+			{ data : 'member_first_name', name : 'member_first_name' },
+			{ data : 'account_number', name : 'account_number' },
 			{ data : 'amount', name : 'amount' },
 			{ data : 'dr_cr', name : 'dr_cr' },
 			{ data : 'type', name : 'type' },

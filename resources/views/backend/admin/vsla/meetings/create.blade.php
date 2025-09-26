@@ -6,6 +6,11 @@
         <div class="card">
             <div class="card-header">
                 <h4 class="card-title">{{ _lang('Create New Meeting') }}</h4>
+                <div class="card-tools">
+                    <a href="{{ route('vsla.meetings.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> {{ _lang('Back to Meetings') }}
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="post" action="{{ route('vsla.meetings.store') }}" class="validate">

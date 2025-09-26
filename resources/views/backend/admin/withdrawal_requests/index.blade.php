@@ -43,8 +43,8 @@
                                 @php
                                     $recipientDetails = $requirements['recipient_details'] ?? [];
                                 @endphp
-                                {{ $recipientDetails['name'] ?? 'N/A' }}<br>
-                                <small class="text-muted">{{ $recipientDetails['mobile'] ?? '' }}</small>
+                                {{ e($recipientDetails['name'] ?? 'N/A') }}<br>
+                                <small class="text-muted">{{ e($recipientDetails['mobile'] ?? '') }}</small>
                             </td>
                             <td>
                                 @if($request->status == 0)
@@ -63,15 +63,15 @@
                                 @if($request->status == 0)
                                     <button class="btn btn-success btn-xs approve-btn" 
                                             data-id="{{ $request->id }}" 
-                                            data-member="{{ $request->member->first_name }} {{ $request->member->last_name }}"
-                                            data-amount="{{ decimalPlace($request->amount, currency($request->account->savings_type->currency->name)) }}"
+                                            data-member="{{ json_encode($request->member->first_name . ' ' . $request->member->last_name) }}"
+                                            data-amount="{{ json_encode(decimalPlace($request->amount, currency($request->account->savings_type->currency->name))) }}"
                                             title="{{ _lang('Approve') }}">
                                         <i class="fas fa-check"></i>
                                     </button>
                                     <button class="btn btn-danger btn-xs reject-btn" 
                                             data-id="{{ $request->id }}"
-                                            data-member="{{ $request->member->first_name }} {{ $request->member->last_name }}"
-                                            data-amount="{{ decimalPlace($request->amount, currency($request->account->savings_type->currency->name)) }}"
+                                            data-member="{{ json_encode($request->member->first_name . ' ' . $request->member->last_name) }}"
+                                            data-amount="{{ json_encode(decimalPlace($request->amount, currency($request->account->savings_type->currency->name))) }}"
                                             title="{{ _lang('Reject') }}">
                                         <i class="fas fa-times"></i>
                                     </button>

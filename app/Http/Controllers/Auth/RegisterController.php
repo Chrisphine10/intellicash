@@ -209,6 +209,12 @@ class RegisterController extends Controller {
         $tenant->package_id = $data['package_id'] ?? null;
         $tenant->save();
 
+        // Get the Admin role for this tenant
+        $adminRole = DB::table('roles')
+            ->where('tenant_id', $tenant->id)
+            ->where('name', 'Admin')
+            ->first();
+
         return User::create([
             'name'            => $data['name'],
             'email'           => $data['email'],
@@ -220,6 +226,7 @@ class RegisterController extends Controller {
             'password'        => Hash::make($data['password']),
             'tenant_id'       => $tenant->id,
             'tenant_owner'    => 1,
+            'role_id'         => $adminRole ? $adminRole->id : null,
         ]);
     }
 

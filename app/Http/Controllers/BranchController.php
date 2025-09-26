@@ -37,8 +37,11 @@ class BranchController extends Controller {
      */
     public function index() {
         $assets  = ['datatable'];
-        $branchs = Branch::all()->sortByDesc("id");
-        return view('backend.admin.branch.list', compact('branchs', 'assets'));
+        $branches = Branch::select('id', 'name', 'contact_email', 'contact_phone')
+            ->withCount('members')
+            ->orderBy('id', 'desc')
+            ->paginate(15);
+        return view('backend.admin.branch.list', compact('branches', 'assets'));
     }
 
     /**
@@ -63,8 +66,11 @@ class BranchController extends Controller {
      */
     public function store(Request $request) {
         $validator = Validator::make($request->all(), [
-            'name'          => 'required',
-            'contact_email' => 'nullable|email',
+            'name'          => 'required|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:20',
+            'address'       => 'nullable|string|max:1000',
+            'descriptions'  => 'nullable|string|max:2000',
         ]);
 
         if ($validator->fails()) {
@@ -116,7 +122,7 @@ class BranchController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function edit(Request $request, $tenant, $id) {
-        $branch = Branch::find($id);
+        $branch = Branch::findOrFail($id);
         if (! $request->ajax()) {
             $alert_col = 'col-lg-8 offset-lg-2';
             return view('backend.admin.branch.edit', compact('branch', 'id', 'alert_col'));
@@ -134,8 +140,11 @@ class BranchController extends Controller {
      */
     public function update(Request $request, $tenant, $id) {
         $validator = Validator::make($request->all(), [
-            'name'          => 'required',
-            'contact_email' => 'nullable|email',
+            'name'          => 'required|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:20',
+            'address'       => 'nullable|string|max:1000',
+            'descriptions'  => 'nullable|string|max:2000',
         ]);
 
         if ($validator->fails()) {
@@ -171,8 +180,51 @@ class BranchController extends Controller {
      * @return \Illuminate\Http\Response
      */
     public function destroy($tenant, $id) {
-        $branch = Branch::find($id);
-        $branch->delete();
-        return redirect()->route('branches.index')->with('success', _lang('Deleted Successfully'));
+        try {
+            $branch = Branch::findOrFail($id);
+            
+            // Check if branch can be deleted
+            if (!$branch->canBeDeleted()) {
+                return redirect()->route('branches.index')
+                    ->with('error', _lang('Cannot delete branch with existing members'));
+            }
+            
+            $branch->delete();
+            
+            return redirect()->route('branches.index')
+                ->with('success', _lang('Deleted Successfully'));
+                
+        } catch (\Exception $e) {
+            return redirect()->route('branches.index')
+                ->with('error', _lang('An error occurred while deleting the branch'));
+        }
+    }
+
+    /**
+     * Switch to a different branch
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function switchBranch(Request $request) {
+        $validator = Validator::make($request->all(), [
+            'branch_id' => 'required|exists:branches,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['result' => 'error', 'message' => $validator->errors()->all()]);
+        }
+
+        $branch = Branch::findOrFail($request->branch_id);
+        
+        // Check if user has permission to switch to this branch
+        $user = auth()->user();
+        if ($user->user_type != 'admin' && $user->all_branch_access != 1) {
+            return response()->json(['result' => 'error', 'message' => _lang('Unauthorized branch access')]);
+        }
+        
+        session(['branch' => $branch->name, 'branch_id' => $branch->id]);
+        
+        return response()->json(['result' => 'success', 'message' => _lang('Branch switched successfully')]);
     }
 }

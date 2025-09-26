@@ -32,28 +32,40 @@ class WithdrawRequestController extends Controller {
 
     public function get_table_data(Request $request) {
 
-        $withdraw_requests = WithdrawRequest::select('withdraw_requests.*')
-            ->with(['member', 'method', 'account.savings_type', 'account.savings_type.currency'])
+        $withdraw_requests = WithdrawRequest::select([
+                'withdraw_requests.*',
+                'members.first_name as member_first_name',
+                'members.last_name as member_last_name',
+                'savings_accounts.account_number',
+                'savings_products.name as savings_type_name',
+                'currency.name as currency_name',
+                'withdraw_methods.name as method_name'
+            ])
+            ->leftJoin('members', 'withdraw_requests.member_id', '=', 'members.id')
+            ->leftJoin('savings_accounts', 'withdraw_requests.savings_account_id', '=', 'savings_accounts.id')
+            ->leftJoin('savings_products', 'savings_accounts.savings_product_id', '=', 'savings_products.id')
+            ->leftJoin('currency', 'savings_products.currency_id', '=', 'currency.id')
+            ->leftJoin('withdraw_methods', 'withdraw_requests.withdraw_method_id', '=', 'withdraw_methods.id')
             ->orderBy("withdraw_requests.id", "desc");
 
         return Datatables::eloquent($withdraw_requests)
             ->filter(function ($query) use ($request) {
                 $status = $request->has('status') ? $request->status : 1;
-                $query->where('status', $status);
+                $query->where('withdraw_requests.status', $status);
             }, true)
-            ->editColumn('member.first_name', function ($deposit_request) {
-                return $deposit_request->member->first_name . ' ' . $deposit_request->member->last_name;
+            ->editColumn('member_first_name', function ($withdraw_request) {
+                return $withdraw_request->member_first_name . ' ' . $withdraw_request->member_last_name;
             })
             ->editColumn('amount', function ($withdraw_request) {
-                return decimalPlace($withdraw_request->amount, currency($withdraw_request->method->currency->name));
+                return decimalPlace($withdraw_request->amount, currency($withdraw_request->currency_name));
             })
             ->editColumn('status', function ($withdraw_request) {
                 return transaction_status($withdraw_request->status);
             })
-            ->filterColumn('member.first_name', function ($query, $keyword) {
-                $query->whereHas('member', function ($query) use ($keyword) {
-                    return $query->where("first_name", "like", "{$keyword}%")
-                        ->orWhere("last_name", "like", "{$keyword}%");
+            ->filterColumn('member_first_name', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where("members.first_name", "like", "{$keyword}%")
+                      ->orWhere("members.last_name", "like", "{$keyword}%");
                 });
             }, true)
             ->addColumn('action', function ($withdraw_request) {

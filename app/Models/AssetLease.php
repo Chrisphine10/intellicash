@@ -97,7 +97,8 @@ class AssetLease extends Model
             return null;
         }
         
-        return \Carbon\Carbon::parse($this->start_date)->diffInDays($this->end_date);
+        // Use diffInDays + 1 for inclusive day counting (both start and end dates count)
+        return \Carbon\Carbon::parse($this->start_date)->diffInDays(\Carbon\Carbon::parse($this->end_date)) + 1;
     }
 
     public function getTotalCostAttribute()

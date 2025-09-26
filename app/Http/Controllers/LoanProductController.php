@@ -14,6 +14,20 @@ class LoanProductController extends Controller {
      */
     public function __construct() {
         date_default_timezone_set(get_timezone());
+
+        $this->middleware(function ($request, $next) {
+            $route_name = request()->route()->getName();
+            if ($route_name == 'loan_products.store') {
+                if (has_limit('loan_products', 'account_type_limit') <= 0) {
+                    if ($request->ajax()) {
+                        return response()->json(['result' => 'error', 'message' => _lang('Sorry, Your have reached your limit ! You can update your subscription plan to increase your limit.')]);
+                    }
+                    return back()->with('error', _lang('Sorry, Your have reached your limit ! You can update your subscription plan to increase your limit.'));
+                }
+            }
+
+            return $next($request);
+        });
     }
 
     /**

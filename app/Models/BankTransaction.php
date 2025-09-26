@@ -36,6 +36,8 @@ class BankTransaction extends Model
     const TYPE_BANK_TO_CASH = 'bank_to_cash';
     const TYPE_LOAN_DISBURSEMENT = 'loan_disbursement';
     const TYPE_LOAN_REPAYMENT = 'loan_repayment';
+    const TYPE_ASSET_PURCHASE = 'asset_purchase';
+    const TYPE_ASSET_SALE = 'asset_sale';
 
     /**
      * The attributes that are mass assignable.
@@ -152,7 +154,9 @@ class BankTransaction extends Model
             self::TYPE_CASH_TO_BANK,
             self::TYPE_BANK_TO_CASH,
             self::TYPE_LOAN_DISBURSEMENT,
-            self::TYPE_LOAN_REPAYMENT
+            self::TYPE_LOAN_REPAYMENT,
+            self::TYPE_ASSET_PURCHASE,
+            self::TYPE_ASSET_SALE
         ];
 
         if (!in_array($this->type, $validTypes)) {

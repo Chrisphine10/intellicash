@@ -23,9 +23,11 @@
                   },
                   options: {
                       responsive: true,
+                      maintainAspectRatio: true,
+                      aspectRatio: 1,
                       plugins: {
                           legend: {
-                              position: 'top',
+                              position: 'bottom',
                           },
                           title: {
                               display: false,
@@ -84,7 +86,9 @@
                   intersect: false,
                 },
                 responsive: true,
-                stacked: true,
+                maintainAspectRatio: true,
+                aspectRatio: 2,
+                stacked: false,
                 scales: {
                   y: {
                     type: "linear",
@@ -98,6 +102,10 @@
                   },
                 },
                 plugins: {
+                  legend: {
+                    display: true,
+                    position: 'bottom'
+                  },
                   tooltip: {
                     callbacks: {
                       label: function(context) {

@@ -10,6 +10,17 @@
                 <h4 class="card-title">Edit E-Signature Document</h4>
             </div>
             <div class="card-body">
+                @if($document->status === 'Sent')
+                    <div class="alert alert-warning">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This document has been sent for signing. Changes to basic information will not affect pending signatures, but will be reflected in future communications.
+                    </div>
+                @elseif($document->status === 'Expired')
+                    <div class="alert alert-info">
+                        <i class="fa fa-info-circle"></i>
+                        <strong>Note:</strong> This document has expired. You can still edit the details for future reference or if you plan to resend it.
+                    </div>
+                @endif
                 <form action="{{ route('esignature.esignature-documents.update', $document->id) }}" method="POST">
                     @csrf
                     @method('PUT')
