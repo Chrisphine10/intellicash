@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('election_id');
             $table->unsignedBigInteger('member_id')->nullable();
-            $table->string('action'); // created, started, voted, closed, result_calculated, etc.
+            $table->string('action', 50); // created, started, voted, closed, result_calculated, etc.
             $table->text('details')->nullable(); // JSON details about the action
             $table->string('ip_address')->nullable();
             $table->string('user_agent')->nullable();

@@ -15,8 +15,8 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('user_id')->nullable();
-            $table->string('action'); // created, updated, deleted, processed, approved, etc.
-            $table->string('model_type'); // PayrollPeriod, PayrollItem, PayrollDeduction, etc.
+            $table->string('action', 50); // created, updated, deleted, processed, approved, etc.
+            $table->string('model_type', 50); // PayrollPeriod, PayrollItem, PayrollDeduction, etc.
             $table->unsignedBigInteger('model_id');
             $table->json('old_values')->nullable(); // Previous values
             $table->json('new_values')->nullable(); // New values
@@ -29,11 +29,11 @@ return new class extends Migration
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
             
-            $table->index(['tenant_id', 'model_type', 'model_id']);
-            $table->index(['tenant_id', 'action']);
-            $table->index(['tenant_id', 'user_id']);
-            $table->index(['tenant_id', 'created_at']);
-            $table->index(['model_type', 'model_id']);
+            $table->index(['tenant_id', 'model_type', 'model_id'], 'idx_payroll_audit_tenant_model');
+            $table->index(['tenant_id', 'action'], 'idx_payroll_audit_tenant_action');
+            $table->index(['tenant_id', 'user_id'], 'idx_payroll_audit_tenant_user');
+            $table->index(['tenant_id', 'created_at'], 'idx_payroll_audit_tenant_date');
+            $table->index(['model_type', 'model_id'], 'idx_payroll_audit_model');
         });
     }
 

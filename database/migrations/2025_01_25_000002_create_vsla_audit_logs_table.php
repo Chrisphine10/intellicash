@@ -26,10 +26,10 @@ return new class extends Migration
             $table->timestamps();
             
             // Indexes for better performance
-            $table->index(['tenant_id', 'model_type', 'model_id']);
-            $table->index(['tenant_id', 'user_id']);
-            $table->index(['tenant_id', 'action']);
-            $table->index(['created_at']);
+            $table->index(['tenant_id', 'model_type', 'model_id'], 'idx_vsla_audit_tenant_model');
+            $table->index(['tenant_id', 'user_id'], 'idx_vsla_audit_tenant_user');
+            $table->index(['tenant_id', 'action'], 'idx_vsla_audit_tenant_action');
+            $table->index(['created_at'], 'idx_vsla_audit_created');
         });
     }
 
