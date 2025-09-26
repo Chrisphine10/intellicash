@@ -14,6 +14,16 @@ class AddPwaSettings extends Migration
      */
     public function up()
     {
+        // Ensure settings table exists before adding PWA settings
+        if (!Schema::hasTable('settings')) {
+            Schema::create('settings', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 191);
+                $table->text('value');
+                $table->timestamps();
+            });
+        }
+
         // Add default PWA settings
         $pwaSettings = [
             'pwa_enabled' => '1',

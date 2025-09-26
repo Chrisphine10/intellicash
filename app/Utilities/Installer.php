@@ -112,7 +112,13 @@ class Installer {
         @set_time_limit(300); // 5 minutes
 
         // Create tables
-        Artisan::call('migrate:fresh', ['--force' => true]);
+        try {
+            Artisan::call('migrate:fresh', ['--force' => true]);
+        } catch (\Exception $e) {
+            // If migrate:fresh fails due to foreign key constraints, try alternative approach
+            Artisan::call('migrate:reset', ['--force' => true]);
+            Artisan::call('migrate', ['--force' => true]);
+        }
 
         // Run seeder
         Artisan::call('db:seed', ['--force' => true]);

@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
-            $table->boolean('qr_code_enabled')->default(false)->after('vsla_enabled');
+            $table->boolean('qr_code_enabled')->default(false);
         });
     }
 

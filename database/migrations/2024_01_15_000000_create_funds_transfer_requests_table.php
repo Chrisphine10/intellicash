@@ -28,11 +28,26 @@ class CreateFundsTransferRequestsTable extends Migration
             $table->tinyInteger('status')->default(0)->comment('0=Pending, 1=Processing, 2=Completed, 3=Failed');
             $table->json('api_response')->nullable();
             $table->timestamps();
-
-            $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
-            $table->foreign('debit_account_id')->references('id')->on('savings_accounts')->onDelete('cascade');
-            $table->foreign('transaction_id')->references('id')->on('transactions')->onDelete('cascade');
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('members')) {
+            Schema::table('funds_transfer_requests', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('savings_accounts')) {
+            Schema::table('funds_transfer_requests', function (Blueprint $table) {
+                $table->foreign('debit_account_id')->references('id')->on('savings_accounts')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('transactions')) {
+            Schema::table('funds_transfer_requests', function (Blueprint $table) {
+                $table->foreign('transaction_id')->references('id')->on('transactions')->onDelete('cascade');
+            });
+        }
     }
 
     /**

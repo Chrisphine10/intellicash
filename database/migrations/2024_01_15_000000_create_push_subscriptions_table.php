@@ -16,7 +16,7 @@ class CreatePushSubscriptionsTable extends Migration
         Schema::create('push_subscriptions', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
-            $table->text('endpoint');
+            $table->string('endpoint', 500); // Changed from text to varchar with length
             $table->string('p256dh');
             $table->string('auth');
             $table->boolean('active')->default(true);
