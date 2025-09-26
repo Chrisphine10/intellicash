@@ -124,7 +124,7 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
             return redirect()->route('admin.login');
         });
         Route::get('/login', [LoginController::class, 'showAdminLoginForm'])->name('admin.login');
-        Route::post('/login', [LoginController::class, 'login'])->name('admin.login');
+        Route::post('/login', [LoginController::class, 'login'])->name('admin.login.post');
         Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('admin.password.request');
         Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('admin.password.email');
         Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('admin.password.reset');
