@@ -13,19 +13,62 @@ return new class extends Migration
     {
         Schema::create('vsla_transactions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('meeting_id')->constrained('vsla_meetings')->onDelete('cascade');
-            $table->foreignId('member_id')->constrained('members')->onDelete('cascade');
+            $table->unsignedBigInteger('tenant_id');
+            $table->unsignedBigInteger('meeting_id');
+            $table->unsignedBigInteger('member_id');
             $table->enum('transaction_type', ['share_purchase', 'loan_issuance', 'loan_repayment', 'penalty_fine', 'welfare_contribution']);
             $table->decimal('amount', 15, 2);
             $table->text('description')->nullable();
-            $table->foreignId('transaction_id')->nullable()->constrained('transactions')->onDelete('set null');
-            $table->foreignId('loan_id')->nullable()->constrained('loans')->onDelete('set null');
-            $table->foreignId('savings_account_id')->nullable()->constrained('savings_accounts')->onDelete('set null');
+            $table->unsignedBigInteger('transaction_id')->nullable();
+            $table->unsignedBigInteger('loan_id')->nullable();
+            $table->unsignedBigInteger('savings_account_id')->nullable();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
-            $table->foreignId('created_user_id')->constrained('users')->onDelete('cascade');
+            $table->unsignedBigInteger('created_user_id');
             $table->timestamps();
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('tenants')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('vsla_meetings')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('meeting_id')->references('id')->on('vsla_meetings')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('transactions')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('transaction_id')->references('id')->on('transactions')->onDelete('set null');
+            });
+        }
+        
+        if (Schema::hasTable('loans')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('loan_id')->references('id')->on('loans')->onDelete('set null');
+            });
+        }
+        
+        if (Schema::hasTable('savings_accounts')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('savings_account_id')->references('id')->on('savings_accounts')->onDelete('set null');
+            });
+        }
+        
+        if (Schema::hasTable('users')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                $table->foreign('created_user_id')->references('id')->on('users')->onDelete('cascade');
+            });
+        }
     }
 
     /**

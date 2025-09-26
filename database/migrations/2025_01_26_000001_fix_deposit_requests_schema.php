@@ -11,13 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('deposit_requests', function (Blueprint $table) {
-            // Rename method_id to deposit_method_id to match controller expectations
-            $table->renameColumn('method_id', 'deposit_method_id');
-            
-            // Rename credit_account_id to savings_account_id for consistency
-            $table->renameColumn('credit_account_id', 'savings_account_id');
-        });
+        // Only proceed if deposit_requests table exists
+        if (Schema::hasTable('deposit_requests')) {
+            Schema::table('deposit_requests', function (Blueprint $table) {
+                // Rename method_id to deposit_method_id to match controller expectations
+                if (Schema::hasColumn('deposit_requests', 'method_id')) {
+                    $table->renameColumn('method_id', 'deposit_method_id');
+                }
+                
+                // Rename credit_account_id to savings_account_id for consistency
+                if (Schema::hasColumn('deposit_requests', 'credit_account_id')) {
+                    $table->renameColumn('credit_account_id', 'savings_account_id');
+                }
+            });
+        }
     }
 
     /**

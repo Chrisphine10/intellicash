@@ -48,7 +48,7 @@ class AddDashboardPerformanceIndexes extends Migration
      */
     private function addIndexIfNotExists($table, $columns, $name)
     {
-        if (!Schema::hasIndex($table, $name)) {
+        if (Schema::hasTable($table) && !Schema::hasIndex($table, $name)) {
             Schema::table($table, function (Blueprint $table) use ($columns, $name) {
                 $table->index($columns, $name);
             });

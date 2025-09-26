@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::create('advanced_loan_applications', function (Blueprint $table) {
             $table->id();
             $table->string('application_number', 50)->unique();
-            $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('loan_product_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('applicant_id')->constrained('members')->cascadeOnDelete();
+            $table->unsignedBigInteger('tenant_id');
+            $table->unsignedBigInteger('loan_product_id');
+            $table->unsignedBigInteger('applicant_id');
             
             // Application Details
             $table->enum('application_type', ['business_loan', 'value_addition_enterprise', 'startup_loan'])->default('business_loan');
@@ -68,9 +68,9 @@ return new class extends Migration
             $table->enum('status', ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'cancelled', 'disbursed'])->default('draft');
             $table->text('review_notes')->nullable();
             $table->text('rejection_reason')->nullable();
-            $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('reviewed_by')->nullable();
             $table->timestamp('reviewed_at')->nullable();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('approved_by')->nullable();
             $table->timestamp('approved_at')->nullable();
             
             // Risk Assessment
@@ -84,8 +84,8 @@ return new class extends Migration
             $table->json('custom_fields')->nullable();
             
             // System Fields
-            $table->foreignId('created_user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('updated_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('created_user_id')->nullable();
+            $table->unsignedBigInteger('updated_user_id')->nullable();
             $table->timestamps();
             
             // Indexes
@@ -93,6 +93,34 @@ return new class extends Migration
             $table->index(['applicant_id', 'application_date']);
             $table->index('application_type');
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('tenants')) {
+            Schema::table('advanced_loan_applications', function (Blueprint $table) {
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('loan_products')) {
+            Schema::table('advanced_loan_applications', function (Blueprint $table) {
+                $table->foreign('loan_product_id')->references('id')->on('loan_products')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('advanced_loan_applications', function (Blueprint $table) {
+                $table->foreign('applicant_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('users')) {
+            Schema::table('advanced_loan_applications', function (Blueprint $table) {
+                $table->foreign('reviewed_by')->references('id')->on('users')->onDelete('set null');
+                $table->foreign('approved_by')->references('id')->on('users')->onDelete('set null');
+                $table->foreign('created_user_id')->references('id')->on('users')->onDelete('set null');
+                $table->foreign('updated_user_id')->references('id')->on('users')->onDelete('set null');
+            });
+        }
     }
 
     /**

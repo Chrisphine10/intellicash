@@ -11,9 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('vsla_transactions', function (Blueprint $table) {
-            $table->foreignId('bank_account_id')->nullable()->constrained('bank_accounts')->onDelete('set null');
-        });
+        // Only proceed if vsla_transactions table exists and doesn't already have the column
+        if (Schema::hasTable('vsla_transactions') && !Schema::hasColumn('vsla_transactions', 'bank_account_id')) {
+            Schema::table('vsla_transactions', function (Blueprint $table) {
+                if (Schema::hasTable('bank_accounts')) {
+                    $table->foreignId('bank_account_id')->nullable()->constrained('bank_accounts')->onDelete('set null');
+                } else {
+                    $table->unsignedBigInteger('bank_account_id')->nullable();
+                }
+            });
+        }
     }
 
     /**

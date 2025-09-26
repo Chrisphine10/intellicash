@@ -11,15 +11,31 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bank_accounts', function (Blueprint $table) {
-            $table->decimal('current_balance', 10, 2)->default(0)->after('opening_balance');
-            $table->decimal('blocked_balance', 10, 2)->default(0)->after('current_balance');
-            $table->timestamp('last_balance_update')->nullable()->after('blocked_balance');
-            $table->boolean('is_active')->default(true)->after('last_balance_update');
-            $table->boolean('allow_negative_balance')->default(false)->after('is_active');
-            $table->decimal('minimum_balance', 10, 2)->default(0)->after('allow_negative_balance');
-            $table->decimal('maximum_balance', 10, 2)->nullable()->after('minimum_balance');
-        });
+        if (Schema::hasTable('bank_accounts')) {
+            Schema::table('bank_accounts', function (Blueprint $table) {
+                if (!Schema::hasColumn('bank_accounts', 'current_balance')) {
+                    $table->decimal('current_balance', 10, 2)->default(0)->after('opening_balance');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'blocked_balance')) {
+                    $table->decimal('blocked_balance', 10, 2)->default(0)->after('current_balance');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'last_balance_update')) {
+                    $table->timestamp('last_balance_update')->nullable()->after('blocked_balance');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'is_active')) {
+                    $table->boolean('is_active')->default(true)->after('last_balance_update');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'allow_negative_balance')) {
+                    $table->boolean('allow_negative_balance')->default(false)->after('is_active');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'minimum_balance')) {
+                    $table->decimal('minimum_balance', 10, 2)->default(0)->after('allow_negative_balance');
+                }
+                if (!Schema::hasColumn('bank_accounts', 'maximum_balance')) {
+                    $table->decimal('maximum_balance', 10, 2)->nullable()->after('minimum_balance');
+                }
+            });
+        }
     }
 
     /**

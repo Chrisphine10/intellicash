@@ -11,10 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bank_accounts', function (Blueprint $table) {
-            // Change the default value for allow_negative_balance to true
-            $table->boolean('allow_negative_balance')->default(true)->change();
-        });
+        // Only proceed if bank_accounts table exists and has the allow_negative_balance column
+        if (Schema::hasTable('bank_accounts') && Schema::hasColumn('bank_accounts', 'allow_negative_balance')) {
+            Schema::table('bank_accounts', function (Blueprint $table) {
+                // Change the default value for allow_negative_balance to true
+                $table->boolean('allow_negative_balance')->default(true)->change();
+            });
+        }
     }
 
     /**

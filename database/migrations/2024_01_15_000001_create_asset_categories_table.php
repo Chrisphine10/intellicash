@@ -16,7 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_id');
             $table->string('name');
             $table->text('description')->nullable();
-            $table->string('type')->default('fixed'); // fixed, investment, leasable
+            $table->string('type', 50)->default('fixed'); // fixed, investment, leasable
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 

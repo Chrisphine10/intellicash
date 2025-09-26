@@ -12,20 +12,22 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Check if VSLA_MEETING_REMINDER template already exists as global tenant template
-        $existingTemplate = DB::table('email_templates')
-            ->where('slug', 'VSLA_MEETING_REMINDER')
-            ->whereNull('tenant_id')
-            ->where('template_type', 'tenant')
-            ->first();
+        // Only proceed if email_templates table exists
+        if (Schema::hasTable('email_templates')) {
+            // Check if VSLA_MEETING_REMINDER template already exists as global tenant template
+            $existingTemplate = DB::table('email_templates')
+                ->where('slug', 'VSLA_MEETING_REMINDER')
+                ->whereNull('tenant_id')
+                ->where('template_type', 'tenant')
+                ->first();
 
-        if (!$existingTemplate) {
-            // Create global VSLA template that tenants can customize
-            DB::table('email_templates')->insert([
-                'name' => 'VSLA Meeting Reminder',
-                'slug' => 'VSLA_MEETING_REMINDER',
-                'subject' => 'VSLA Meeting Reminder - {{meetingDate}}',
-                'email_body' => '<!DOCTYPE html>
+            if (!$existingTemplate) {
+                // Create global VSLA template that tenants can customize
+                DB::table('email_templates')->insert([
+                    'name' => 'VSLA Meeting Reminder',
+                    'slug' => 'VSLA_MEETING_REMINDER',
+                    'subject' => 'VSLA Meeting Reminder - {{meetingDate}}',
+                    'email_body' => '<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -111,18 +113,19 @@ return new class extends Migration
     </div>
 </body>
 </html>',
-                'sms_body' => 'VSLA Meeting Reminder: {{meetingDate}} at {{meetingTime}}. Meeting days: {{meetingDays}}. Please attend on time. - {{vslaName}}',
-                'notification_body' => 'VSLA Meeting Reminder: {{meetingDate}} at {{meetingTime}}. Please attend on time.',
-                'shortcode' => '{{memberName}} {{meetingDate}} {{meetingTime}} {{meetingDays}} {{vslaName}}',
-                'email_status' => 1,
-                'sms_status' => 1,
-                'notification_status' => 1,
-                'template_mode' => 0,
-                'template_type' => 'tenant',
-                'tenant_id' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+                    'sms_body' => 'VSLA Meeting Reminder: {{meetingDate}} at {{meetingTime}}. Meeting days: {{meetingDays}}. Please attend on time. - {{vslaName}}',
+                    'notification_body' => 'VSLA Meeting Reminder: {{meetingDate}} at {{meetingTime}}. Please attend on time.',
+                    'shortcode' => '{{memberName}} {{meetingDate}} {{meetingTime}} {{meetingDays}} {{vslaName}}',
+                    'email_status' => 1,
+                    'sms_status' => 1,
+                    'notification_status' => 1,
+                    'template_mode' => 0,
+                    'template_type' => 'tenant',
+                    'tenant_id' => null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
         }
     }
 

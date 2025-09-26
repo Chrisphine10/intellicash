@@ -11,10 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('vsla_settings', function (Blueprint $table) {
-            // Add meeting_days field to store multiple days of the week
-            $table->json('meeting_days')->nullable()->after('meeting_day_of_week');
-        });
+        if (Schema::hasTable('vsla_settings')) {
+            Schema::table('vsla_settings', function (Blueprint $table) {
+                // Add meeting_days field to store multiple days of the week
+                if (!Schema::hasColumn('vsla_settings', 'meeting_days')) {
+                    $table->json('meeting_days')->nullable();
+                }
+            });
+        }
     }
 
     /**

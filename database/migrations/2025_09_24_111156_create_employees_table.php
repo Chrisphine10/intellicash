@@ -30,7 +30,7 @@ return new class extends Migration
             $table->date('termination_date')->nullable();
             $table->enum('employment_status', ['active', 'terminated', 'on_leave', 'suspended'])->default('active');
             $table->string('job_title');
-            $table->string('department')->nullable();
+            $table->string('department', 191)->nullable();
             $table->string('employment_type')->default('full_time'); // full_time, part_time, contract, intern
             $table->decimal('basic_salary', 15, 2)->default(0);
             $table->string('salary_currency', 3)->default('KES'); // Default to KES, will be updated per tenant

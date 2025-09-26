@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('vsla_role_assignments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('member_id')->constrained()->onDelete('cascade');
+            $table->unsignedBigInteger('tenant_id');
+            $table->unsignedBigInteger('member_id');
             $table->enum('role', ['chairperson', 'treasurer', 'secretary'])->index();
             $table->timestamp('assigned_at')->useCurrent();
-            $table->foreignId('assigned_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->unsignedBigInteger('assigned_by')->nullable();
             $table->boolean('is_active')->default(true);
             $table->text('notes')->nullable();
             $table->timestamps();
@@ -25,6 +25,25 @@ return new class extends Migration
             // Ensure unique active role assignments per tenant
             $table->unique(['tenant_id', 'member_id', 'role', 'is_active'], 'unique_active_role_assignment');
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('tenants')) {
+            Schema::table('vsla_role_assignments', function (Blueprint $table) {
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('vsla_role_assignments', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('users')) {
+            Schema::table('vsla_role_assignments', function (Blueprint $table) {
+                $table->foreign('assigned_by')->references('id')->on('users')->onDelete('set null');
+            });
+        }
     }
 
     /**

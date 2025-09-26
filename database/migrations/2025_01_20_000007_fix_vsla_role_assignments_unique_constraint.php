@@ -11,13 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('vsla_role_assignments', function (Blueprint $table) {
-            // Drop the existing unique constraint
-            $table->dropUnique('unique_active_role_assignment');
+        if (Schema::hasTable('vsla_role_assignments')) {
+            try {
+                Schema::table('vsla_role_assignments', function (Blueprint $table) {
+                    // Drop the existing unique constraint
+                    $table->dropUnique('unique_active_role_assignment');
+                });
+            } catch (\Exception $e) {
+                // Constraint might not exist or be in use, continue
+            }
             
-            // Add a new unique constraint that only applies to active records
-            $table->unique(['tenant_id', 'member_id', 'role'], 'unique_active_role_per_member');
-        });
+            try {
+                Schema::table('vsla_role_assignments', function (Blueprint $table) {
+                    // Add a new unique constraint that only applies to active records
+                    $table->unique(['tenant_id', 'member_id', 'role'], 'unique_active_role_per_member');
+                });
+            } catch (\Exception $e) {
+                // Constraint creation might fail, continue
+            }
+        }
     }
 
     /**

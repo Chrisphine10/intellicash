@@ -11,10 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('expenses', function (Blueprint $table) {
-            $table->unsignedBigInteger('bank_account_id')->nullable()->after('expense_category_id');
-            $table->foreign('bank_account_id')->references('id')->on('bank_accounts')->onDelete('set null');
-        });
+        if (Schema::hasTable('expenses')) {
+            Schema::table('expenses', function (Blueprint $table) {
+                if (!Schema::hasColumn('expenses', 'bank_account_id')) {
+                    $table->unsignedBigInteger('bank_account_id')->nullable()->after('expense_category_id');
+                }
+            });
+            
+            // Add foreign key constraint only if bank_accounts table exists
+            if (Schema::hasTable('bank_accounts')) {
+                Schema::table('expenses', function (Blueprint $table) {
+                    $table->foreign('bank_account_id')->references('id')->on('bank_accounts')->onDelete('set null');
+                });
+            }
+        }
     }
 
     /**

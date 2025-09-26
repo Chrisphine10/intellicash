@@ -13,14 +13,27 @@ return new class extends Migration
     {
         Schema::create('vsla_meeting_attendance', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('meeting_id')->constrained('vsla_meetings')->onDelete('cascade');
-            $table->foreignId('member_id')->constrained('members')->onDelete('cascade');
+            $table->unsignedBigInteger('meeting_id');
+            $table->unsignedBigInteger('member_id');
             $table->boolean('present')->default(false);
             $table->text('notes')->nullable();
             $table->timestamps();
             
             $table->unique(['meeting_id', 'member_id']);
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('vsla_meetings')) {
+            Schema::table('vsla_meeting_attendance', function (Blueprint $table) {
+                $table->foreign('meeting_id')->references('id')->on('vsla_meetings')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('vsla_meeting_attendance', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
     }
 
     /**

@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('members', function (Blueprint $table) {
-            $table->renameColumn('state', 'county');
-        });
+        // Only proceed if members table exists and has the state column
+        if (Schema::hasTable('members') && Schema::hasColumn('members', 'state')) {
+            Schema::table('members', function (Blueprint $table) {
+                $table->renameColumn('state', 'county');
+            });
+        }
     }
 
     /**

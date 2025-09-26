@@ -13,16 +13,41 @@ return new class extends Migration
     {
         Schema::create('voting_audit_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('election_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('member_id')->nullable()->constrained()->nullOnDelete();
+            $table->unsignedBigInteger('election_id');
+            $table->unsignedBigInteger('member_id')->nullable();
             $table->string('action'); // created, started, voted, closed, result_calculated, etc.
             $table->text('details')->nullable(); // JSON details about the action
             $table->string('ip_address')->nullable();
             $table->string('user_agent')->nullable();
-            $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('performed_by')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('tenant_id');
+            $table->unsignedBigInteger('performed_by');
             $table->timestamps();
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('elections')) {
+            Schema::table('voting_audit_logs', function (Blueprint $table) {
+                $table->foreign('election_id')->references('id')->on('elections')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('voting_audit_logs', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->nullOnDelete();
+            });
+        }
+        
+        if (Schema::hasTable('tenants')) {
+            Schema::table('voting_audit_logs', function (Blueprint $table) {
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('users')) {
+            Schema::table('voting_audit_logs', function (Blueprint $table) {
+                $table->foreign('performed_by')->references('id')->on('users')->onDelete('cascade');
+            });
+        }
     }
 
     /**

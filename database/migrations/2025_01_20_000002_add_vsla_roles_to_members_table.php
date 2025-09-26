@@ -11,13 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('members', function (Blueprint $table) {
-            // Add VSLA role fields
-            $table->enum('vsla_role', ['chairperson', 'treasurer', 'secretary', 'member'])->default('member')->after('custom_fields');
-            $table->boolean('is_vsla_chairperson')->default(false)->after('vsla_role');
-            $table->boolean('is_vsla_treasurer')->default(false)->after('is_vsla_chairperson');
-            $table->boolean('is_vsla_secretary')->default(false)->after('is_vsla_treasurer');
-        });
+        if (Schema::hasTable('members')) {
+            Schema::table('members', function (Blueprint $table) {
+                // Add VSLA role fields
+                if (!Schema::hasColumn('members', 'vsla_role')) {
+                    $table->enum('vsla_role', ['chairperson', 'treasurer', 'secretary', 'member'])->default('member');
+                }
+                if (!Schema::hasColumn('members', 'is_vsla_chairperson')) {
+                    $table->boolean('is_vsla_chairperson')->default(false);
+                }
+                if (!Schema::hasColumn('members', 'is_vsla_treasurer')) {
+                    $table->boolean('is_vsla_treasurer')->default(false);
+                }
+                if (!Schema::hasColumn('members', 'is_vsla_secretary')) {
+                    $table->boolean('is_vsla_secretary')->default(false);
+                }
+            });
+        }
     }
 
     /**

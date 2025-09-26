@@ -16,6 +16,9 @@ class AddReportsPerformanceIndexes extends Migration
     {
         // Helper function to check if index exists
         $indexExists = function($table, $indexName) {
+            if (!Schema::hasTable($table)) {
+                return true; // Table doesn't exist, so "index exists" to skip
+            }
             $indexes = DB::select("SHOW INDEX FROM {$table} WHERE Key_name = ?", [$indexName]);
             return count($indexes) > 0;
         };
@@ -158,6 +161,9 @@ class AddReportsPerformanceIndexes extends Migration
     {
         // Helper function to check if index exists
         $indexExists = function($table, $indexName) {
+            if (!Schema::hasTable($table)) {
+                return true; // Table doesn't exist, so "index exists" to skip
+            }
             $indexes = DB::select("SHOW INDEX FROM {$table} WHERE Key_name = ?", [$indexName]);
             return count($indexes) > 0;
         };

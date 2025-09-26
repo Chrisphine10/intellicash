@@ -11,9 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('tenants', function (Blueprint $table) {
-            $table->boolean('advanced_loan_management_enabled')->default(true)->after('api_enabled');
-        });
+        if (Schema::hasTable('tenants')) {
+            Schema::table('tenants', function (Blueprint $table) {
+                if (!Schema::hasColumn('tenants', 'advanced_loan_management_enabled')) {
+                    $table->boolean('advanced_loan_management_enabled')->default(true);
+                }
+            });
+        }
     }
 
     /**

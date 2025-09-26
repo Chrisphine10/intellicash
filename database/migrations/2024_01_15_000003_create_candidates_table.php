@@ -19,11 +19,30 @@ return new class extends Migration
             $table->string('photo')->nullable();
             $table->integer('order')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('election_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('member_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('election_id');
+            $table->unsignedBigInteger('member_id');
+            $table->unsignedBigInteger('tenant_id');
             $table->timestamps();
         });
+
+        // Add foreign key constraints only if referenced tables exist
+        if (Schema::hasTable('elections')) {
+            Schema::table('candidates', function (Blueprint $table) {
+                $table->foreign('election_id')->references('id')->on('elections')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('members')) {
+            Schema::table('candidates', function (Blueprint $table) {
+                $table->foreign('member_id')->references('id')->on('members')->onDelete('cascade');
+            });
+        }
+        
+        if (Schema::hasTable('tenants')) {
+            Schema::table('candidates', function (Blueprint $table) {
+                $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            });
+        }
     }
 
     /**

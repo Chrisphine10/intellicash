@@ -12,11 +12,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Update the VSLA Meeting Reminder email template with proper HTML structure
-        DB::table('email_templates')
-            ->where('slug', 'VSLA_MEETING_REMINDER')
-            ->update([
-                'email_body' => '<!DOCTYPE html>
+        // Only proceed if email_templates table exists
+        if (Schema::hasTable('email_templates')) {
+            // Update the VSLA Meeting Reminder email template with proper HTML structure
+            DB::table('email_templates')
+                ->where('slug', 'VSLA_MEETING_REMINDER')
+                ->update([
+                    'email_body' => '<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -98,8 +100,9 @@ return new class extends Migration
     </div>
 </body>
 </html>',
-                'subject' => 'VSLA Meeting Reminder - {{meetingDate}}'
-            ]);
+                    'subject' => 'VSLA Meeting Reminder - {{meetingDate}}'
+                ]);
+        }
     }
 
     /**

@@ -12,32 +12,45 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('withdraw_requests', function (Blueprint $table) {
-            // Add indexes for frequently queried columns
-            $table->index(['member_id', 'status'], 'idx_withdraw_requests_member_status');
-            $table->index(['created_at', 'status'], 'idx_withdraw_requests_created_status');
-            $table->index(['tenant_id', 'status'], 'idx_withdraw_requests_tenant_status');
-            $table->index(['method_id'], 'idx_withdraw_requests_method');
-            $table->index(['debit_account_id'], 'idx_withdraw_requests_account');
-            
-            // Add foreign key constraints if they don't exist
-            if (!Schema::hasColumn('withdraw_requests', 'transaction_id')) {
-                $table->foreignId('transaction_id')->nullable()->constrained('transactions')->onDelete('set null');
-            }
-        });
+        // Add indexes and constraints to withdraw_requests table if it exists
+        if (Schema::hasTable('withdraw_requests')) {
+            Schema::table('withdraw_requests', function (Blueprint $table) {
+                // Add indexes for frequently queried columns
+                $table->index(['member_id', 'status'], 'idx_withdraw_requests_member_status');
+                $table->index(['created_at', 'status'], 'idx_withdraw_requests_created_status');
+                $table->index(['tenant_id', 'status'], 'idx_withdraw_requests_tenant_status');
+                $table->index(['method_id'], 'idx_withdraw_requests_method');
+                $table->index(['debit_account_id'], 'idx_withdraw_requests_account');
+                
+                // Add foreign key constraints if they don't exist
+                if (!Schema::hasColumn('withdraw_requests', 'transaction_id')) {
+                    if (Schema::hasTable('transactions')) {
+                        $table->foreignId('transaction_id')->nullable()->constrained('transactions')->onDelete('set null');
+                    } else {
+                        $table->unsignedBigInteger('transaction_id')->nullable();
+                    }
+                }
+            });
+        }
 
-        Schema::table('withdraw_methods', function (Blueprint $table) {
-            // Add indexes
-            $table->index(['status'], 'idx_withdraw_methods_status');
-            $table->index(['tenant_id', 'status'], 'idx_withdraw_methods_tenant_status');
-        });
+        // Add indexes to withdraw_methods table if it exists
+        if (Schema::hasTable('withdraw_methods')) {
+            Schema::table('withdraw_methods', function (Blueprint $table) {
+                // Add indexes
+                $table->index(['status'], 'idx_withdraw_methods_status');
+                $table->index(['tenant_id', 'status'], 'idx_withdraw_methods_tenant_status');
+            });
+        }
 
-        Schema::table('transactions', function (Blueprint $table) {
-            // Add indexes for withdrawal-related queries
-            $table->index(['member_id', 'type', 'status'], 'idx_transactions_member_type_status');
-            $table->index(['savings_account_id', 'dr_cr', 'status'], 'idx_transactions_account_dr_cr_status');
-            $table->index(['created_at', 'type'], 'idx_transactions_created_type');
-        });
+        // Add indexes to transactions table if it exists
+        if (Schema::hasTable('transactions')) {
+            Schema::table('transactions', function (Blueprint $table) {
+                // Add indexes for withdrawal-related queries
+                $table->index(['member_id', 'type', 'status'], 'idx_transactions_member_type_status');
+                $table->index(['savings_account_id', 'dr_cr', 'status'], 'idx_transactions_account_dr_cr_status');
+                $table->index(['created_at', 'type'], 'idx_transactions_created_type');
+            });
+        }
 
         // Add check constraints using raw SQL
         $this->addCheckConstraints();

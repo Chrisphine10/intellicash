@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -10,43 +11,48 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Initialize current_balance for existing bank accounts
-        DB::statement('
-            UPDATE bank_accounts 
-            SET current_balance = opening_balance,
-                last_balance_update = NOW(),
-                is_active = 1,
-                allow_negative_balance = 0,
-                minimum_balance = 0
-            WHERE current_balance IS NULL OR current_balance = 0
-        ');
+        // Only proceed if bank_accounts table exists
+        if (Schema::hasTable('bank_accounts')) {
+            // Initialize current_balance for existing bank accounts
+            DB::statement('
+                UPDATE bank_accounts 
+                SET current_balance = opening_balance,
+                    last_balance_update = NOW(),
+                    is_active = 1,
+                    allow_negative_balance = 0,
+                    minimum_balance = 0
+                WHERE current_balance IS NULL OR current_balance = 0
+            ');
 
-        // Recalculate balances from transactions for accounts that have transactions
-        $bankAccounts = DB::table('bank_accounts')->get();
-        
-        foreach ($bankAccounts as $account) {
-            $credits = DB::table('bank_transactions')
-                ->where('bank_account_id', $account->id)
-                ->where('dr_cr', 'cr')
-                ->where('status', 1)
-                ->sum('amount');
+            // Recalculate balances from transactions for accounts that have transactions
+            if (Schema::hasTable('bank_transactions')) {
+                $bankAccounts = DB::table('bank_accounts')->get();
+                
+                foreach ($bankAccounts as $account) {
+                    $credits = DB::table('bank_transactions')
+                        ->where('bank_account_id', $account->id)
+                        ->where('dr_cr', 'cr')
+                        ->where('status', 1)
+                        ->sum('amount');
 
-            $debits = DB::table('bank_transactions')
-                ->where('bank_account_id', $account->id)
-                ->where('dr_cr', 'dr')
-                ->where('status', 1)
-                ->sum('amount');
+                    $debits = DB::table('bank_transactions')
+                        ->where('bank_account_id', $account->id)
+                        ->where('dr_cr', 'dr')
+                        ->where('status', 1)
+                        ->sum('amount');
 
-            $calculatedBalance = $credits - $debits;
+                    $calculatedBalance = $credits - $debits;
 
-            // Update with calculated balance if there are transactions
-            if ($credits > 0 || $debits > 0) {
-                DB::table('bank_accounts')
-                    ->where('id', $account->id)
-                    ->update([
-                        'current_balance' => $calculatedBalance,
-                        'last_balance_update' => NOW()
-                    ]);
+                    // Update with calculated balance if there are transactions
+                    if ($credits > 0 || $debits > 0) {
+                        DB::table('bank_accounts')
+                            ->where('id', $account->id)
+                            ->update([
+                                'current_balance' => $calculatedBalance,
+                                'last_balance_update' => NOW()
+                            ]);
+                    }
+                }
             }
         }
     }
