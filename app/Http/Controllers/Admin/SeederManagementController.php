@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Database\Seeders\SubscriptionPackagesSeeder;
 use Database\Seeders\SaasSeeder;
+use Database\Seeders\DemoSeeder;
 use Database\Seeders\AssetManagementSeeder;
 use Database\Seeders\BankingSystemTestDataSeeder;
 use Database\Seeders\UtilitySeeder;
@@ -41,15 +42,25 @@ class SeederManagementController extends Controller
     /**
      * Get available seeders with their status
      */
-    private function getAvailableSeeders()
+    public function getAvailableSeeders()
     {
         return [
+            [
+                'name' => 'Demo Data',
+                'class' => 'DemoSeeder',
+                'description' => 'Demo tenant, user, and basic system data',
+                'category' => 'Core System',
+                'priority' => 1,
+                'status' => $this->checkSeederStatus('tenants'),
+                'has_data' => $this->safeTableCount('tenants') > 0,
+                'data_count' => $this->safeTableCount('tenants'),
+            ],
             [
                 'name' => 'Subscription Packages',
                 'class' => 'SubscriptionPackagesSeeder',
                 'description' => 'Core subscription packages and pricing plans',
                 'category' => 'Core System',
-                'priority' => 1,
+                'priority' => 2,
                 'status' => $this->checkSeederStatus('packages'),
                 'has_data' => $this->safeTableCount('packages') > 0,
                 'data_count' => $this->safeTableCount('packages'),
@@ -59,7 +70,7 @@ class SeederManagementController extends Controller
                 'class' => 'UtilitySeeder',
                 'description' => 'System utilities and configuration data',
                 'category' => 'Core System',
-                'priority' => 2,
+                'priority' => 3,
                 'status' => $this->checkSeederStatus('utilities'),
                 'has_data' => $this->safeTableCount('utilities') > 0,
                 'data_count' => $this->safeTableCount('utilities'),
@@ -69,7 +80,7 @@ class SeederManagementController extends Controller
                 'class' => 'EmailTemplateSeeder',
                 'description' => 'Email templates for all system modules',
                 'category' => 'Communication',
-                'priority' => 3,
+                'priority' => 4,
                 'status' => $this->checkSeederStatus('email_templates'),
                 'has_data' => $this->safeTableCount('email_templates') > 0,
                 'data_count' => $this->safeTableCount('email_templates'),
@@ -79,7 +90,7 @@ class SeederManagementController extends Controller
                 'class' => 'LandingPageSeeder',
                 'description' => 'Landing page content and settings',
                 'category' => 'Content',
-                'priority' => 4,
+                'priority' => 5,
                 'status' => $this->checkSeederStatus('landing_page'),
                 'has_data' => $this->safeTableCount('landing_page') > 0,
                 'data_count' => $this->safeTableCount('landing_page'),
@@ -89,7 +100,7 @@ class SeederManagementController extends Controller
                 'class' => 'BuniAutomaticGatewaySeeder',
                 'description' => 'Payment gateway configurations',
                 'category' => 'Payment',
-                'priority' => 5,
+                'priority' => 6,
                 'status' => $this->checkSeederStatus('payment_gateways'),
                 'has_data' => $this->safeTableCount('payment_gateways') > 0,
                 'data_count' => $this->safeTableCount('payment_gateways'),
@@ -99,7 +110,7 @@ class SeederManagementController extends Controller
                 'class' => 'LoanPermissionSeeder',
                 'description' => 'Loan system permissions and settings',
                 'category' => 'Loans',
-                'priority' => 6,
+                'priority' => 7,
                 'status' => $this->checkSeederStatus('loan_permissions'),
                 'has_data' => $this->safeTableCount('loan_permissions') > 0,
                 'data_count' => $this->safeTableCount('loan_permissions'),
@@ -109,7 +120,7 @@ class SeederManagementController extends Controller
                 'class' => 'VotingSystemSeeder',
                 'description' => 'Voting system configuration and sample data',
                 'category' => 'Modules',
-                'priority' => 7,
+                'priority' => 8,
                 'status' => $this->checkSeederStatus('voting_system'),
                 'has_data' => $this->safeTableCount('voting_elections') > 0,
                 'data_count' => $this->safeTableCount('voting_elections'),
@@ -119,7 +130,7 @@ class SeederManagementController extends Controller
                 'class' => 'AssetManagementSeeder',
                 'description' => 'Asset management categories and sample data',
                 'category' => 'Modules',
-                'priority' => 8,
+                'priority' => 9,
                 'status' => $this->checkSeederStatus('asset_categories'),
                 'has_data' => $this->safeTableCount('asset_categories') > 0,
                 'data_count' => $this->safeTableCount('asset_categories'),
@@ -129,7 +140,7 @@ class SeederManagementController extends Controller
                 'class' => 'LegalTemplatesSeeder',
                 'description' => 'Legal templates and compliance documents',
                 'category' => 'Compliance',
-                'priority' => 9,
+                'priority' => 10,
                 'status' => $this->checkSeederStatus('legal_templates'),
                 'has_data' => $this->safeTableCount('legal_templates') > 0,
                 'data_count' => $this->safeTableCount('legal_templates'),
@@ -139,7 +150,7 @@ class SeederManagementController extends Controller
                 'class' => 'KenyanLegalComplianceSeeder',
                 'description' => 'Kenyan legal compliance templates',
                 'category' => 'Compliance',
-                'priority' => 10,
+                'priority' => 11,
                 'status' => $this->checkSeederStatus('kenyan_legal_compliance'),
                 'has_data' => $this->safeTableCount('kenyan_legal_compliance') > 0,
                 'data_count' => $this->safeTableCount('kenyan_legal_compliance'),
@@ -149,7 +160,7 @@ class SeederManagementController extends Controller
                 'class' => 'LoanTermsAndPrivacySeeder',
                 'description' => 'Loan terms and privacy policy templates',
                 'category' => 'Compliance',
-                'priority' => 11,
+                'priority' => 12,
                 'status' => $this->checkSeederStatus('loan_terms_privacy'),
                 'has_data' => $this->safeTableCount('loan_terms_privacy') > 0,
                 'data_count' => $this->safeTableCount('loan_terms_privacy'),
@@ -159,7 +170,7 @@ class SeederManagementController extends Controller
                 'class' => 'MultiCountryLegalTemplatesSeeder',
                 'description' => 'Legal templates for multiple countries',
                 'category' => 'Compliance',
-                'priority' => 12,
+                'priority' => 13,
                 'status' => $this->checkSeederStatus('multi_country_legal'),
                 'has_data' => $this->safeTableCount('multi_country_legal') > 0,
                 'data_count' => $this->safeTableCount('multi_country_legal'),
@@ -431,6 +442,7 @@ class SeederManagementController extends Controller
     public function runAllCoreSeeders(Request $request)
     {
         $coreSeeders = [
+            'DemoSeeder',
             'SubscriptionPackagesSeeder',
             'UtilitySeeder',
             'EmailTemplateSeeder',
@@ -511,6 +523,7 @@ class SeederManagementController extends Controller
     private function clearSeederData($seederClass)
     {
         $tableMap = [
+            'DemoSeeder' => ['tenants', 'users', 'currency'],
             'SubscriptionPackagesSeeder' => ['packages'],
             'UtilitySeeder' => ['utilities'],
             'EmailTemplateSeeder' => ['email_templates'],
@@ -565,6 +578,7 @@ class SeederManagementController extends Controller
     private function getSeederMap()
     {
         return [
+            'DemoSeeder' => DemoSeeder::class,
             'SubscriptionPackagesSeeder' => SubscriptionPackagesSeeder::class,
             'SaasSeeder' => SaasSeeder::class,
             'AssetManagementSeeder' => AssetManagementSeeder::class,

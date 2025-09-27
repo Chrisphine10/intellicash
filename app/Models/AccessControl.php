@@ -12,4 +12,22 @@ class AccessControl extends Model
      * @var string
      */
     protected $table = 'permissions';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'role_id',
+        'permission',
+    ];
+
+    /**
+     * Get the role that owns the permission.
+     */
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
 }
