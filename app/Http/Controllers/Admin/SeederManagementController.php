@@ -338,12 +338,6 @@ class SeederManagementController extends Controller
             }
         }
 
-        Log::info("Multiple seeders run", [
-            'total' => count($seederClasses),
-            'successful' => $successCount,
-            'failed' => $failureCount,
-            'results' => $results,
-        ]);
 
         return response()->json([
             'success' => $successCount > 0,
@@ -448,21 +442,9 @@ class SeederManagementController extends Controller
         $seederMap = $this->getSeederMap();
         $fullClass = $seederMap[$seederClass] ?? null;
         
-        Log::info('Creating seeder instance', [
-            'seeder_class' => $seederClass,
-            'full_class' => $fullClass,
-            'class_exists' => $fullClass ? class_exists($fullClass) : false
-        ]);
-        
         if ($fullClass && class_exists($fullClass)) {
             return new $fullClass();
         }
-
-        Log::warning('Seeder class not found or does not exist', [
-            'seeder_class' => $seederClass,
-            'full_class' => $fullClass,
-            'available_seeders' => array_keys($seederMap)
-        ]);
 
         return null;
     }
@@ -501,16 +483,9 @@ class SeederManagementController extends Controller
      */
     public function getSeederStatus(Request $request)
     {
-        Log::info('Seeder status request received', [
-            'request_data' => $request->all(),
-            'user_id' => auth()->id(),
-            'user_type' => auth()->user()->user_type ?? 'unknown'
-        ]);
-
         $seederClass = $request->input('seeder_class');
         
         if (!$seederClass) {
-            Log::warning('Seeder status request missing seeder_class');
             return response()->json([
                 'error' => 'Seeder class required',
                 'available_seeders' => array_keys($this->getSeederMap())
@@ -519,15 +494,8 @@ class SeederManagementController extends Controller
 
         try {
             $seederInfo = $this->getSeederInfo($seederClass);
-            Log::info('Seeder status retrieved successfully', ['seeder_class' => $seederClass]);
             return response()->json($seederInfo);
         } catch (Exception $e) {
-            Log::error('Seeder status request failed', [
-                'seeder_class' => $seederClass,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
             return response()->json([
                 'error' => 'Failed to get seeder status: ' . $e->getMessage(),
                 'seeder_class' => $seederClass
