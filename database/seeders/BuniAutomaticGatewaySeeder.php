@@ -73,6 +73,8 @@ class BuniAutomaticGatewaySeeder extends Seeder
             ]);
         }
 
-        $this->command->info('Buni automatic gateway seeded successfully!');
+        if ($this->command) {
+            $this->command->info('Buni automatic gateway seeded successfully!');
+        }
     }
 }

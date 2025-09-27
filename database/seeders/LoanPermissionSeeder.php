@@ -45,7 +45,9 @@ class LoanPermissionSeeder extends Seeder
         $tenants = DB::table('tenants')->get();
         
         if ($tenants->isEmpty()) {
-            $this->command->info('No tenants found. Skipping loan permission seeding.');
+            if ($this->command) {
+                $this->command->info('No tenants found. Skipping loan permission seeding.');
+            }
             return;
         }
         
@@ -157,7 +159,9 @@ class LoanPermissionSeeder extends Seeder
             }
         }
 
-        $this->command->info('Loan permissions seeded successfully!');
-        $this->command->info('Updated existing roles and created: Loan Manager (full access), Loan Officer (limited access)');
+        if ($this->command) {
+            $this->command->info('Loan permissions seeded successfully!');
+            $this->command->info('Updated existing roles and created: Loan Manager (full access), Loan Officer (limited access)');
+        }
     }
 }

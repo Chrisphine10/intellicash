@@ -13,7 +13,9 @@ class LandingPageSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->command->info('Seeding landing page default data...');
+        if ($this->command) {
+            $this->command->info('Seeding landing page default data...');
+        }
 
         // Default landing page settings
         $landingPageSettings = [
@@ -420,15 +422,17 @@ class LandingPageSeeder extends Seeder
             ['value' => json_encode($aboutPageMediaData)]
         );
 
-        $this->command->info('Landing page default data seeded successfully!');
-        $this->command->info('Created default settings for:');
-        $this->command->info('- Site configuration and branding');
-        $this->command->info('- Home page content and media');
-        $this->command->info('- About, Pricing, Features, Blogs, FAQ pages');
-        $this->command->info('- Contact information and footer');
-        $this->command->info('- Terms & Conditions and Privacy Policy');
-        $this->command->info('- GDPR Cookie Consent');
-        $this->command->info('- PWA (Progressive Web App) settings');
-        $this->command->info('- Email and SMTP configuration');
+        if ($this->command) {
+            $this->command->info('Landing page default data seeded successfully!');
+            $this->command->info('Created default settings for:');
+            $this->command->info('- Site configuration and branding');
+            $this->command->info('- Home page content and media');
+            $this->command->info('- About, Pricing, Features, Blogs, FAQ pages');
+            $this->command->info('- Contact information and footer');
+            $this->command->info('- Terms & Conditions and Privacy Policy');
+            $this->command->info('- GDPR Cookie Consent');
+            $this->command->info('- PWA (Progressive Web App) settings');
+            $this->command->info('- Email and SMTP configuration');
+        }
     }
 }
