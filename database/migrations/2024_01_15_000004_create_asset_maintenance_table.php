@@ -15,15 +15,15 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('asset_id');
-            $table->string('maintenance_type'); // scheduled, emergency, repair, inspection
-            $table->string('title');
+            $table->string('maintenance_type', 50); // scheduled, emergency, repair, inspection
+            $table->string('title', 191);
             $table->text('description')->nullable();
             $table->date('scheduled_date');
             $table->date('completed_date')->nullable();
             $table->decimal('cost', 10, 2)->default(0);
             $table->string('status', 50)->default('scheduled'); // scheduled, in_progress, completed, cancelled
             $table->text('notes')->nullable();
-            $table->string('performed_by')->nullable();
+            $table->string('performed_by', 191)->nullable();
             $table->unsignedBigInteger('created_by');
             $table->timestamps();
 

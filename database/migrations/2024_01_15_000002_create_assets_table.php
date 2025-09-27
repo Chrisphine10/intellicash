@@ -15,18 +15,18 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('category_id');
-            $table->string('name');
+            $table->string('name', 191);
             $table->string('asset_code', 191)->unique();
             $table->text('description')->nullable();
             $table->decimal('purchase_price', 15, 2);
             $table->decimal('current_value', 15, 2)->nullable();
             $table->date('purchase_date');
             $table->date('warranty_expiry')->nullable();
-            $table->string('location')->nullable();
+            $table->string('location', 191)->nullable();
             $table->string('status', 50)->default('active'); // active, inactive, maintenance, disposed
             $table->boolean('is_leasable')->default(false);
             $table->decimal('lease_rate', 10, 2)->nullable(); // daily rate for leasable assets
-            $table->string('lease_rate_type')->default('daily'); // daily, weekly, monthly
+            $table->string('lease_rate_type', 50)->default('daily'); // daily, weekly, monthly
             $table->text('notes')->nullable();
             $table->json('metadata')->nullable(); // for storing additional asset-specific data
             $table->timestamps();
@@ -34,7 +34,7 @@ return new class extends Migration
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('category_id')->references('id')->on('asset_categories')->onDelete('cascade');
             $table->index(['tenant_id', 'status'], 'idx_assets_tenant_status');
-            $table->index(['tenant_id', 'is_leasable']);
+            $table->index(['tenant_id', 'is_leasable'], 'idx_assets_tenant_leasable');
         });
     }
 

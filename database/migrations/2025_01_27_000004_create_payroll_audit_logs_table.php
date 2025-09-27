@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('model_id');
             $table->json('old_values')->nullable(); // Previous values
             $table->json('new_values')->nullable(); // New values
-            $table->string('ip_address')->nullable();
+            $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->text('description')->nullable();
             $table->json('metadata')->nullable(); // Additional context

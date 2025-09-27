@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('payroll_periods', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->string('period_name'); // e.g., "January 2025", "Q1 2025"
+            $table->string('period_name', 191); // e.g., "January 2025", "Q1 2025"
             $table->date('start_date');
             $table->date('end_date');
             $table->enum('period_type', ['weekly', 'bi_weekly', 'monthly', 'quarterly', 'annually'])->default('monthly');
@@ -38,9 +38,9 @@ return new class extends Migration
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('updated_by')->references('id')->on('users')->onDelete('set null');
             
-            $table->index(['tenant_id', 'start_date', 'end_date']);
-            $table->index(['tenant_id', 'status']);
-            $table->index(['tenant_id', 'period_type']);
+            $table->index(['tenant_id', 'start_date', 'end_date'], 'idx_payroll_periods_tenant_dates');
+            $table->index(['tenant_id', 'status'], 'idx_payroll_periods_tenant_status');
+            $table->index(['tenant_id', 'period_type'], 'idx_payroll_periods_tenant_type');
         });
     }
 

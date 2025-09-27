@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('payroll_deductions', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->string('name'); // e.g., "Income Tax", "Social Security", "Health Insurance"
-            $table->string('code')->unique(); // e.g., "IT", "SS", "HI"
+            $table->string('name', 191); // e.g., "Income Tax", "Social Security", "Health Insurance"
+            $table->string('code', 50)->unique(); // e.g., "IT", "SS", "HI"
             $table->text('description')->nullable();
             $table->enum('type', ['percentage', 'fixed_amount', 'tiered'])->default('percentage');
             $table->decimal('rate', 8, 4)->nullable(); // Percentage rate (e.g., 15.5 for 15.5%)
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->decimal('maximum_amount', 15, 2)->nullable(); // Maximum deduction amount
             $table->boolean('is_mandatory')->default(false); // Required by law
             $table->boolean('is_active')->default(true);
-            $table->string('tax_category')->nullable(); // For tax reporting
+            $table->string('tax_category', 50)->nullable(); // For tax reporting
             $table->json('applicable_employees')->nullable(); // JSON array of employee IDs or criteria
             $table->json('calculation_rules')->nullable(); // JSON for complex calculation rules
             $table->unsignedBigInteger('created_by');
@@ -36,9 +36,9 @@ return new class extends Migration
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('updated_by')->references('id')->on('users')->onDelete('set null');
             
-            $table->index(['tenant_id', 'is_active']);
-            $table->index(['tenant_id', 'type']);
-            $table->index(['tenant_id', 'is_mandatory']);
+            $table->index(['tenant_id', 'is_active'], 'idx_deductions_tenant_active');
+            $table->index(['tenant_id', 'type'], 'idx_deductions_tenant_type');
+            $table->index(['tenant_id', 'is_mandatory'], 'idx_deductions_tenant_mandatory');
         });
     }
 

@@ -17,8 +17,8 @@ return new class extends Migration
             $table->unsignedBigInteger('member_id')->nullable();
             $table->string('action', 50); // created, started, voted, closed, result_calculated, etc.
             $table->text('details')->nullable(); // JSON details about the action
-            $table->string('ip_address')->nullable();
-            $table->string('user_agent')->nullable();
+            $table->string('ip_address', 45)->nullable();
+            $table->string('user_agent', 500)->nullable();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('performed_by');
             $table->timestamps();

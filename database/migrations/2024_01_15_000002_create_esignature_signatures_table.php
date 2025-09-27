@@ -15,20 +15,20 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('document_id');
             $table->unsignedBigInteger('tenant_id');
-            $table->string('signer_email');
-            $table->string('signer_name')->nullable();
-            $table->string('signer_phone')->nullable();
-            $table->string('signer_company')->nullable();
+            $table->string('signer_email', 191);
+            $table->string('signer_name', 191)->nullable();
+            $table->string('signer_phone', 50)->nullable();
+            $table->string('signer_company', 191)->nullable();
             $table->string('signature_token', 191)->unique();
             $table->string('status', 50)->default('pending'); // pending, signed, declined, expired
             $table->text('signature_data')->nullable(); // Base64 encoded signature image
             $table->text('signature_type')->nullable(); // drawn, typed, uploaded
             $table->json('filled_fields')->nullable(); // Fields filled by signer
             $table->json('signature_metadata')->nullable(); // Additional signature data
-            $table->string('ip_address')->nullable();
+            $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
-            $table->string('browser_info')->nullable();
-            $table->string('device_info')->nullable();
+            $table->string('browser_info', 191)->nullable();
+            $table->string('device_info', 191)->nullable();
             $table->datetime('sent_at')->nullable();
             $table->datetime('viewed_at')->nullable();
             $table->datetime('signed_at')->nullable();

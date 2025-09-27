@@ -33,11 +33,11 @@ return new class extends Migration
             $table->foreignId('tenant_id')->nullable()->constrained()->cascadeOnDelete();
             
             // Indexes for performance
-            $table->index(['auditable_type', 'auditable_id']);
-            $table->index(['user_type', 'user_id']);
-            $table->index(['event_type']);
-            $table->index(['created_at']);
-            $table->index(['tenant_id']);
+            $table->index(['auditable_type', 'auditable_id'], 'idx_audit_auditable');
+            $table->index(['user_type', 'user_id'], 'idx_audit_user');
+            $table->index(['event_type'], 'idx_audit_event');
+            $table->index(['created_at'], 'idx_audit_created');
+            $table->index(['tenant_id'], 'idx_audit_tenant');
         });
     }
 

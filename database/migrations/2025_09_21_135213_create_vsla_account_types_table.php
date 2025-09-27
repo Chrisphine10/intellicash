@@ -14,15 +14,15 @@ return new class extends Migration
         Schema::create('vsla_account_types', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->string('name');
-            $table->string('code')->unique();
+            $table->string('name', 191);
+            $table->string('code', 50)->unique();
             $table->text('description')->nullable();
             $table->string('color', 7)->default('#007bff');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
-            $table->index(['tenant_id', 'code']);
+            $table->index(['tenant_id', 'code'], 'idx_vsla_types_tenant_code');
         });
     }
 

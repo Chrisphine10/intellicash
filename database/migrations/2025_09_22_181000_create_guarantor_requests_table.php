@@ -16,8 +16,8 @@ return new class extends Migration
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('loan_id')->constrained()->cascadeOnDelete();
             $table->foreignId('borrower_id')->constrained('members')->cascadeOnDelete();
-            $table->string('guarantor_email');
-            $table->string('guarantor_name');
+            $table->string('guarantor_email', 191);
+            $table->string('guarantor_name', 191);
             $table->text('guarantor_message')->nullable();
             $table->string('token', 64)->unique();
             $table->enum('status', ['pending', 'accepted', 'declined', 'expired'])->default('pending');
@@ -26,8 +26,8 @@ return new class extends Migration
             $table->text('response_message')->nullable();
             $table->timestamps();
             
-            $table->index(['token', 'status']);
-            $table->index(['loan_id', 'status']);
+            $table->index(['token', 'status'], 'idx_guarantor_requests_token_status');
+            $table->index(['loan_id', 'status'], 'idx_guarantor_requests_loan_status');
         });
     }
 

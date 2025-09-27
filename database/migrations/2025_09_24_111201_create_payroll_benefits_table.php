@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('payroll_benefits', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->string('name'); // e.g., "Health Insurance", "Retirement Plan", "Life Insurance"
-            $table->string('code')->unique(); // e.g., "HI", "RP", "LI"
+            $table->string('name', 191); // e.g., "Health Insurance", "Retirement Plan", "Life Insurance"
+            $table->string('code', 50)->unique(); // e.g., "HI", "RP", "LI"
             $table->text('description')->nullable();
             $table->enum('type', ['percentage', 'fixed_amount', 'tiered'])->default('percentage');
             $table->decimal('rate', 8, 4)->nullable(); // Percentage rate (e.g., 5.0 for 5%)
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->decimal('maximum_amount', 15, 2)->nullable(); // Maximum benefit amount
             $table->boolean('is_employer_paid')->default(true); // Employer pays vs employee pays
             $table->boolean('is_active')->default(true);
-            $table->string('category')->nullable(); // e.g., "health", "retirement", "life", "dental"
+            $table->string('category', 50)->nullable(); // e.g., "health", "retirement", "life", "dental"
             $table->json('applicable_employees')->nullable(); // JSON array of employee IDs or criteria
             $table->json('calculation_rules')->nullable(); // JSON for complex calculation rules
             $table->date('effective_date')->nullable(); // When this benefit becomes effective
@@ -38,10 +38,10 @@ return new class extends Migration
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('updated_by')->references('id')->on('users')->onDelete('set null');
             
-            $table->index(['tenant_id', 'is_active']);
-            $table->index(['tenant_id', 'type']);
-            $table->index(['tenant_id', 'category']);
-            $table->index(['tenant_id', 'is_employer_paid']);
+            $table->index(['tenant_id', 'is_active'], 'idx_benefits_tenant_active');
+            $table->index(['tenant_id', 'type'], 'idx_benefits_tenant_type');
+            $table->index(['tenant_id', 'category'], 'idx_benefits_tenant_category');
+            $table->index(['tenant_id', 'is_employer_paid'], 'idx_benefits_tenant_employer');
         });
     }
 

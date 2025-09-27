@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('security_test_results', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
-            $table->string('test_type');
+            $table->string('test_type', 50);
             $table->json('test_results');
             $table->json('test_summary');
             $table->integer('total_tests');
@@ -27,8 +27,8 @@ return new class extends Migration
             $table->timestamps();
             
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->index(['user_id', 'test_type']);
-            $table->index('test_completed_at');
+            $table->index(['user_id', 'test_type'], 'idx_security_test_user_type');
+            $table->index('test_completed_at', 'idx_security_test_completed');
         });
     }
 

@@ -14,10 +14,10 @@ return new class extends Migration
         Schema::create('legal_templates', function (Blueprint $table) {
             $table->id();
             $table->string('country_code', 3); // ISO country code (KEN, UGA, TZA, etc.)
-            $table->string('country_name');
-            $table->string('template_name');
-            $table->string('template_type'); // 'general', 'microfinance', 'sme', 'agricultural', 'personal'
-            $table->string('version')->default('1.0');
+            $table->string('country_name', 191);
+            $table->string('template_name', 191);
+            $table->string('template_type', 50); // 'general', 'microfinance', 'sme', 'agricultural', 'personal'
+            $table->string('version', 20)->default('1.0');
             $table->longText('terms_and_conditions');
             $table->longText('privacy_policy');
             $table->text('description')->nullable();
@@ -28,8 +28,8 @@ return new class extends Migration
             $table->string('language_code', 5)->default('en'); // en, sw, fr, etc.
             $table->timestamps();
             
-            $table->index(['country_code', 'template_type', 'is_active']);
-            $table->index(['is_system_template', 'is_active']);
+            $table->index(['country_code', 'template_type', 'is_active'], 'idx_legal_templates_country_type_active');
+            $table->index(['is_system_template', 'is_active'], 'idx_legal_templates_system_active');
             $table->unique(['country_code', 'template_name', 'template_type', 'version'], 'legal_templates_unique');
         });
     }

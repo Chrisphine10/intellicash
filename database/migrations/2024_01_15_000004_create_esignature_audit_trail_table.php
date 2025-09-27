@@ -22,11 +22,11 @@ return new class extends Migration
             $table->string('actor_name', 191)->nullable();
             $table->text('description')->nullable();
             $table->json('metadata')->nullable(); // Additional action data
-            $table->string('ip_address')->nullable();
+            $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
-            $table->string('browser_info')->nullable();
-            $table->string('device_info')->nullable();
-            $table->string('location')->nullable();
+            $table->string('browser_info', 191)->nullable();
+            $table->string('device_info', 191)->nullable();
+            $table->string('location', 191)->nullable();
             $table->timestamps();
 
             $table->foreign('document_id')->references('id')->on('esignature_documents')->onDelete('cascade');
