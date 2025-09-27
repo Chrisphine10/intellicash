@@ -52,8 +52,8 @@ class SeederManagementController extends Controller
                 'category' => 'Core System',
                 'priority' => 1,
                 'status' => $this->checkSeederStatus('packages'),
-                'has_data' => DB::table('packages')->count() > 0,
-                'data_count' => DB::table('packages')->count(),
+                'has_data' => $this->safeTableCount('packages') > 0,
+                'data_count' => $this->safeTableCount('packages'),
             ],
             [
                 'name' => 'Core Utilities',
@@ -62,8 +62,8 @@ class SeederManagementController extends Controller
                 'category' => 'Core System',
                 'priority' => 2,
                 'status' => $this->checkSeederStatus('utilities'),
-                'has_data' => DB::table('utilities')->count() > 0,
-                'data_count' => DB::table('utilities')->count(),
+                'has_data' => $this->safeTableCount('utilities') > 0,
+                'data_count' => $this->safeTableCount('utilities'),
             ],
             [
                 'name' => 'Email Templates',
@@ -72,8 +72,8 @@ class SeederManagementController extends Controller
                 'category' => 'Communication',
                 'priority' => 3,
                 'status' => $this->checkSeederStatus('email_templates'),
-                'has_data' => DB::table('email_templates')->count() > 0,
-                'data_count' => DB::table('email_templates')->count(),
+                'has_data' => $this->safeTableCount('email_templates') > 0,
+                'data_count' => $this->safeTableCount('email_templates'),
             ],
             [
                 'name' => 'Landing Page Content',
@@ -82,8 +82,8 @@ class SeederManagementController extends Controller
                 'category' => 'Content',
                 'priority' => 4,
                 'status' => $this->checkSeederStatus('landing_page'),
-                'has_data' => DB::table('landing_page')->count() > 0,
-                'data_count' => DB::table('landing_page')->count(),
+                'has_data' => $this->safeTableCount('landing_page') > 0,
+                'data_count' => $this->safeTableCount('landing_page'),
             ],
             [
                 'name' => 'Payment Gateways',
@@ -92,8 +92,8 @@ class SeederManagementController extends Controller
                 'category' => 'Payment',
                 'priority' => 5,
                 'status' => $this->checkSeederStatus('payment_gateways'),
-                'has_data' => DB::table('payment_gateways')->count() > 0,
-                'data_count' => DB::table('payment_gateways')->count(),
+                'has_data' => $this->safeTableCount('payment_gateways') > 0,
+                'data_count' => $this->safeTableCount('payment_gateways'),
             ],
             [
                 'name' => 'Loan Permissions',
@@ -102,8 +102,8 @@ class SeederManagementController extends Controller
                 'category' => 'Loans',
                 'priority' => 6,
                 'status' => $this->checkSeederStatus('loan_permissions'),
-                'has_data' => DB::table('loan_permissions')->count() > 0,
-                'data_count' => DB::table('loan_permissions')->count(),
+                'has_data' => $this->safeTableCount('loan_permissions') > 0,
+                'data_count' => $this->safeTableCount('loan_permissions'),
             ],
             [
                 'name' => 'Voting System',
@@ -112,8 +112,8 @@ class SeederManagementController extends Controller
                 'category' => 'Modules',
                 'priority' => 7,
                 'status' => $this->checkSeederStatus('voting_system'),
-                'has_data' => DB::table('voting_elections')->count() > 0,
-                'data_count' => DB::table('voting_elections')->count(),
+                'has_data' => $this->safeTableCount('voting_elections') > 0,
+                'data_count' => $this->safeTableCount('voting_elections'),
             ],
             [
                 'name' => 'Asset Management',
@@ -122,8 +122,8 @@ class SeederManagementController extends Controller
                 'category' => 'Modules',
                 'priority' => 8,
                 'status' => $this->checkSeederStatus('asset_categories'),
-                'has_data' => DB::table('asset_categories')->count() > 0,
-                'data_count' => DB::table('asset_categories')->count(),
+                'has_data' => $this->safeTableCount('asset_categories') > 0,
+                'data_count' => $this->safeTableCount('asset_categories'),
             ],
             [
                 'name' => 'Legal Templates',
@@ -132,8 +132,8 @@ class SeederManagementController extends Controller
                 'category' => 'Compliance',
                 'priority' => 9,
                 'status' => $this->checkSeederStatus('legal_templates'),
-                'has_data' => DB::table('legal_templates')->count() > 0,
-                'data_count' => DB::table('legal_templates')->count(),
+                'has_data' => $this->safeTableCount('legal_templates') > 0,
+                'data_count' => $this->safeTableCount('legal_templates'),
             ],
             [
                 'name' => 'Kenyan Legal Compliance',
@@ -142,8 +142,8 @@ class SeederManagementController extends Controller
                 'category' => 'Compliance',
                 'priority' => 10,
                 'status' => $this->checkSeederStatus('kenyan_legal_compliance'),
-                'has_data' => DB::table('kenyan_legal_compliance')->count() > 0,
-                'data_count' => DB::table('kenyan_legal_compliance')->count(),
+                'has_data' => $this->safeTableCount('kenyan_legal_compliance') > 0,
+                'data_count' => $this->safeTableCount('kenyan_legal_compliance'),
             ],
             [
                 'name' => 'Loan Terms and Privacy',
@@ -152,8 +152,8 @@ class SeederManagementController extends Controller
                 'category' => 'Compliance',
                 'priority' => 11,
                 'status' => $this->checkSeederStatus('loan_terms_privacy'),
-                'has_data' => DB::table('loan_terms_privacy')->count() > 0,
-                'data_count' => DB::table('loan_terms_privacy')->count(),
+                'has_data' => $this->safeTableCount('loan_terms_privacy') > 0,
+                'data_count' => $this->safeTableCount('loan_terms_privacy'),
             ],
             [
                 'name' => 'Multi-Country Legal Templates',
@@ -162,8 +162,8 @@ class SeederManagementController extends Controller
                 'category' => 'Compliance',
                 'priority' => 12,
                 'status' => $this->checkSeederStatus('multi_country_legal'),
-                'has_data' => DB::table('multi_country_legal')->count() > 0,
-                'data_count' => DB::table('multi_country_legal')->count(),
+                'has_data' => $this->safeTableCount('multi_country_legal') > 0,
+                'data_count' => $this->safeTableCount('multi_country_legal'),
             ],
         ];
     }
@@ -173,17 +173,36 @@ class SeederManagementController extends Controller
      */
     private function checkSeederStatus($tableName)
     {
-        if (!Schema::hasTable($tableName)) {
-            return 'table_missing';
+        try {
+            if (!Schema::hasTable($tableName)) {
+                return 'table_missing';
+            }
+            
+            $count = DB::table($tableName)->count();
+            
+            if ($count === 0) {
+                return 'empty';
+            }
+            
+            return 'populated';
+        } catch (Exception $e) {
+            return 'error';
         }
-        
-        $count = DB::table($tableName)->count();
-        
-        if ($count === 0) {
-            return 'empty';
+    }
+
+    /**
+     * Safely get table count, returning 0 if table doesn't exist
+     */
+    private function safeTableCount($tableName)
+    {
+        try {
+            if (!Schema::hasTable($tableName)) {
+                return 0;
+            }
+            return DB::table($tableName)->count();
+        } catch (Exception $e) {
+            return 0;
         }
-        
-        return 'populated';
     }
 
     /**
@@ -192,11 +211,11 @@ class SeederManagementController extends Controller
     private function getSystemStatus()
     {
         return [
-            'total_tenants' => DB::table('tenants')->count(),
-            'total_users' => DB::table('users')->count(),
-            'total_packages' => DB::table('packages')->count(),
-            'total_currencies' => DB::table('currency')->count(),
-            'total_roles' => DB::table('roles')->count(),
+            'total_tenants' => $this->safeTableCount('tenants'),
+            'total_users' => $this->safeTableCount('users'),
+            'total_packages' => $this->safeTableCount('packages'),
+            'total_currencies' => $this->safeTableCount('currency'),
+            'total_roles' => $this->safeTableCount('roles'),
             'database_size' => $this->getDatabaseSize(),
             'last_seeder_run' => $this->getLastSeederRun(),
         ];
@@ -481,7 +500,7 @@ class SeederManagementController extends Controller
         foreach ($tables as $table) {
             $tableInfo[$table] = [
                 'exists' => Schema::hasTable($table),
-                'count' => Schema::hasTable($table) ? DB::table($table)->count() : 0,
+                'count' => $this->safeTableCount($table),
                 'last_updated' => Schema::hasTable($table) ? DB::table($table)->max('updated_at') : null,
             ];
         }
