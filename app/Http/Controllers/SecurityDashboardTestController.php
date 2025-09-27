@@ -914,6 +914,12 @@ class SecurityDashboardTestController extends Controller
             // Ensure test tenant exists for VSLA testing
             $this->createTestTenantForVSLA();
             
+            // Check if VSLAUltimateTestWithTenant class is available
+            if (!class_exists('Tests\VSLAUltimateTestWithTenant')) {
+                Log::warning('VSLAUltimateTestWithTenant class not found, falling back to basic VSLA tests');
+                throw new Exception('VSLAUltimateTestWithTenant class not available');
+            }
+            
             // Use the ultimate VSLA test suite with tenant support
             $vslaUltimateTest = new VSLAUltimateTestWithTenant();
             $vslaResults = $vslaUltimateTest->runAllTests();
