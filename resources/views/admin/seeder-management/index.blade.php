@@ -12,12 +12,21 @@
                         <i class="fas fa-database"></i> Seeder Management
                     </h3>
                     <div class="card-tools">
+                        <button type="button" class="btn btn-secondary" onclick="testConnection()">
+                            <i class="fas fa-plug"></i> Test Connection
+                        </button>
                         <button type="button" class="btn btn-primary" onclick="runAllCoreSeeders()">
                             <i class="fas fa-play"></i> Run All Core Seeders
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
+                    <!-- Debug Info -->
+                    <div class="alert alert-info" id="debugInfo" style="display: none;">
+                        <h6><i class="fas fa-bug"></i> Debug Information</h6>
+                        <div id="debugContent"></div>
+                    </div>
+                    
                     <!-- System Status -->
                     <div class="row mb-4">
                         <div class="col-12">
@@ -216,8 +225,96 @@
 // CSRF Token
 const csrfToken = '{{ csrf_token() }}';
 
+// Debug function to log errors
+function logError(error, context = '') {
+    console.error('Seeder Management Error' + (context ? ' (' + context + ')' : '') + ':', error);
+    console.error('Stack trace:', error.stack);
+}
+
+// Show debug information
+function showDebugInfo(info) {
+    const debugInfo = document.getElementById('debugInfo');
+    const debugContent = document.getElementById('debugContent');
+    
+    debugContent.innerHTML = `
+        <pre style="margin: 0; font-size: 12px;">${JSON.stringify(info, null, 2)}</pre>
+    `;
+    debugInfo.style.display = 'block';
+}
+
+// Hide debug information
+function hideDebugInfo() {
+    document.getElementById('debugInfo').style.display = 'none';
+}
+
+// Test connection function
+function testConnection() {
+    console.log('Testing connection...');
+    
+    const debugInfo = {
+        csrf_token: csrfToken,
+        current_url: window.location.href,
+        user_agent: navigator.userAgent,
+        timestamp: new Date().toISOString()
+    };
+    
+    showDebugInfo(debugInfo);
+    
+    fetch('{{ route("admin.seeder-management.status") }}', {
+        method: 'GET',
+        headers: {
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        console.log('Test response status:', response.status);
+        
+        const responseInfo = {
+            ...debugInfo,
+            response_status: response.status,
+            response_ok: response.ok,
+            response_headers: Object.fromEntries(response.headers.entries())
+        };
+        
+        showDebugInfo(responseInfo);
+        
+        if (response.ok) {
+            showAlert('success', 'Connection successful! Server is responding.');
+        } else {
+            showAlert('error', `Connection failed: HTTP ${response.status}`);
+        }
+        return response.text();
+    })
+    .then(data => {
+        console.log('Test response data:', data);
+        const finalInfo = {
+            ...debugInfo,
+            response_data: data.substring(0, 500) + (data.length > 500 ? '...' : '')
+        };
+        showDebugInfo(finalInfo);
+    })
+    .catch(error => {
+        logError(error, 'testConnection');
+        
+        const errorInfo = {
+            ...debugInfo,
+            error: {
+                message: error.message,
+                name: error.name,
+                stack: error.stack
+            }
+        };
+        showDebugInfo(errorInfo);
+        
+        showAlert('error', 'Connection failed: ' + error.message);
+    });
+}
+
 // Run single seeder
 function runSeeder(seederClass, clearExisting = false) {
+    console.log('Running seeder:', seederClass, 'Clear existing:', clearExisting);
+    
     if (!confirm(`Are you sure you want to run ${seederClass}?${clearExisting ? ' This will clear existing data first.' : ''}`)) {
         return;
     }
@@ -225,30 +322,43 @@ function runSeeder(seederClass, clearExisting = false) {
     showProgressModal();
     updateProgress(0, `Running ${seederClass}...`);
 
+    // Use FormData for better compatibility
+    const formData = new FormData();
+    formData.append('seeder_class', seederClass);
+    formData.append('clear_existing', clearExisting ? '1' : '0');
+    formData.append('_token', csrfToken);
+
     fetch('{{ route("admin.seeder-management.run") }}', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
             'X-CSRF-TOKEN': csrfToken
         },
-        body: JSON.stringify({
-            seeder_class: seederClass,
-            clear_existing: clearExisting
-        })
+        body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    })
     .then(data => {
-        updateProgress(100, data.message);
+        console.log('Seeder response:', data);
+        updateProgress(100, data.message || 'Completed');
         setTimeout(() => {
             hideProgressModal();
-            showAlert(data.success ? 'success' : 'error', data.message);
+            showAlert(data.success ? 'success' : 'error', data.message || 'Operation completed');
             if (data.success) {
-                location.reload();
+                setTimeout(() => location.reload(), 1000);
             }
         }, 2000);
     })
     .catch(error => {
-        updateProgress(100, 'Error: ' + error.message);
+        logError(error, 'runSeeder');
+        updateProgress(100, 'Error occurred');
         setTimeout(() => {
             hideProgressModal();
             showAlert('error', 'An error occurred: ' + error.message);
@@ -258,6 +368,8 @@ function runSeeder(seederClass, clearExisting = false) {
 
 // Run all core seeders
 function runAllCoreSeeders() {
+    console.log('Running all core seeders');
+    
     if (!confirm('Are you sure you want to run all core seeders? This may take several minutes.')) {
         return;
     }
@@ -265,40 +377,56 @@ function runAllCoreSeeders() {
     showProgressModal();
     updateProgress(0, 'Running all core seeders...');
 
+    // Use FormData for better compatibility
+    const formData = new FormData();
+    formData.append('clear_existing', '0');
+    formData.append('_token', csrfToken);
+
     fetch('{{ route("admin.seeder-management.run-all-core") }}', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
             'X-CSRF-TOKEN': csrfToken
         },
-        body: JSON.stringify({
-            clear_existing: false
-        })
+        body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Core seeders response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    })
     .then(data => {
-        updateProgress(100, data.message);
+        console.log('Core seeders response:', data);
+        updateProgress(100, data.message || 'All core seeders completed');
         
         // Display results
         let resultsHtml = '<h6>Results:</h6><ul>';
-        data.results.forEach(result => {
-            const icon = result.success ? '<i class="fas fa-check text-success"></i>' : '<i class="fas fa-times text-danger"></i>';
-            resultsHtml += `<li>${icon} ${result.seeder}: ${result.message}</li>`;
-        });
+        if (data.results && Array.isArray(data.results)) {
+            data.results.forEach(result => {
+                const icon = result.success ? '<i class="fas fa-check text-success"></i>' : '<i class="fas fa-times text-danger"></i>';
+                resultsHtml += `<li>${icon} ${result.seeder}: ${result.message}</li>`;
+            });
+        } else {
+            resultsHtml += '<li>No detailed results available</li>';
+        }
         resultsHtml += '</ul>';
         
         document.getElementById('progressResults').innerHTML = resultsHtml;
         
         setTimeout(() => {
             hideProgressModal();
-            showAlert(data.success ? 'success' : 'warning', data.message);
+            showAlert(data.success ? 'success' : 'warning', data.message || 'Core seeders completed');
             if (data.success_count > 0) {
-                location.reload();
+                setTimeout(() => location.reload(), 1000);
             }
         }, 3000);
     })
     .catch(error => {
-        updateProgress(100, 'Error: ' + error.message);
+        logError(error, 'runAllCoreSeeders');
+        updateProgress(100, 'Error occurred');
         setTimeout(() => {
             hideProgressModal();
             showAlert('error', 'An error occurred: ' + error.message);
@@ -308,23 +436,46 @@ function runAllCoreSeeders() {
 
 // Get seeder status
 function getSeederStatus(seederClass) {
+    console.log('Getting status for seeder:', seederClass);
+    
     $('#statusModal').modal('show');
     
-    fetch('{{ route("admin.seeder-management.status") }}', {
+    // Show loading state
+    document.getElementById('statusContent').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p>Loading seeder status...</p>
+        </div>
+    `;
+    
+    // Build URL with query parameters
+    const url = new URL('{{ route("admin.seeder-management.status") }}', window.location.origin);
+    url.searchParams.append('seeder_class', seederClass);
+    
+    fetch(url.toString(), {
         method: 'GET',
         headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken
-        },
-        body: new URLSearchParams({
-            seeder_class: seederClass
-        })
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json'
+        }
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Status response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    })
     .then(data => {
+        console.log('Status response:', data);
+        
         let html = `
-            <h6>${data.seeder}</h6>
-            <p><strong>Total Records:</strong> ${data.total_records}</p>
+            <h6>${data.seeder || seederClass}</h6>
+            <p><strong>Total Records:</strong> ${data.total_records || 0}</p>
             <table class="table table-sm">
                 <thead>
                     <tr>
@@ -337,24 +488,31 @@ function getSeederStatus(seederClass) {
                 <tbody>
         `;
         
-        for (const [table, info] of Object.entries(data.tables)) {
-            html += `
-                <tr>
-                    <td>${table}</td>
-                    <td>${info.exists ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>'}</td>
-                    <td>${info.count}</td>
-                    <td>${info.last_updated || 'N/A'}</td>
-                </tr>
-            `;
+        if (data.tables && typeof data.tables === 'object') {
+            for (const [table, info] of Object.entries(data.tables)) {
+                html += `
+                    <tr>
+                        <td>${table}</td>
+                        <td>${info.exists ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>'}</td>
+                        <td>${info.count || 0}</td>
+                        <td>${info.last_updated || 'N/A'}</td>
+                    </tr>
+                `;
+            }
+        } else {
+            html += '<tr><td colspan="4" class="text-center">No table information available</td></tr>';
         }
         
         html += '</tbody></table>';
         document.getElementById('statusContent').innerHTML = html;
     })
     .catch(error => {
+        logError(error, 'getSeederStatus');
         document.getElementById('statusContent').innerHTML = `
             <div class="alert alert-danger">
-                Error loading status: ${error.message}
+                <h6>Error loading status</h6>
+                <p>${error.message}</p>
+                <small>Check browser console for more details.</small>
             </div>
         `;
     });

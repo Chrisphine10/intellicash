@@ -249,42 +249,60 @@ class SeederManagementController extends Controller
      */
     public function runSeeder(Request $request)
     {
+        Log::info('Seeder run request received', [
+            'request_data' => $request->all(),
+            'user_id' => auth()->id(),
+            'user_type' => auth()->user()->user_type ?? 'unknown'
+        ]);
+
         $request->validate([
             'seeder_class' => 'required|string',
             'clear_existing' => 'boolean',
         ]);
 
         $seederClass = $request->input('seeder_class');
-        $clearExisting = $request->input('clear_existing', false);
+        $clearExisting = $request->boolean('clear_existing');
 
         try {
             $startTime = now();
+            
+            Log::info("Starting seeder execution", [
+                'seeder' => $seederClass,
+                'clear_existing' => $clearExisting,
+                'start_time' => $startTime
+            ]);
             
             // Create seeder instance
             $seeder = $this->createSeederInstance($seederClass);
             
             if (!$seeder) {
+                Log::warning("Seeder class not found", ['seeder_class' => $seederClass]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Seeder class not found: ' . $seederClass,
                 ], 404);
             }
 
+            Log::info("Seeder instance created successfully", ['seeder_class' => $seederClass]);
+
             // Clear existing data if requested
             if ($clearExisting) {
+                Log::info("Clearing existing seeder data", ['seeder_class' => $seederClass]);
                 $this->clearSeederData($seederClass);
             }
 
             // Run the seeder
+            Log::info("Executing seeder", ['seeder_class' => $seederClass]);
             $seeder->run();
             
             $endTime = now();
             $duration = $startTime->diffInSeconds($endTime);
 
-            Log::info("Seeder {$seederClass} run successfully", [
+            Log::info("Seeder executed successfully", [
                 'seeder' => $seederClass,
                 'duration' => $duration,
                 'cleared_existing' => $clearExisting,
+                'end_time' => $endTime
             ]);
 
             return response()->json([
@@ -294,15 +312,21 @@ class SeederManagementController extends Controller
             ]);
 
         } catch (Exception $e) {
-            Log::error("Seeder {$seederClass} failed", [
+            Log::error("Seeder execution failed", [
                 'seeder' => $seederClass,
                 'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Seeder failed: ' . $e->getMessage(),
+                'error_details' => [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
             ], 500);
         }
     }
@@ -401,30 +425,24 @@ class SeederManagementController extends Controller
      */
     private function createSeederInstance($seederClass)
     {
-        $seederMap = [
-            'SubscriptionPackagesSeeder' => SubscriptionPackagesSeeder::class,
-            'SaasSeeder' => SaasSeeder::class,
-            'AssetManagementSeeder' => AssetManagementSeeder::class,
-            'BankingSystemTestDataSeeder' => BankingSystemTestDataSeeder::class,
-            'UtilitySeeder' => UtilitySeeder::class,
-            'EmailTemplateSeeder' => EmailTemplateSeeder::class,
-            'LandingPageSeeder' => LandingPageSeeder::class,
-            'PackageAdvancedFeaturesSeeder' => PackageAdvancedFeaturesSeeder::class,
-            'VotingSystemSeeder' => VotingSystemSeeder::class,
-            'LoanPermissionSeeder' => LoanPermissionSeeder::class,
-            'BuniAutomaticGatewaySeeder' => BuniAutomaticGatewaySeeder::class,
-            'LegalTemplatesSeeder' => LegalTemplatesSeeder::class,
-            'KenyanLegalComplianceSeeder' => KenyanLegalComplianceSeeder::class,
-            'LoanTermsAndPrivacySeeder' => LoanTermsAndPrivacySeeder::class,
-            'MultiCountryLegalTemplatesSeeder' => MultiCountryLegalTemplatesSeeder::class,
-            'TenantModuleSeeder' => TenantModuleSeeder::class,
-        ];
-
+        $seederMap = $this->getSeederMap();
         $fullClass = $seederMap[$seederClass] ?? null;
+        
+        Log::info('Creating seeder instance', [
+            'seeder_class' => $seederClass,
+            'full_class' => $fullClass,
+            'class_exists' => $fullClass ? class_exists($fullClass) : false
+        ]);
         
         if ($fullClass && class_exists($fullClass)) {
             return new $fullClass();
         }
+
+        Log::warning('Seeder class not found or does not exist', [
+            'seeder_class' => $seederClass,
+            'full_class' => $fullClass,
+            'available_seeders' => array_keys($seederMap)
+        ]);
 
         return null;
     }
@@ -463,15 +481,63 @@ class SeederManagementController extends Controller
      */
     public function getSeederStatus(Request $request)
     {
+        Log::info('Seeder status request received', [
+            'request_data' => $request->all(),
+            'user_id' => auth()->id(),
+            'user_type' => auth()->user()->user_type ?? 'unknown'
+        ]);
+
         $seederClass = $request->input('seeder_class');
         
         if (!$seederClass) {
-            return response()->json(['error' => 'Seeder class required'], 400);
+            Log::warning('Seeder status request missing seeder_class');
+            return response()->json([
+                'error' => 'Seeder class required',
+                'available_seeders' => array_keys($this->getSeederMap())
+            ], 400);
         }
 
-        $seederInfo = $this->getSeederInfo($seederClass);
-        
-        return response()->json($seederInfo);
+        try {
+            $seederInfo = $this->getSeederInfo($seederClass);
+            Log::info('Seeder status retrieved successfully', ['seeder_class' => $seederClass]);
+            return response()->json($seederInfo);
+        } catch (Exception $e) {
+            Log::error('Seeder status request failed', [
+                'seeder_class' => $seederClass,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to get seeder status: ' . $e->getMessage(),
+                'seeder_class' => $seederClass
+            ], 500);
+        }
+    }
+
+    /**
+     * Get seeder map for debugging
+     */
+    private function getSeederMap()
+    {
+        return [
+            'SubscriptionPackagesSeeder' => SubscriptionPackagesSeeder::class,
+            'SaasSeeder' => SaasSeeder::class,
+            'AssetManagementSeeder' => AssetManagementSeeder::class,
+            'BankingSystemTestDataSeeder' => BankingSystemTestDataSeeder::class,
+            'UtilitySeeder' => UtilitySeeder::class,
+            'EmailTemplateSeeder' => EmailTemplateSeeder::class,
+            'LandingPageSeeder' => LandingPageSeeder::class,
+            'PackageAdvancedFeaturesSeeder' => PackageAdvancedFeaturesSeeder::class,
+            'VotingSystemSeeder' => VotingSystemSeeder::class,
+            'LoanPermissionSeeder' => LoanPermissionSeeder::class,
+            'BuniAutomaticGatewaySeeder' => BuniAutomaticGatewaySeeder::class,
+            'LegalTemplatesSeeder' => LegalTemplatesSeeder::class,
+            'KenyanLegalComplianceSeeder' => KenyanLegalComplianceSeeder::class,
+            'LoanTermsAndPrivacySeeder' => LoanTermsAndPrivacySeeder::class,
+            'MultiCountryLegalTemplatesSeeder' => MultiCountryLegalTemplatesSeeder::class,
+            'TenantModuleSeeder' => TenantModuleSeeder::class,
+        ];
     }
 
     /**
