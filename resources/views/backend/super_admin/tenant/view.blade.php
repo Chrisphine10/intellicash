@@ -23,7 +23,7 @@
 						<div class="table-responsive">
 							<table class="table table-bordered">
 								<tr><td>{{ _lang('Name') }}</td><td>{{ $tenant->name }}</td></tr>
-								<tr><td>{{ _lang('Email') }}</td><td>{{ $tenant->owner->email }}</td></tr>
+								<tr><td>{{ _lang('Email') }}</td><td>{{ $tenant->owner ? $tenant->owner->email : _lang('Not Available') }}</td></tr>
 								<tr>
 									<td>{{ _lang('Workspace') }}</td>
 									<td>{{ $tenant->slug }}</td>

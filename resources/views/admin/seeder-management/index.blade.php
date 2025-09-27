@@ -178,6 +178,8 @@
                                                             <span class="badge badge-success">Populated</span>
                                                         @elseif($seeder['status'] === 'empty')
                                                             <span class="badge badge-warning">Empty</span>
+                                                        @elseif($seeder['status'] === 'migration_pending')
+                                                            <span class="badge badge-info">Migration Pending</span>
                                                         @else
                                                             <span class="badge badge-danger">Table Missing</span>
                                                         @endif

@@ -173,10 +173,18 @@ class SeederManagementController extends Controller
     private function checkSeederStatus($tableName)
     {
         try {
+            // First check if table exists
             if (!Schema::hasTable($tableName)) {
                 return 'table_missing';
             }
             
+            // Check if migrations have been run for this table
+            $migrationStatus = $this->checkMigrationStatus($tableName);
+            if ($migrationStatus === 'not_run') {
+                return 'migration_pending';
+            }
+            
+            // Count records in table
             $count = DB::table($tableName)->count();
             
             if ($count === 0) {
@@ -184,6 +192,54 @@ class SeederManagementController extends Controller
             }
             
             return 'populated';
+        } catch (Exception $e) {
+            return 'error';
+        }
+    }
+
+    /**
+     * Check if migrations have been run for a specific table
+     */
+    private function checkMigrationStatus($tableName)
+    {
+        try {
+            // Check if migrations table exists
+            if (!Schema::hasTable('migrations')) {
+                return 'not_run';
+            }
+            
+            // Map table names to migration files
+            $tableMigrationMap = [
+                'settings' => 'create_settings_table',
+                'roles' => 'create_roles_table',
+                'permissions' => 'create_permissions_table',
+                'voting_positions' => 'create_voting_positions_table',
+                'elections' => 'create_elections_table',
+                'candidates' => 'create_candidates_table',
+                'votes' => 'create_votes_table',
+                'election_results' => 'create_election_results_table',
+                'legal_templates' => 'create_legal_templates_table',
+                'loan_terms_and_privacy' => 'create_loan_terms_and_privacy_table',
+                'asset_categories' => 'create_asset_categories_table',
+                'assets' => 'create_assets_table',
+                'automatic_gateways' => 'create_automatic_gateways_table',
+                'email_templates' => 'create_email_templates_table',
+                'pages' => 'create_pages_table',
+                'currency' => 'create_currency_table',
+            ];
+            
+            $migrationName = $tableMigrationMap[$tableName] ?? null;
+            if (!$migrationName) {
+                return 'unknown';
+            }
+            
+            // Check if migration has been run
+            $migrationExists = DB::table('migrations')
+                ->where('migration', 'like', '%' . $migrationName . '%')
+                ->exists();
+                
+            return $migrationExists ? 'run' : 'not_run';
+            
         } catch (Exception $e) {
             return 'error';
         }

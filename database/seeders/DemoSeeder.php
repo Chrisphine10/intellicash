@@ -29,9 +29,9 @@ class DemoSeeder extends Seeder {
         ]);
 
         //Create Tenant
-        $teannt = DB::table('tenants')->insert([
-            'slug'              => 'demo-user',
-            'name'              => 'Demo User',
+        $tenantId = DB::table('tenants')->insertGetId([
+            'slug'              => 'intelli-demo',
+            'name'              => 'IntelliDemo',
             'membership_type'   => 'member',
             'package_id'        => 7,
             'subscription_date' => now(),
@@ -40,14 +40,15 @@ class DemoSeeder extends Seeder {
         ]);
 
         DB::table('users')->insert([
-            'name'            => 'Demo User',
-            'email'           => 'user@demo.com',
+            'name'            => 'IntelliDemo Admin',
+            'email'           => 'admin@intellidemo.com',
             'user_type'       => 'admin',
-            'tenant_id'       => $teannt,
+            'tenant_id'       => $tenantId,
             'tenant_owner'    => 1,
             'status'          => 1,
             'profile_picture' => 'default.png',
             'password'        => Hash::make('123456'),
+            'email_verified_at' => now(),
         ]);
 
         DB::table('currency')->insert([
@@ -57,7 +58,7 @@ class DemoSeeder extends Seeder {
                 'exchange_rate' => 1.000000,
                 'base_currency' => 1,
                 'status'        => 1,
-                'tenant_id'     => $teannt,
+                'tenant_id'     => $tenantId,
             ],
             [
                 'full_name'     => 'United States Dollar',
@@ -65,7 +66,7 @@ class DemoSeeder extends Seeder {
                 'exchange_rate' => 0.007500,
                 'base_currency' => 0,
                 'status'        => 1,
-                'tenant_id'     => $teannt,
+                'tenant_id'     => $tenantId,
             ],
         ]);
 
