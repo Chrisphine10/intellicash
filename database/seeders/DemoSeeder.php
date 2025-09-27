@@ -63,7 +63,7 @@ class DemoSeeder extends Seeder {
                     'slug'              => 'intelli-demo',
                     'name'              => 'IntelliDemo',
                     'membership_type'   => 'member',
-                    'package_id'        => 7,
+                    'package_id'        => 7, // Lifetime Premium package
                     'subscription_date' => now(),
                     'valid_to'          => date('Y-m-d', strtotime(now() . ' + 25 years')),
                     'status'            => 1,
