@@ -78,6 +78,7 @@ use App\Http\Controllers\SuperAdmin\EmailSubscriberController;
 use App\Http\Controllers\SuperAdmin\SubscriptionPaymentController;
 use App\Http\Controllers\SuperAdmin\NotificationTemplateController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\Admin\SeederManagementController;
 use App\Http\Controllers\SubscriptionGateway\Mollie\ProcessController as MollieProcessController;
 use App\Http\Controllers\SubscriptionGateway\PayPal\ProcessController as PayPalProcessController;
 use App\Http\Controllers\SubscriptionGateway\Stripe\ProcessController as StripeProcessController;
@@ -263,6 +264,15 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                 //Contact Messages
                 Route::get('contact_messages/get_table_data', [ContactController::class, 'get_table_data']);
                 Route::resource('contact_messages', ContactController::class)->only(['index', 'show', 'destroy']);
+
+                //Seeder Management Routes
+                Route::name('seeder-management.')->prefix('seeder-management')->group(function () {
+                    Route::get('/', [SeederManagementController::class, 'index'])->name('index');
+                    Route::post('/run', [SeederManagementController::class, 'runSeeder'])->name('run');
+                    Route::post('/run-multiple', [SeederManagementController::class, 'runMultipleSeeders'])->name('run-multiple');
+                    Route::post('/run-all-core', [SeederManagementController::class, 'runAllCoreSeeders'])->name('run-all-core');
+                    Route::get('/status', [SeederManagementController::class, 'getSeederStatus'])->name('status');
+                });
             });
         });
 

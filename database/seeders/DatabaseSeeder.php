@@ -2,6 +2,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Database\Seeders\SubscriptionPackagesSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -17,6 +18,7 @@ class DatabaseSeeder extends Seeder
         // Core system seeders (run first - these don't require tenants)
         $this->command->info('Seeding core system data...');
         $this->call([
+            SubscriptionPackagesSeeder::class,
             UtilitySeeder::class,
             EmailTemplateSeeder::class,
             LandingPageSeeder::class,

@@ -40,6 +40,8 @@
 <li><a href="{{ route('admin.email_subscribers.index') }}"><i class="far fa-envelope"></i><span>{{ _lang('Email Subscribers') }}</span></a></li>
 <li><a href="{{ route('admin.contact_messages.index') }}"><i class="fas fa-envelope-open-text"></i><span>{{ _lang('Contact Messages') }}</span>{!! xss_clean(request_count('unread_contact_message', true, 'sidebar-notification-count contact-notification-count')) !!}</a></li>
 
+<li><a href="{{ route('admin.seeder-management.index') }}"><i class="fas fa-database"></i><span>{{ _lang('Seeder Management') }}</span></a></li>
+
 <li>
 	<a href="javascript: void(0);"><i class="fas fa-globe"></i><span>{{ _lang('Languages') }}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
 	<ul class="nav-second-level" aria-expanded="false">
