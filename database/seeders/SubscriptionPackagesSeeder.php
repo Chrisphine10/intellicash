@@ -13,12 +13,17 @@ class SubscriptionPackagesSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->command->info('Seeding subscription packages...');
+        // Only show info if running from command line
+        if ($this->command) {
+            $this->command->info('Seeding subscription packages...');
+        }
         
-        // Clear existing packages if requested
-        if ($this->command->confirm('Do you want to clear existing packages?', false)) {
+        // Clear existing packages if requested (only from command line)
+        if ($this->command && $this->command->confirm('Do you want to clear existing packages?', false)) {
             Package::truncate();
-            $this->command->info('Existing packages cleared.');
+            if ($this->command) {
+                $this->command->info('Existing packages cleared.');
+            }
         }
         
         $packages = [
@@ -235,13 +240,19 @@ class SubscriptionPackagesSeeder extends Seeder
             );
             
             if ($package->wasRecentlyCreated) {
-                $this->command->info("Created package: {$package->name} ({$package->package_type})");
+                if ($this->command) {
+                    $this->command->info("Created package: {$package->name} ({$package->package_type})");
+                }
             } else {
-                $this->command->info("Package already exists: {$package->name} ({$package->package_type})");
+                if ($this->command) {
+                    $this->command->info("Package already exists: {$package->name} ({$package->package_type})");
+                }
             }
         }
         
-        $this->command->info('Subscription packages seeded successfully!');
-        $this->command->info('Total packages available: ' . Package::count());
+        if ($this->command) {
+            $this->command->info('Subscription packages seeded successfully!');
+            $this->command->info('Total packages available: ' . Package::count());
+        }
     }
 }

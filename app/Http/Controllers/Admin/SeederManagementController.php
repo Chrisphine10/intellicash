@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Database\Seeders\SubscriptionPackagesSeeder;
 use Database\Seeders\SaasSeeder;
@@ -249,12 +248,6 @@ class SeederManagementController extends Controller
      */
     public function runSeeder(Request $request)
     {
-        Log::info('Seeder run request received', [
-            'request_data' => $request->all(),
-            'user_id' => auth()->id(),
-            'user_type' => auth()->user()->user_type ?? 'unknown'
-        ]);
-
         $request->validate([
             'seeder_class' => 'required|string',
             'clear_existing' => 'boolean',
@@ -266,53 +259,27 @@ class SeederManagementController extends Controller
         try {
             $startTime = now();
             
-            Log::info("Starting seeder execution", [
-                'seeder' => $seederClass,
-                'clear_existing' => $clearExisting,
-                'start_time' => $startTime
-            ]);
-            
             // Create seeder instance
             $seeder = $this->createSeederInstance($seederClass);
             
             if (!$seeder) {
-                Log::warning("Seeder class not found", ['seeder_class' => $seederClass]);
                 return redirect()->back()->with('error', 'Seeder class not found: ' . $seederClass);
             }
 
-            Log::info("Seeder instance created successfully", ['seeder_class' => $seederClass]);
-
             // Clear existing data if requested
             if ($clearExisting) {
-                Log::info("Clearing existing seeder data", ['seeder_class' => $seederClass]);
                 $this->clearSeederData($seederClass);
             }
 
             // Run the seeder
-            Log::info("Executing seeder", ['seeder_class' => $seederClass]);
             $seeder->run();
             
             $endTime = now();
             $duration = $startTime->diffInSeconds($endTime);
 
-            Log::info("Seeder executed successfully", [
-                'seeder' => $seederClass,
-                'duration' => $duration,
-                'cleared_existing' => $clearExisting,
-                'end_time' => $endTime
-            ]);
-
             return redirect()->back()->with('success', "Seeder {$seederClass} run successfully in {$duration} seconds");
 
         } catch (Exception $e) {
-            Log::error("Seeder execution failed", [
-                'seeder' => $seederClass,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
             return redirect()->back()->with('error', 'Seeder failed: ' . $e->getMessage());
         }
     }
@@ -392,11 +359,6 @@ class SeederManagementController extends Controller
      */
     public function runMigrations(Request $request)
     {
-        Log::info('Running migrations', [
-            'user_id' => auth()->id(),
-            'user_type' => auth()->user()->user_type ?? 'unknown'
-        ]);
-
         try {
             $startTime = now();
             
@@ -405,22 +367,10 @@ class SeederManagementController extends Controller
             
             $endTime = now();
             $duration = $startTime->diffInSeconds($endTime);
-            
-            $output = Artisan::output();
-            
-            Log::info('Migrations completed successfully', [
-                'duration' => $duration,
-                'output' => $output
-            ]);
 
             return redirect()->back()->with('success', "Migrations completed successfully in {$duration} seconds");
 
         } catch (Exception $e) {
-            Log::error('Migrations failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
             return redirect()->back()->with('error', 'Migrations failed: ' . $e->getMessage());
         }
     }
@@ -430,11 +380,6 @@ class SeederManagementController extends Controller
      */
     public function runAllCoreSeeders(Request $request)
     {
-        Log::info('Running all core seeders', [
-            'user_id' => auth()->id(),
-            'user_type' => auth()->user()->user_type ?? 'unknown'
-        ]);
-
         $coreSeeders = [
             'SubscriptionPackagesSeeder',
             'UtilitySeeder',
@@ -451,8 +396,6 @@ class SeederManagementController extends Controller
 
         foreach ($coreSeeders as $seederClass) {
             try {
-                Log::info("Running core seeder: {$seederClass}");
-                
                 $seeder = $this->createSeederInstance($seederClass);
                 
                 if (!$seeder) {
@@ -479,11 +422,6 @@ class SeederManagementController extends Controller
                 $successCount++;
 
             } catch (Exception $e) {
-                Log::error("Core seeder {$seederClass} failed", [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                ]);
-                
                 $results[] = [
                     'seeder' => $seederClass,
                     'success' => false,
@@ -492,12 +430,6 @@ class SeederManagementController extends Controller
                 $failureCount++;
             }
         }
-
-        Log::info("All core seeders completed", [
-            'total' => count($coreSeeders),
-            'successful' => $successCount,
-            'failed' => $failureCount,
-        ]);
 
         $message = "Completed {$successCount} seeders successfully, {$failureCount} failed";
         
