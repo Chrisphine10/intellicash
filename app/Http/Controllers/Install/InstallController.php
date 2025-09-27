@@ -54,13 +54,20 @@ class InstallController extends Controller {
                 ->withInput();
         }
 
-        $name     = $request->name;
-        $email    = $request->email;
-        $password = Hash::make($request->password);
+        try {
+            $name     = $request->name;
+            $email    = $request->email;
+            $password = Hash::make($request->password);
 
-        Installer::createUser($name, $email, $password);
+            Installer::createUser($name, $email, $password);
 
-        return redirect('install/system_settings');
+            return redirect('install/system_settings');
+        } catch (\Exception $e) {
+            \Log::error('User creation failed: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to create user. Please try again.')
+                ->withInput();
+        }
     }
 
     public function system_settings() {
@@ -68,9 +75,16 @@ class InstallController extends Controller {
     }
 
     public function final_touch(Request $request) {
-        Installer::updateSettings($request->all());
-        Installer::finalTouches($request->site_title);
-        return redirect()->route('admin.settings.update_settings');
+        try {
+            Installer::updateSettings($request->all());
+            Installer::finalTouches($request->site_title);
+            return redirect()->route('admin.settings.update_settings');
+        } catch (\Exception $e) {
+            \Log::error('Final touch failed: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Installation failed. Please check the logs and try again.')
+                ->withInput();
+        }
     }
 
 }

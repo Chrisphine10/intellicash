@@ -20,6 +20,7 @@ use App\Services\CryptographicProtectionService;
 use App\Services\ThreatMonitoringService;
 use App\Services\VslaTestIntegrationService;
 use App\Utilities\LoanCalculator;
+use Tests\VSLAUltimateTestWithTenant;
 use Carbon\Carbon;
 use Exception;
 use TypeError;
@@ -914,7 +915,7 @@ class SecurityDashboardTestController extends Controller
             $this->createTestTenantForVSLA();
             
             // Use the ultimate VSLA test suite with tenant support
-            $vslaUltimateTest = new \Tests\VSLAUltimateTestWithTenant();
+            $vslaUltimateTest = new VSLAUltimateTestWithTenant();
             $vslaResults = $vslaUltimateTest->runAllTests();
             
             // Merge VSLA test results into current test results
@@ -1274,7 +1275,7 @@ class SecurityDashboardTestController extends Controller
             }
 
             // Use the ultimate VSLA test suite with tenant support
-            $vslaUltimateTest = new \Tests\VSLAUltimateTestWithTenant();
+            $vslaUltimateTest = new VSLAUltimateTestWithTenant();
             $vslaResults = $vslaUltimateTest->runAllTests();
 
             // Save results to database for history

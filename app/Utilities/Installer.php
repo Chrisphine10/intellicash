@@ -193,52 +193,74 @@ class Installer {
     }
 
     public static function updateSettings($post) {
-        foreach ($post as $key => $value) {
-            if ($key == "_token") {
-                continue;
-            }
+        try {
+            foreach ($post as $key => $value) {
+                if ($key == "_token") {
+                    continue;
+                }
 
-            $data               = [];
-            $data['value']      = $value;
-            $data['updated_at'] = Carbon::now();
-            if (Setting::where('name', $key)->exists()) {
-                Setting::where('name', '=', $key)->update($data);
-            } else {
-                $data['name']       = $key;
-                $data['created_at'] = Carbon::now();
-                Setting::insert($data);
+                $data               = [];
+                $data['value']      = $value;
+                $data['updated_at'] = Carbon::now();
+                if (Setting::where('name', $key)->exists()) {
+                    Setting::where('name', '=', $key)->update($data);
+                } else {
+                    $data['name']       = $key;
+                    $data['created_at'] = Carbon::now();
+                    Setting::insert($data);
+                }
             }
+        } catch (\Exception $e) {
+            \Log::error('Failed to update settings: ' . $e->getMessage());
+            throw $e; // Re-throw to handle in controller
         }
     }
 
     public static function createUser($name, $email, $password) {
-        // Create the user
-        $user                    = new User();
-        $user->name              = $name;
-        $user->email             = $email;
-        $user->email_verified_at = now();
-        $user->password          = $password;
-        $user->status            = 1;
-        $user->profile_picture   = 'default.png';
-        $user->user_type         = 'superadmin';
-        $user->save();
-
+        try {
+            // Create the user
+            $user                    = new User();
+            $user->name              = $name;
+            $user->email             = $email;
+            $user->email_verified_at = now();
+            $user->password          = $password;
+            $user->status            = 1;
+            $user->profile_picture   = 'default.png';
+            $user->user_type         = 'superadmin';
+            $user->save();
+        } catch (\Exception $e) {
+            \Log::error('Failed to create user: ' . $e->getMessage());
+            throw $e; // Re-throw to handle in controller
+        }
     }
 
     public static function finalTouches($app_name = 'TrickBiz') {
-        // Update .env file
-        static::updateEnv([
-            'APP_NAME'      => '"' . $app_name . '"',
-            'APP_LOCALE'    => session('locale'),
-            'APP_INSTALLED' => 'true',
-            'APP_DEBUG'     => 'false',
-            'APP_URL'       => url(''),
-        ]);
+        try {
+            // Update .env file
+            static::updateEnv([
+                'APP_NAME'      => '"' . $app_name . '"',
+                'APP_LOCALE'    => session('locale'),
+                'APP_INSTALLED' => 'true',
+                'APP_DEBUG'     => 'false',
+                'APP_URL'       => url(''),
+            ]);
 
-        //Import Dummy Data
-        $dummyDataPath = public_path('uploads/dummy_data.sql');
-        if (file_exists($dummyDataPath)) {
-            DB::unprepared(file_get_contents($dummyDataPath));
+            //Import Dummy Data
+            $dummyDataPath = public_path('uploads/dummy_data.sql');
+            if (file_exists($dummyDataPath)) {
+                try {
+                    $sql = file_get_contents($dummyDataPath);
+                    if ($sql !== false && !empty(trim($sql))) {
+                        DB::unprepared($sql);
+                    }
+                } catch (\Exception $e) {
+                    // Log the error but don't fail the installation
+                    \Log::error('Failed to import dummy data: ' . $e->getMessage());
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed in finalTouches: ' . $e->getMessage());
+            throw $e; // Re-throw to handle in controller
         }
     }
 
