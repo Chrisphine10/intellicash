@@ -18,11 +18,16 @@ class SubscriptionPackagesSeeder extends Seeder
             $this->command->info('Seeding subscription packages...');
         }
         
-        // Clear existing packages if requested (only from command line)
-        if ($this->command && $this->command->confirm('Do you want to clear existing packages?', false)) {
-            Package::truncate();
-            if ($this->command) {
-                $this->command->info('Existing packages cleared.');
+        // Skip interactive confirmation in web context to avoid STDIN issues
+        // Only allow package clearing in actual console context
+        if ($this->command && app()->runningInConsole() && php_sapi_name() === 'cli') {
+            try {
+                if ($this->command->confirm('Do you want to clear existing packages?', false)) {
+                    Package::truncate();
+                    $this->command->info('Existing packages cleared.');
+                }
+            } catch (\Exception $e) {
+                $this->command->info('Skipping package clearing due to context limitations.');
             }
         }
         
