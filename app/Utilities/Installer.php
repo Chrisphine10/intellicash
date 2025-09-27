@@ -236,7 +236,10 @@ class Installer {
         ]);
 
         //Import Dummy Data
-        DB::unprepared(file_get_contents('public/uploads/dummy_data.sql'));
+        $dummyDataPath = public_path('uploads/dummy_data.sql');
+        if (file_exists($dummyDataPath)) {
+            DB::unprepared(file_get_contents($dummyDataPath));
+        }
     }
 
     public static function updateEnv($data) {
