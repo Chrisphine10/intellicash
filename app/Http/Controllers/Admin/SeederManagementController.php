@@ -277,10 +277,7 @@ class SeederManagementController extends Controller
             
             if (!$seeder) {
                 Log::warning("Seeder class not found", ['seeder_class' => $seederClass]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Seeder class not found: ' . $seederClass,
-                ], 404);
+                return redirect()->back()->with('error', 'Seeder class not found: ' . $seederClass);
             }
 
             Log::info("Seeder instance created successfully", ['seeder_class' => $seederClass]);
@@ -305,11 +302,7 @@ class SeederManagementController extends Controller
                 'end_time' => $endTime
             ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => "Seeder {$seederClass} run successfully in {$duration} seconds",
-                'duration' => $duration,
-            ]);
+            return redirect()->back()->with('success', "Seeder {$seederClass} run successfully in {$duration} seconds");
 
         } catch (Exception $e) {
             Log::error("Seeder execution failed", [
@@ -320,14 +313,7 @@ class SeederManagementController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Seeder failed: ' . $e->getMessage(),
-                'error_details' => [
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                ]
-            ], 500);
+            return redirect()->back()->with('error', 'Seeder failed: ' . $e->getMessage());
         }
     }
 
@@ -402,10 +388,53 @@ class SeederManagementController extends Controller
     }
 
     /**
+     * Run database migrations
+     */
+    public function runMigrations(Request $request)
+    {
+        Log::info('Running migrations', [
+            'user_id' => auth()->id(),
+            'user_type' => auth()->user()->user_type ?? 'unknown'
+        ]);
+
+        try {
+            $startTime = now();
+            
+            // Run migrations using Artisan
+            Artisan::call('migrate', ['--force' => true]);
+            
+            $endTime = now();
+            $duration = $startTime->diffInSeconds($endTime);
+            
+            $output = Artisan::output();
+            
+            Log::info('Migrations completed successfully', [
+                'duration' => $duration,
+                'output' => $output
+            ]);
+
+            return redirect()->back()->with('success', "Migrations completed successfully in {$duration} seconds");
+
+        } catch (Exception $e) {
+            Log::error('Migrations failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->back()->with('error', 'Migrations failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Run all core seeders
      */
     public function runAllCoreSeeders(Request $request)
     {
+        Log::info('Running all core seeders', [
+            'user_id' => auth()->id(),
+            'user_type' => auth()->user()->user_type ?? 'unknown'
+        ]);
+
         $coreSeeders = [
             'SubscriptionPackagesSeeder',
             'UtilitySeeder',
@@ -415,9 +444,68 @@ class SeederManagementController extends Controller
             'LoanPermissionSeeder',
         ];
 
-        $request->merge(['seeder_classes' => $coreSeeders]);
+        $clearExisting = $request->boolean('clear_existing', false);
+        $results = [];
+        $successCount = 0;
+        $failureCount = 0;
+
+        foreach ($coreSeeders as $seederClass) {
+            try {
+                Log::info("Running core seeder: {$seederClass}");
+                
+                $seeder = $this->createSeederInstance($seederClass);
+                
+                if (!$seeder) {
+                    $results[] = [
+                        'seeder' => $seederClass,
+                        'success' => false,
+                        'message' => 'Seeder class not found',
+                    ];
+                    $failureCount++;
+                    continue;
+                }
+
+                if ($clearExisting) {
+                    $this->clearSeederData($seederClass);
+                }
+
+                $seeder->run();
+                
+                $results[] = [
+                    'seeder' => $seederClass,
+                    'success' => true,
+                    'message' => 'Completed successfully',
+                ];
+                $successCount++;
+
+            } catch (Exception $e) {
+                Log::error("Core seeder {$seederClass} failed", [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                
+                $results[] = [
+                    'seeder' => $seederClass,
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ];
+                $failureCount++;
+            }
+        }
+
+        Log::info("All core seeders completed", [
+            'total' => count($coreSeeders),
+            'successful' => $successCount,
+            'failed' => $failureCount,
+        ]);
+
+        $message = "Completed {$successCount} seeders successfully, {$failureCount} failed";
         
-        return $this->runMultipleSeeders($request);
+        if ($failureCount === 0) {
+            return redirect()->back()->with('success', $message);
+        } else {
+            return redirect()->back()->with('warning', $message);
+        }
     }
 
     /**

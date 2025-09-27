@@ -271,6 +271,7 @@ Route::group(['middleware' => ['install']], function () use ($ev) {
                     Route::post('/run', [SeederManagementController::class, 'runSeeder'])->name('run');
                     Route::post('/run-multiple', [SeederManagementController::class, 'runMultipleSeeders'])->name('run-multiple');
                     Route::post('/run-all-core', [SeederManagementController::class, 'runAllCoreSeeders'])->name('run-all-core');
+                    Route::post('/run-migrations', [SeederManagementController::class, 'runMigrations'])->name('run-migrations');
                     Route::get('/status', [SeederManagementController::class, 'getSeederStatus'])->name('status');
                 });
             });

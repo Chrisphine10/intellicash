@@ -15,16 +15,64 @@
                         <button type="button" class="btn btn-secondary" onclick="testConnection()">
                             <i class="fas fa-plug"></i> Test Connection
                         </button>
-                        <button type="button" class="btn btn-primary" onclick="runAllCoreSeeders()">
-                            <i class="fas fa-play"></i> Run All Core Seeders
-                        </button>
+                        <form method="POST" action="{{ route('admin.seeder-management.run-migrations') }}" style="display: inline;">
+                            @csrf
+                            <button type="submit" class="btn btn-warning" onclick="return confirm('This will run database migrations. Continue?')">
+                                <i class="fas fa-database"></i> Run Migrations
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ route('admin.seeder-management.run-all-core') }}" style="display: inline;">
+                            @csrf
+                            <input type="hidden" name="clear_existing" value="0">
+                            <button type="submit" class="btn btn-primary" onclick="return confirm('Are you sure you want to run all core seeders? This may take several minutes.')">
+                                <i class="fas fa-play"></i> Run All Core Seeders
+                            </button>
+                        </form>
                     </div>
                 </div>
                 <div class="card-body">
+                    <!-- Success/Error Messages -->
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="fas fa-check-circle"></i> {{ session('success') }}
+                            <button type="button" class="close" data-dismiss="alert">
+                                <span>&times;</span>
+                            </button>
+                        </div>
+                    @endif
+                    
+                    @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-circle"></i> {{ session('error') }}
+                            <button type="button" class="close" data-dismiss="alert">
+                                <span>&times;</span>
+                            </button>
+                        </div>
+                    @endif
+                    
+                    @if(session('warning'))
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i> {{ session('warning') }}
+                            <button type="button" class="close" data-dismiss="alert">
+                                <span>&times;</span>
+                            </button>
+                        </div>
+                    @endif
+                    
                     <!-- Debug Info -->
                     <div class="alert alert-info" id="debugInfo" style="display: none;">
                         <h6><i class="fas fa-bug"></i> Debug Information</h6>
                         <div id="debugContent"></div>
+                    </div>
+                    
+                    <!-- Instructions -->
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle"></i> Instructions</h6>
+                        <ol>
+                            <li><strong>First:</strong> Click "Run Migrations" to create missing database tables</li>
+                            <li><strong>Then:</strong> Click "Run All Core Seeders" to populate the tables with data</li>
+                            <li><strong>Or:</strong> Use individual seeder buttons to run specific seeders</li>
+                        </ol>
                     </div>
                     
                     <!-- System Status -->
@@ -146,21 +194,26 @@
                                                     </td>
                                                     <td>
                                                         <div class="btn-group" role="group">
-                                                            <button type="button" class="btn btn-sm btn-success" 
-                                                                    onclick="runSeeder('{{ $seeder['class'] }}', false)"
-                                                                    title="Run Seeder">
-                                                                <i class="fas fa-play"></i>
-                                                            </button>
-                                                            <button type="button" class="btn btn-sm btn-warning" 
-                                                                    onclick="runSeeder('{{ $seeder['class'] }}', true)"
-                                                                    title="Clear & Run">
-                                                                <i class="fas fa-redo"></i>
-                                                            </button>
-                                                            <button type="button" class="btn btn-sm btn-info" 
-                                                                    onclick="getSeederStatus('{{ $seeder['class'] }}')"
-                                                                    title="View Status">
+                                                            <form method="POST" action="{{ route('admin.seeder-management.run') }}" style="display: inline;">
+                                                                @csrf
+                                                                <input type="hidden" name="seeder_class" value="{{ $seeder['class'] }}">
+                                                                <input type="hidden" name="clear_existing" value="0">
+                                                                <button type="submit" class="btn btn-sm btn-success" title="Run Seeder">
+                                                                    <i class="fas fa-play"></i>
+                                                                </button>
+                                                            </form>
+                                                            <form method="POST" action="{{ route('admin.seeder-management.run') }}" style="display: inline;">
+                                                                @csrf
+                                                                <input type="hidden" name="seeder_class" value="{{ $seeder['class'] }}">
+                                                                <input type="hidden" name="clear_existing" value="1">
+                                                                <button type="submit" class="btn btn-sm btn-warning" title="Clear & Run">
+                                                                    <i class="fas fa-redo"></i>
+                                                                </button>
+                                                            </form>
+                                                            <a href="{{ route('admin.seeder-management.status') }}?seeder_class={{ $seeder['class'] }}" 
+                                                               class="btn btn-sm btn-info" title="View Status" target="_blank">
                                                                 <i class="fas fa-info-circle"></i>
-                                                            </button>
+                                                            </a>
                                                         </div>
                                                     </td>
                                                 </tr>
