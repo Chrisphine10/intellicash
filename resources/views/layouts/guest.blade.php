@@ -30,9 +30,9 @@
         <link rel="shortcut icon" href="{{ get_favicon() }}">
 
 		<!-- App Css -->
-        <link rel="stylesheet" href="{{ asset('public/backend/plugins/bootstrap/css/bootstrap.min.css') }}">
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/fontawesome.css') }}">
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/themify-icons.css') }}">
+        <link rel="stylesheet" href="{{ asset('backend/plugins/bootstrap/css/bootstrap.min.css') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/fontawesome.css') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/themify-icons.css') }}">
 
 		@if(isset(request()->tenant->id))
 			@if(get_tenant_option('backend_direction') == "rtl")
@@ -45,13 +45,13 @@
 		@endif
 		
 		<!-- Others css -->
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/typography.css') }}">
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/default-css.css') }}">
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/styles.css?v=1.1') }}">
-		<link rel="stylesheet" href="{{ asset('public/backend/assets/css/responsive.css?v=1.0') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/typography.css') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/default-css.css') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/styles.css?v=1.1') }}">
+		<link rel="stylesheet" href="{{ asset('backend/assets/css/responsive.css?v=1.0') }}">
 		
 		<!-- Modernizr -->
-		<script src="{{ asset('public/backend/assets/js/vendor/modernizr-3.6.0.min.js') }}"></script>     
+		<script src="{{ asset('backend/assets/js/vendor/modernizr-3.6.0.min.js') }}"></script>     
 
 		@if(isset(request()->tenant->id))
 			@if(get_tenant_option('backend_direction') == "rtl")
@@ -113,11 +113,11 @@
 
 
         <!-- jQuery  -->
-		<script src="{{ asset('public/backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
-		<script src="{{ asset('public/backend/assets/js/popper.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/bootstrap/js/bootstrap.min.js') }}"></script> 
-		<script src="{{ asset('public/backend/assets/js/print.js') }}"></script>
-		<script src="{{ asset('public/backend/assets/js/guest.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/popper.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/bootstrap/js/bootstrap.min.js') }}"></script> 
+		<script src="{{ asset('backend/assets/js/print.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/guest.js') }}"></script>
 
 		@if(get_option('pwa_enabled', 1))
 		<!-- PWA Service Worker Registration -->

@@ -28,7 +28,7 @@
         </main>
     </div>
     
-	<script src="{{ asset('public/backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
+	<script src="{{ asset('backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
 	@yield('js-script')
 </body>
 </html>

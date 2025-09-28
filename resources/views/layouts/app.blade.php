@@ -342,30 +342,30 @@
 		</div><!--End Page Container-->
 
         <!-- jQuery  -->
-		<script src="{{ asset('public/backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/vendor/jquery-3.7.1.min.js') }}"></script>
 		
 		<!-- JavaScript Variables -->
 		@include('layouts.others.languages')
-		<script src="{{ asset('public/backend/assets/js/popper.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/bootstrap/js/bootstrap.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/metisMenu/metisMenu.min.js') }}"></script>
-		<script src="{{ asset('public/backend/assets/js/print.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/pace/pace.min.js') }}"></script>
-        <script src="{{ asset('public/backend/plugins/moment/moment.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/popper.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/bootstrap/js/bootstrap.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/metisMenu/metisMenu.min.js') }}"></script>
+		<script src="{{ asset('backend/assets/js/print.js') }}"></script>
+		<script src="{{ asset('backend/plugins/pace/pace.min.js') }}"></script>
+        <script src="{{ asset('backend/plugins/moment/moment.js') }}"></script>
 
 		<!-- Conditional JS -->
         @include('layouts.others.import-js')
 
-		<script src="{{ asset('public/backend/plugins/dropify/js/dropify.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/sweet-alert2/js/sweetalert2.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/select2/js/select2.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/parsleyjs/parsley.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/jquery-toast-plugin/jquery.toast.min.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/daterangepicker/daterangepicker.js') }}"></script>
-		<script src="{{ asset('public/backend/plugins/slimscroll/jquery.slimscroll.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/dropify/js/dropify.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/sweet-alert2/js/sweetalert2.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/select2/js/select2.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/parsleyjs/parsley.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/jquery-toast-plugin/jquery.toast.min.js') }}"></script>
+		<script src="{{ asset('backend/plugins/daterangepicker/daterangepicker.js') }}"></script>
+		<script src="{{ asset('backend/plugins/slimscroll/jquery.slimscroll.min.js') }}"></script>
 
         <!-- App js -->
-        <script src="{{ asset('public/backend/assets/js/scripts.js'). '?v=' . filemtime(public_path('backend/assets/js/scripts.js')) }}"></script>
+        <script src="{{ asset('backend/assets/js/scripts.js'). '?v=' . filemtime(public_path('backend/assets/js/scripts.js')) }}"></script>
         
         <!-- Chart.js for Security Dashboard -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

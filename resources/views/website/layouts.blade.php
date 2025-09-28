@@ -17,11 +17,11 @@
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&display=swap" rel="stylesheet">
 
         <!-- Core theme CSS (includes Bootstrap)-->
-        <link href="{{ asset('public/website/css/animate.css') }}" rel="stylesheet">
-        <link href="{{ asset('public/website/vendors/slick/slick.css') }}" rel="stylesheet" />
-        <link href="{{ asset('public/website/vendors/slick/slick-theme.css') }}" rel="stylesheet" />
-        <link href="{{ asset('public/backend/plugins/jquery-toast-plugin/jquery.toast.min.css') }}" rel="stylesheet" />
-        <link href="{{ asset('public/website/css/styles.css') . '?v=' . filemtime(public_path('website/css/styles.css')) }}" rel="stylesheet" />
+        <link href="{{ asset('website/css/animate.css') }}" rel="stylesheet">
+        <link href="{{ asset('website/vendors/slick/slick.css') }}" rel="stylesheet" />
+        <link href="{{ asset('website/vendors/slick/slick-theme.css') }}" rel="stylesheet" />
+        <link href="{{ asset('backend/plugins/jquery-toast-plugin/jquery.toast.min.css') }}" rel="stylesheet" />
+        <link href="{{ asset('website/css/styles.css') . '?v=' . filemtime(public_path('website/css/styles.css')) }}" rel="stylesheet" />
         @php $header_footer_settings = json_decode(get_trans_option('header_footer_page')); @endphp
         @php $header_footer_media = json_decode(get_trans_option('header_footer_page_media')); @endphp
 
@@ -190,14 +190,14 @@
             </div>
         </footer>
         
-        <script src="{{ asset('public/website/js/jquery-3.7.1.min.js') }}"></script>
-        <script src="{{ asset('public/website/js/bootstrap.bundle.min.js') }}"></script>
-        <script src="{{ asset('public/website/vendors/slick/slick.min.js') }}"></script>
-        <script src="{{ asset('public/backend/plugins/jquery-toast-plugin/jquery.toast.min.js') }}"></script>
-        <script src="{{ asset('public/website/js/wow.min.js') }}"></script>
+        <script src="{{ asset('website/js/jquery-3.7.1.min.js') }}"></script>
+        <script src="{{ asset('website/js/bootstrap.bundle.min.js') }}"></script>
+        <script src="{{ asset('website/vendors/slick/slick.min.js') }}"></script>
+        <script src="{{ asset('backend/plugins/jquery-toast-plugin/jquery.toast.min.js') }}"></script>
+        <script src="{{ asset('website/js/wow.min.js') }}"></script>
 
         <!-- Core theme JS-->
-        <script src="{{ asset('public/website/js/scripts.js') }}"></script>
+        <script src="{{ asset('website/js/scripts.js') }}"></script>
         @include('website.custom-js')
     </body>
 </html>
