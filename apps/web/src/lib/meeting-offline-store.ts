@@ -36,10 +36,34 @@ export interface OfflineMeetingDraft {
 }
 
 const dbName = "intellicash-meeting-pwa";
-const dbVersion = 1;
+const dbVersion = 2;
 const verifierStore = "verifiers";
 const draftStore = "drafts";
+const workspaceStore = "group-meeting-workspaces";
+const scheduleQueueStore = "meeting-schedule-queue";
 const deviceStorageKey = "intellicash-meeting-device-id";
+
+export interface OfflineGroupMeetingWorkspace<
+  TGroup = unknown,
+  TMeeting = unknown,
+  TMember = unknown,
+  TUser = unknown
+> {
+  group: TGroup;
+  meetings: TMeeting[];
+  members: TMember[];
+  user: TUser;
+  cachedAt: string;
+}
+
+export interface OfflineMeetingScheduleDraft {
+  id: string;
+  groupId: string;
+  title: string;
+  scheduledAt: string;
+  gpsCompliant: boolean;
+  createdAt: string;
+}
 
 interface StoredEncryptedPayload {
   encrypted: true;
@@ -111,6 +135,8 @@ function openDb() {
       const db = request.result;
       if (!db.objectStoreNames.contains(verifierStore)) db.createObjectStore(verifierStore);
       if (!db.objectStoreNames.contains(draftStore)) db.createObjectStore(draftStore);
+      if (!db.objectStoreNames.contains(workspaceStore)) db.createObjectStore(workspaceStore);
+      if (!db.objectStoreNames.contains(scheduleQueueStore)) db.createObjectStore(scheduleQueueStore);
     };
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -235,4 +261,52 @@ export async function loadMeetingDraft(groupId: string, meetingId: string, devic
 
 export async function clearMeetingDraft(groupId: string, meetingId: string, deviceId: string) {
   await deleteStored(draftStore, `${groupId}:${meetingId}:${deviceId}`);
+}
+
+function offlineMeetingId() {
+  return `offline-meeting-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export async function storeGroupMeetingWorkspace<TGroup, TMeeting, TMember, TUser>(
+  groupId: string,
+  workspace: OfflineGroupMeetingWorkspace<TGroup, TMeeting, TMember, TUser>
+) {
+  await setStored(workspaceStore, groupId, workspace);
+}
+
+export async function loadGroupMeetingWorkspace<TGroup, TMeeting, TMember, TUser>(groupId: string) {
+  return getStored<OfflineGroupMeetingWorkspace<TGroup, TMeeting, TMember, TUser>>(workspaceStore, groupId);
+}
+
+export async function loadOfflineMeetingSchedules(groupId: string) {
+  return (await getStored<OfflineMeetingScheduleDraft[]>(scheduleQueueStore, groupId)) ?? [];
+}
+
+export async function queueOfflineMeetingSchedule(input: {
+  groupId: string;
+  title: string;
+  scheduledAt: string;
+  gpsCompliant?: boolean;
+}) {
+  const queued: OfflineMeetingScheduleDraft = {
+    id: offlineMeetingId(),
+    groupId: input.groupId,
+    title: input.title,
+    scheduledAt: input.scheduledAt,
+    gpsCompliant: input.gpsCompliant ?? false,
+    createdAt: new Date().toISOString()
+  };
+  const current = await loadOfflineMeetingSchedules(input.groupId);
+  await setStored(scheduleQueueStore, input.groupId, [...current, queued]);
+  return queued;
+}
+
+export async function clearOfflineMeetingSchedule(groupId: string, scheduleId: string) {
+  const current = await loadOfflineMeetingSchedules(groupId);
+  const remaining = current.filter((schedule) => schedule.id !== scheduleId);
+  if (remaining.length === 0) {
+    await deleteStored(scheduleQueueStore, groupId);
+    return;
+  }
+  await setStored(scheduleQueueStore, groupId, remaining);
 }

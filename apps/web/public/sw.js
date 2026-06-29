@@ -1,4 +1,4 @@
-const CACHE_NAME = "intellicash-group-pwa-v2";
+const CACHE_NAME = "intellicash-group-pwa-v3";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/brand/intelli-cash-logo.png",
@@ -75,15 +75,22 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate" && url.pathname.startsWith("/dashboard")) {
     event.respondWith(
-      fetch(request).catch(() =>
-        caches.match("/manifest.webmanifest").then(
-          () =>
-            new Response(
-              "<!doctype html><title>Intelli-Cash</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><body style=\"font-family:system-ui;margin:0;display:grid;min-height:100vh;place-items:center;background:#f7faf8;color:#101820\"><main style=\"padding:24px;text-align:center\"><img src=\"/pwa/icon-192.png\" alt=\"\" width=\"96\" height=\"96\"><h1>Intelli-Cash Group Account</h1><p>You are offline. Reconnect to open the latest group workspace.</p></main></body>",
-              { headers: { "Content-Type": "text/html; charset=utf-8" } }
-            )
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then(
+            (cached) =>
+              cached ||
+              new Response(
+                "<!doctype html><title>Intelli-Cash</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><body style=\"font-family:system-ui;margin:0;display:grid;min-height:100vh;place-items:center;background:#f7faf8;color:#101820\"><main style=\"padding:24px;text-align:center\"><img src=\"/pwa/icon-192.png\" alt=\"\" width=\"96\" height=\"96\"><h1>Intelli-Cash Group Account</h1><p>You are offline. Open a workspace once while online so the PWA can keep it available offline.</p></main></body>",
+                { headers: { "Content-Type": "text/html; charset=utf-8" } }
+              )
+          )
         )
-      )
     );
   }
 });

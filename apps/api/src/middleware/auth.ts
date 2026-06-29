@@ -209,3 +209,19 @@ export function requireAuth(permission?: Permission) {
     }
   };
 }
+
+export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  try {
+    if (!req.user) {
+      throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+    }
+
+    if (req.user.role !== "IWL_ADMIN") {
+      throw new ApiHttpError(403, "ADMIN_REQUIRED", "Only IWL admins can manage this workspace.");
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+}

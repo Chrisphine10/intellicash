@@ -1,11 +1,12 @@
 "use client";
 
+import React from "react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { CheckCircle2, FlaskConical, KeyRound, LockKeyhole, PlugZap, Trash2 } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { StatCard } from "../../../components/dashboard/stat-card";
-import type { IntegrationHealth, IntegrationStatus } from "../../../components/dashboard/types";
+import type { IntegrationHealth, IntegrationStatus, User } from "../../../components/dashboard/types";
 
 interface TestResult {
   ok: boolean;
@@ -13,14 +14,24 @@ interface TestResult {
   status?: IntegrationStatus;
 }
 
+interface CredentialValuesIndexResponse {
+  providers: Array<{
+    provider: string;
+    displayName: string;
+    credentialsUpdatedAt?: string | null;
+    credentials: Record<string, string>;
+  }>;
+}
+
 const smsProviders = ["AFRICAS_TALKING", "BONGA_SMS"];
 
 function inputTypeForKey(key: string) {
-  if (key.includes("URL")) return "url";
-  if (key.includes("USERNAME") || key.includes("SENDER") || key.includes("CLIENT_ID") || key.includes("SHORTCODE")) {
-    return "text";
-  }
-  return "password";
+  if (key.includes("URL") || key.includes("ENDPOINT")) return "url";
+  return "text";
+}
+
+function isTemplateKey(key: string) {
+  return key.includes("TEMPLATE");
 }
 
 function visibleCredentialValues(values: Record<string, string>) {
@@ -31,12 +42,24 @@ function visibleCredentialValues(values: Record<string, string>) {
   );
 }
 
+function credentialValueIndex(response: CredentialValuesIndexResponse) {
+  return Object.fromEntries(
+    response.providers.map((provider) => [provider.provider, provider.credentials ?? {}])
+  );
+}
+
+function valuesForKeys(keys: string[], values: Record<string, string>) {
+  return Object.fromEntries(keys.map((key) => [key, values[key]?.trim() ?? ""]));
+}
+
 export default function IntegrationsPage() {
   const [health, setHealth] = useState<IntegrationHealth | null>(null);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [credentialValuesByProvider, setCredentialValuesByProvider] = useState<Record<string, Record<string, string>>>({});
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
+  const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [savingCredentials, setSavingCredentials] = useState(false);
   const [credentialMessage, setCredentialMessage] = useState<TestResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,16 +69,35 @@ export default function IntegrationsPage() {
     loadHealth();
   }, []);
 
+  useEffect(() => {
+    if (!selectedProvider) {
+      setCredentialValues({});
+      return;
+    }
+
+    setCredentialValues(credentialValuesByProvider[selectedProvider] ?? {});
+  }, [credentialValuesByProvider, selectedProvider]);
+
   async function loadHealth() {
     setLoading(true);
     try {
-      const response = await apiFetch<IntegrationHealth>("/integrations/health");
+      const me = await apiFetch<User>("/auth/me");
+      if (me.role !== "IWL_ADMIN") {
+        throw new Error("Only IWL admins can manage integrations.");
+      }
+
+      setLoadingCredentials(true);
+      const [response, credentialIndex] = await Promise.all([
+        apiFetch<IntegrationHealth>("/integrations/health"),
+        apiFetch<CredentialValuesIndexResponse>("/integrations/credentials")
+      ]);
       const preferredProvider =
         response.statuses.find((status) => !smsProviders.includes(status.provider))?.provider ??
         response.statuses[0]?.provider ??
         null;
 
       setHealth(response);
+      setCredentialValuesByProvider(credentialValueIndex(credentialIndex));
       setSelectedProvider((current) =>
         current && response.statuses.some((status) => status.provider === current) ? current : preferredProvider
       );
@@ -64,6 +106,7 @@ export default function IntegrationsPage() {
       setError(integrationError instanceof Error ? integrationError.message : "Integrations failed");
     } finally {
       setLoading(false);
+      setLoadingCredentials(false);
     }
   }
 
@@ -85,7 +128,7 @@ export default function IntegrationsPage() {
 
   function selectProvider(status: IntegrationStatus) {
     setSelectedProvider(status.provider);
-    setCredentialValues({});
+    setCredentialValues(credentialValuesByProvider[status.provider] ?? {});
     setCredentialMessage(null);
   }
 
@@ -129,7 +172,18 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ credentials })
       });
       updateProviderStatus(status);
-      setCredentialValues({});
+      const nextValues = valuesForKeys(
+        status.requiredEnv,
+        {
+          ...(credentialValuesByProvider[selectedProvider] ?? {}),
+          ...credentials
+        }
+      );
+      setCredentialValuesByProvider((current) => ({
+        ...current,
+        [selectedProvider]: nextValues
+      }));
+      setCredentialValues(nextValues);
       setCredentialMessage({
         ok: true,
         message: `${status.displayName} credentials saved.`
@@ -155,6 +209,10 @@ export default function IntegrationsPage() {
         method: "DELETE"
       });
       updateProviderStatus(status);
+      setCredentialValuesByProvider((current) => ({
+        ...current,
+        [selectedProvider]: valuesForKeys(status.requiredEnv, {})
+      }));
       setCredentialValues({});
       setCredentialMessage({
         ok: true,
@@ -179,9 +237,6 @@ export default function IntegrationsPage() {
   const missingTotal = statuses.reduce((sum, status) => sum + status.missingEnv.length, 0);
   const selectedStatus = statuses.find((status) => status.provider === selectedProvider) ?? statuses[0] ?? null;
   const selectedTestResult = selectedStatus ? testResults[selectedStatus.provider] : null;
-  const smsStatuses = statuses.filter((status) => smsProviders.includes(status.provider));
-  const readySmsCount = smsStatuses.filter((status) => status.configured).length;
-  const otherStatuses = statuses.filter((status) => !smsProviders.includes(status.provider));
 
   return (
     <>
@@ -213,47 +268,62 @@ export default function IntegrationsPage() {
         <div className="data-card">
           <header>
             <div>
-              <h3>SMS Notifications</h3>
-              <span>{readySmsCount}/{smsStatuses.length} providers ready</span>
+              <h3>Providers</h3>
+              <span>Review saved values for each third party, then select one row to edit.</span>
             </div>
-            <span className={`pill ${readySmsCount > 0 ? "blue" : "gold"}`}>
-              {readySmsCount > 0 ? "SMS ready" : "Needs credentials"}
-            </span>
+            <span className="pill">{statuses.length} listed</span>
           </header>
 
           <div className="list">
-            <div className="list-row">
-              <div>
-                <strong>Member PIN delivery</strong>
-                <span>First ready SMS provider.</span>
-              </div>
-              <span className="pill blue">Enabled</span>
-            </div>
-            {smsStatuses.map((status) => {
+            {statuses.map((status) => {
               const result = testResults[status.provider];
+              const providerValues = credentialValuesByProvider[status.provider] ?? {};
+              const selected = selectedStatus?.provider === status.provider;
 
               return (
-                <div className="list-row" key={status.provider}>
-                  <div>
+                <div className={`list-row integration-provider-row ${selected ? "is-selected" : ""}`} key={status.provider}>
+                  <div className="integration-provider-summary">
                     <strong>{status.displayName}</strong>
-                    <span>{status.missingEnv.length} missing, {status.storedCredentialKeys.length} stored</span>
+                    <span>
+                      {humanizeEnum(status.provider)} - {status.storedCredentialKeys.length} stored, {status.missingEnv.length} missing
+                    </span>
                     {result ? <em className={result.ok ? "" : "warning"}>{result.message}</em> : null}
+                    <div className="integration-value-preview" aria-label={`${status.displayName} current values`}>
+                      {status.requiredEnv.map((key) => {
+                        const value = providerValues[key]?.trim() ?? "";
+                        const fromEnv = status.envCredentialKeys.includes(key);
+                        const missing = status.missingEnv.includes(key);
+                        const stateLabel = value ? value : fromEnv ? "Set in environment" : "Not set";
+
+                        return (
+                          <div
+                            className={`integration-value-item ${value ? "" : fromEnv ? "is-env" : "is-missing"}`}
+                            key={key}
+                          >
+                            <span>{key}</span>
+                            <code title={stateLabel}>{missing && !value ? "Not set" : stateLabel}</code>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="modal-header-actions">
                     <span className={`pill ${status.configured ? "blue" : "gold"}`}>
                       {status.configured ? "Ready" : "Gated"}
                     </span>
+                    <button
+                      aria-pressed={selected}
+                      className="button secondary"
+                      onClick={() => selectProvider(status)}
+                      type="button"
+                    >
+                      {selected ? "Selected" : "Edit"}
+                    </button>
                   </div>
                 </div>
               );
             })}
-            <div className="list-row">
-              <div>
-                <strong>Credential setup</strong>
-                <span>Select a provider.</span>
-              </div>
-              <span className="pill">One form</span>
-            </div>
+            {statuses.length === 0 ? <div className="empty-state">No providers</div> : null}
           </div>
         </div>
 
@@ -261,11 +331,15 @@ export default function IntegrationsPage() {
           <header>
             <div>
               <h3>{selectedStatus ? `${selectedStatus.displayName} Setup` : "Provider Setup"}</h3>
-              <span>Saved credentials are encrypted and hidden after saving.</span>
+              <span>Stored values are visible to admins so setup can be reviewed without guessing.</span>
             </div>
             {selectedStatus ? (
               <span className={`pill ${selectedStatus.configured ? "blue" : "gold"}`}>
-                {selectedStatus.configured ? "Ready" : `${selectedStatus.missingEnv.length} missing`}
+                {loadingCredentials
+                  ? "Loading values"
+                  : selectedStatus.configured
+                    ? "Ready"
+                    : `${selectedStatus.missingEnv.length} missing`}
               </span>
             ) : null}
           </header>
@@ -303,18 +377,36 @@ export default function IntegrationsPage() {
                         {stored ? <em>stored</em> : null}
                         {missing ? <em className="warning">missing</em> : null}
                       </span>
-                      <input
-                        autoComplete="off"
-                        onChange={(event) =>
-                          setCredentialValues((current) => ({
-                            ...current,
-                            [key]: event.target.value
-                          }))
-                        }
-                        placeholder={stored || fromEnv ? "Leave blank to keep current value" : "Enter value"}
-                        type={inputTypeForKey(key)}
-                        value={credentialValues[key] ?? ""}
-                      />
+                      {isTemplateKey(key) ? (
+                        <textarea
+                          onChange={(event) =>
+                            setCredentialValues((current) => ({
+                              ...current,
+                              [key]: event.target.value
+                            }))
+                          }
+                          placeholder={
+                            stored || fromEnv
+                              ? "Current SMS text"
+                              : "Use placeholders like {otp}, {pin}, and {ttlMinutes}"
+                          }
+                          rows={3}
+                          value={credentialValues[key] ?? ""}
+                        />
+                      ) : (
+                        <input
+                          autoComplete="off"
+                          onChange={(event) =>
+                            setCredentialValues((current) => ({
+                              ...current,
+                              [key]: event.target.value
+                            }))
+                          }
+                          placeholder={stored || fromEnv ? "Current value" : "Enter value"}
+                          type={inputTypeForKey(key)}
+                          value={credentialValues[key] ?? ""}
+                        />
+                      )}
                     </label>
                   );
                 })}
@@ -332,7 +424,7 @@ export default function IntegrationsPage() {
               ) : null}
 
               <div className="credential-actions">
-                <button className="button" disabled={savingCredentials} type="submit">
+                <button className="button" disabled={savingCredentials || loadingCredentials} type="submit">
                   <KeyRound size={16} />
                   {savingCredentials ? "Saving" : "Save"}
                 </button>
@@ -347,7 +439,9 @@ export default function IntegrationsPage() {
                 </button>
                 <button
                   className="button secondary"
-                  disabled={savingCredentials || selectedStatus.storedCredentialKeys.length === 0}
+                  disabled={
+                    savingCredentials || loadingCredentials || selectedStatus.storedCredentialKeys.length === 0
+                  }
                   onClick={clearCredentials}
                   type="button"
                 >
@@ -360,32 +454,6 @@ export default function IntegrationsPage() {
             <div className="empty-state">No providers</div>
           )}
         </section>
-      </section>
-
-      <section className="data-card">
-        <header>
-          <h3>Other Providers</h3>
-          <span className="pill">{otherStatuses.length} listed</span>
-        </header>
-        <div className="list">
-          {otherStatuses.map((status) => (
-            <div className="list-row" key={status.provider}>
-              <div>
-                <strong>{status.displayName}</strong>
-                <span>{humanizeEnum(status.provider)}</span>
-              </div>
-              <div className="modal-header-actions">
-                <span className={`pill ${status.configured ? "blue" : "gold"}`}>
-                  {status.configured ? "Ready" : `${status.missingEnv.length} missing`}
-                </span>
-                <button className="button secondary" onClick={() => selectProvider(status)} type="button">
-                  Manage
-                </button>
-              </div>
-            </div>
-          ))}
-          {otherStatuses.length === 0 ? <div className="empty-state">No providers</div> : null}
-        </div>
       </section>
     </>
   );

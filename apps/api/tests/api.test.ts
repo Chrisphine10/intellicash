@@ -173,6 +173,83 @@ describe("Intellicash API", () => {
     expect(Array.isArray(members.body.data)).toBe(true);
   });
 
+  it("updates group and member details for admins", async () => {
+    const agent = await authenticatedAgent();
+    const groups = await agent.get("/api/v1/groups").expect(200);
+    const group = groups.body.data.find((row: { _count?: { members?: number } }) => (row._count?.members ?? 0) > 0);
+    if (!group) throw new Error("Expected seeded group with members.");
+
+    const updatedGroup = await agent
+      .patch(`/api/v1/groups/${group.id}`)
+      .send({
+        name: "Updated Group Details VSLA",
+        code: group.code,
+        county: "Kiambu",
+        subCounty: "Ruiru",
+        phase: "DEVELOPMENT",
+        location: "Ruiru Market",
+        objective: "Updated savings objective",
+        contactPersonName: "Mary Admin",
+        contactPhone: "+254757255710",
+        meetingDay: "Thursday",
+        shareValueCents: 75000,
+        maxSharesPerMemberPerMeeting: 12,
+        constitutionVersion: "IWLSGS-2.0",
+        cycleNumber: 2
+      })
+      .expect(200);
+
+    expect(updatedGroup.body.data).toEqual(
+      expect.objectContaining({
+        id: group.id,
+        name: "Updated Group Details VSLA",
+        county: "Kiambu",
+        subCounty: "Ruiru",
+        phase: "DEVELOPMENT",
+        location: "Ruiru Market",
+        objective: "Updated savings objective",
+        contactPersonName: "Mary Admin",
+        contactPhone: "+254757255710",
+        meetingDay: "Thursday",
+        shareValueCents: 75000,
+        maxSharesPerMemberPerMeeting: 12,
+        constitutionVersion: "IWLSGS-2.0",
+        cycleNumber: 2
+      })
+    );
+
+    const members = await agent.get(`/api/v1/groups/${group.id}/members`).expect(200);
+    const member = members.body.data[0];
+    const updatedMember = await agent
+      .patch(`/api/v1/groups/${group.id}/members/${member.id}`)
+      .send({
+        fullName: "Updated Member Details",
+        phone: "+254757255710",
+        role: "TREASURER",
+        kycStatus: "VERIFIED",
+        status: "SUSPENDED"
+      })
+      .expect(200);
+
+    expect(updatedMember.body.data).toEqual(
+      expect.objectContaining({
+        id: member.id,
+        groupId: group.id,
+        fullName: "Updated Member Details",
+        phone: "+254757255710",
+        role: "TREASURER",
+        kycStatus: "VERIFIED",
+        status: "SUSPENDED"
+      })
+    );
+
+    const groupAgent = await authenticatedAgent("group@intellicash.co.ke");
+    await groupAgent
+      .patch(`/api/v1/groups/${group.id}/members/${member.id}`)
+      .send({ fullName: "Blocked Member Update" })
+      .expect(404);
+  });
+
   it("lists meetings with group context in one request", async () => {
     const agent = await authenticatedAgent();
     const meetings = await agent.get("/api/v1/meetings").expect(200);
@@ -316,7 +393,7 @@ describe("Intellicash API", () => {
     expect(foundation.body.data.ftmaCountyVslaKpis).toEqual([]);
   });
 
-  it("stages IntelliAudit evidence, syncs connectors, chats, drafts reports, and blocks self-approval", async () => {
+  it("stages IntelliAudit evidence, syncs connectors, chats, drafts reports, and blocks non-admin approval", async () => {
     const adminAgent = await authenticatedAgent();
     const partners = await adminAgent.get("/api/v1/partners").expect(200);
     const partner = partners.body.data.find((candidate: { type: string }) => candidate.type !== "LENDER");
@@ -415,15 +492,15 @@ describe("Intellicash API", () => {
     expect(report.body.data.content.methodology).toContain("scoped source documents");
     expect(report.body.data.auditReferences.length).toBeGreaterThan(0);
 
-    await adminAgent
-      .post(`/api/v1/intelliaudit/reports/${report.body.data.id}/approve`)
-      .send({ notes: "Self approval should fail." })
-      .expect(400);
-
     const partnerAgent = await authenticatedAgent("partner@intellicash.co.ke");
-    const approved = await partnerAgent
+    await partnerAgent
       .post(`/api/v1/intelliaudit/reports/${report.body.data.id}/approve`)
-      .send({ notes: "Scoped partner approval." })
+      .send({ notes: "Partner approval should be blocked." })
+      .expect(403);
+
+    const approved = await adminAgent
+      .post(`/api/v1/intelliaudit/reports/${report.body.data.id}/approve`)
+      .send({ notes: "Admin approval." })
       .expect(200);
 
     expect(approved.body.data.status).toBe("APPROVED");
@@ -754,6 +831,41 @@ describe("Intellicash API", () => {
     );
   });
 
+  it("creates partners with admin-managed profile fields", async () => {
+    const agent = await authenticatedAgent();
+    const suffix = Date.now();
+    const created = await agent
+      .post("/api/v1/partners")
+      .send({
+        name: `Admin Created Partner ${suffix}`,
+        type: "NGO",
+        status: "ACTIVE",
+        apiScope: "PROGRAMME",
+        county: "Nairobi",
+        contactName: "Amina Otieno",
+        contactPhone: "+254722000111",
+        valueProposition: "Affordable group financing",
+        capacity: "Enterprise finance",
+        linkageType: "FUNDING_PARTNER"
+      })
+      .expect(201);
+
+    expect(created.body.data).toEqual(
+      expect.objectContaining({
+        name: `Admin Created Partner ${suffix}`,
+        type: "NGO",
+        status: "ACTIVE",
+        apiScope: "PROGRAMME",
+        county: "Nairobi",
+        contactName: "Amina Otieno",
+        contactPhone: "+254722000111",
+        valueProposition: "Affordable group financing",
+        capacity: "Enterprise finance",
+        linkageType: "FUNDING_PARTNER"
+      })
+    );
+  });
+
   it("manages server API keys and authenticates bearer tokens with effective role scopes", async () => {
     const adminAgent = await authenticatedAgent();
     const presets = await adminAgent.get("/api/v1/api-keys/presets").expect(200);
@@ -815,27 +927,10 @@ describe("Intellicash API", () => {
     expect(auditTypes).toEqual(expect.arrayContaining(["API_KEY_CREATED", "API_KEY_REVOKED"]));
 
     const lenderAgent = await authenticatedAgent("lender@intellicash.co.ke");
-    const lenderKey = await lenderAgent
+    await lenderAgent.get("/api/v1/api-keys/presets").expect(403);
+    await lenderAgent
       .post("/api/v1/api-keys")
-      .send({
-        name: `Lender Mobile Test ${Date.now()}`,
-        preset: "MOBILE_CORE"
-      })
-      .expect(201);
-    expect(lenderKey.body.data.scopes).toEqual(expect.arrayContaining(["meetings:write"]));
-    expect(lenderKey.body.data.effectiveScopes).not.toContain("meetings:write");
-
-    const lenderGroups = await request(app)
-      .get("/api/v1/groups")
-      .set("Authorization", `Bearer ${lenderKey.body.data.token}`)
-      .expect(200);
-    await request(app)
-      .post(`/api/v1/groups/${lenderGroups.body.data[0].id}/meetings`)
-      .set("Authorization", `Bearer ${lenderKey.body.data.token}`)
-      .send({
-        title: "Blocked lender API key meeting",
-        scheduledAt: new Date(Date.now() + 60_000).toISOString()
-      })
+      .send({ name: "Blocked lender key", preset: "MOBILE_CORE" })
       .expect(403);
 
     const groupAgent = await authenticatedAgent("group@intellicash.co.ke");
@@ -872,9 +967,16 @@ describe("Intellicash API", () => {
     expect(accessControl.body.data.rolePermissions.MEMBER).not.toContain("payments:read");
     expect(accessControl.body.data.rolePermissions.READ_ONLY).not.toContain("payments:read");
     expect(accessControl.body.data.rolePermissions.IWL_ADMIN).toEqual(expect.arrayContaining(["api-keys:read", "api-keys:write"]));
-    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).toEqual(expect.arrayContaining(["api-keys:read", "api-keys:write"]));
-    expect(accessControl.body.data.rolePermissions.LENDER).toEqual(expect.arrayContaining(["api-keys:read", "api-keys:write"]));
-    expect(accessControl.body.data.rolePermissions.READ_ONLY).toEqual(expect.arrayContaining(["api-keys:read"]));
+    expect(accessControl.body.data.rolePermissions.IWL_ADMIN).toEqual(expect.arrayContaining(["audit:read", "integrations:read"]));
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("api-keys:read");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("integrations:read");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("audit:read");
+    expect(accessControl.body.data.rolePermissions.LENDER).not.toContain("api-keys:read");
+    expect(accessControl.body.data.rolePermissions.LENDER).not.toContain("integrations:read");
+    expect(accessControl.body.data.rolePermissions.LENDER).not.toContain("audit:read");
+    expect(accessControl.body.data.rolePermissions.READ_ONLY).not.toContain("api-keys:read");
+    expect(accessControl.body.data.rolePermissions.READ_ONLY).not.toContain("integrations:read");
+    expect(accessControl.body.data.rolePermissions.READ_ONLY).not.toContain("audit:read");
     expect(accessControl.body.data.rolePermissions.GROUP_ACCOUNT).not.toContain("api-keys:read");
     expect(accessControl.body.data.rolePermissions.MEMBER).not.toContain("api-keys:read");
 
@@ -2272,6 +2374,169 @@ describe("Intellicash API", () => {
     expect(cleared.body.data.configured).toBe(false);
   });
 
+  it("stores Bonga SMS credentials and message templates and returns stored values to admins", async () => {
+    const agent = await authenticatedAgent();
+    const saved = await agent
+      .put("/api/v1/integrations/BONGA_SMS/credentials")
+      .send({
+        credentials: {
+          BONGA_SMS_CLIENT_ID: "1120",
+          BONGA_SMS_API_KEY: "api-key-demo",
+          BONGA_SMS_API_SECRET: "api-secret-demo",
+          BONGA_SMS_SERVICE_ID: "5843",
+          BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms",
+          BONGA_SMS_DEFAULT_PIN_TEMPLATE: "Your Intelli Cash default meeting PIN is {pin}.",
+          BONGA_SMS_OTP_TEMPLATE: "Your Intelli Cash meeting OTP is {otp}. It expires in {ttlMinutes} minutes."
+        }
+      })
+      .expect(200);
+
+    expect(saved.body.data.configured).toBe(true);
+    expect(saved.body.data.storedCredentialKeys).toEqual([
+      "BONGA_SMS_CLIENT_ID",
+      "BONGA_SMS_API_KEY",
+      "BONGA_SMS_API_SECRET",
+      "BONGA_SMS_SERVICE_ID",
+      "BONGA_SMS_ENDPOINT",
+      "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
+      "BONGA_SMS_OTP_TEMPLATE"
+    ]);
+    expect(JSON.stringify(saved.body.data)).not.toContain("api-secret-demo");
+    expect(JSON.stringify(saved.body.data)).not.toContain("Your Intelli Cash meeting OTP");
+
+    const status = await agent.get("/api/v1/integrations/BONGA_SMS/status").expect(200);
+    expect(status.body.data.configured).toBe(true);
+    expect(status.body.data.missingEnv).toEqual([]);
+
+    const values = await agent.get("/api/v1/integrations/BONGA_SMS/credentials").expect(200);
+    expect(values.body.data.credentials).toEqual(
+      expect.objectContaining({
+        BONGA_SMS_CLIENT_ID: "1120",
+        BONGA_SMS_API_KEY: "api-key-demo",
+        BONGA_SMS_API_SECRET: "api-secret-demo",
+        BONGA_SMS_SERVICE_ID: "5843",
+        BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms",
+        BONGA_SMS_DEFAULT_PIN_TEMPLATE: "Your Intelli Cash default meeting PIN is {pin}.",
+        BONGA_SMS_OTP_TEMPLATE: "Your Intelli Cash meeting OTP is {otp}. It expires in {ttlMinutes} minutes."
+      })
+    );
+
+    const allValues = await agent.get("/api/v1/integrations/credentials").expect(200);
+    expect(allValues.body.data.providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "BONGA_SMS",
+          displayName: "Bonga SMS",
+          credentials: expect.objectContaining({
+            BONGA_SMS_CLIENT_ID: "1120",
+            BONGA_SMS_API_KEY: "api-key-demo",
+            BONGA_SMS_API_SECRET: "api-secret-demo",
+            BONGA_SMS_SERVICE_ID: "5843",
+            BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms",
+            BONGA_SMS_DEFAULT_PIN_TEMPLATE: "Your Intelli Cash default meeting PIN is {pin}.",
+            BONGA_SMS_OTP_TEMPLATE: "Your Intelli Cash meeting OTP is {otp}. It expires in {ttlMinutes} minutes."
+          })
+        })
+      ])
+    );
+
+    const cleared = await agent.delete("/api/v1/integrations/BONGA_SMS/credentials").expect(200);
+    expect(cleared.body.data.configured).toBe(false);
+  });
+
+  it("sends admin SMS broadcasts to groups and individual members", async () => {
+    const agent = await authenticatedAgent();
+    await agent
+      .put("/api/v1/integrations/BONGA_SMS/credentials")
+      .send({
+        credentials: {
+          BONGA_SMS_CLIENT_ID: "1120",
+          BONGA_SMS_API_KEY: "api-key-demo",
+          BONGA_SMS_API_SECRET: "api-secret-demo",
+          BONGA_SMS_SERVICE_ID: "5843",
+          BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms"
+        }
+      })
+      .expect(200);
+
+    const groups = await agent.get("/api/v1/groups").expect(200);
+    const group = groups.body.data.find((row: { _count?: { members?: number } }) => (row._count?.members ?? 0) > 0);
+    if (!group) throw new Error("Expected seeded group with members.");
+
+    const members = await agent.get(`/api/v1/groups/${group.id}/members`).expect(200);
+    const activeMembers = members.body.data.filter((row: { status: string }) => row.status === "ACTIVE");
+    expect(activeMembers.length).toBeGreaterThan(0);
+
+    const groupBroadcast = await agent
+      .post("/api/v1/sms/broadcasts")
+      .send({
+        targetType: "GROUP",
+        groupId: group.id,
+        message: "Reminder: group meeting starts at 10:00 AM."
+      })
+      .expect(201);
+
+    expect(groupBroadcast.body.data).toEqual(
+      expect.objectContaining({
+        targetType: "GROUP",
+        targetGroupId: group.id,
+        provider: "BONGA_SMS",
+        recipientCount: activeMembers.length,
+        queuedCount: activeMembers.length,
+        sentCount: 0,
+        failedCount: 0,
+        status: "QUEUED"
+      })
+    );
+    expect(groupBroadcast.body.data.recipients).toHaveLength(activeMembers.length);
+    expect(groupBroadcast.body.data.recipients[0]).toEqual(
+      expect.objectContaining({
+        provider: "BONGA_SMS",
+        status: "QUEUED"
+      })
+    );
+
+    const member = activeMembers[0];
+    const memberBroadcast = await agent
+      .post("/api/v1/sms/broadcasts")
+      .send({
+        targetType: "MEMBER",
+        memberId: member.id,
+        message: "Hello from Intelli Cash admin SMS."
+      })
+      .expect(201);
+
+    expect(memberBroadcast.body.data).toEqual(
+      expect.objectContaining({
+        targetType: "MEMBER",
+        targetMemberId: member.id,
+        recipientCount: 1,
+        queuedCount: 1
+      })
+    );
+    expect(memberBroadcast.body.data.recipients[0]).toEqual(
+      expect.objectContaining({
+        memberId: member.id,
+        memberName: member.fullName
+      })
+    );
+
+    const recent = await agent.get("/api/v1/sms/broadcasts").expect(200);
+    expect(recent.body.data.map((row: { id: string }) => row.id)).toEqual(
+      expect.arrayContaining([groupBroadcast.body.data.id, memberBroadcast.body.data.id])
+    );
+
+    const groupAgent = await authenticatedAgent("group@intellicash.co.ke");
+    await groupAgent
+      .post("/api/v1/sms/broadcasts")
+      .send({
+        targetType: "GROUP",
+        groupId: group.id,
+        message: "Group account should not send admin broadcasts."
+      })
+      .expect(403);
+  });
+
   it("stores Google Maps browser key for dashboard map configuration", async () => {
     const agent = await authenticatedAgent();
     const emptyConfig = await agent
@@ -2322,8 +2587,7 @@ describe("Intellicash API", () => {
           group.programme?.partner?.name === "FLOURISH VSLA Programme"
       )
     ).toBe(true);
-    const partnerAudit = await partnerAgent.get("/api/v1/audit/events").expect(200);
-    expect(Array.isArray(partnerAudit.body.data)).toBe(true);
+    await partnerAgent.get("/api/v1/audit/events").expect(403);
 
     const groupAgent = await authenticatedAgent("group@intellicash.co.ke");
     const groupGroups = await groupAgent.get("/api/v1/groups").expect(200);

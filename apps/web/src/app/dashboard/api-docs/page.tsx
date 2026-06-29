@@ -56,8 +56,13 @@ export default function ApiDocsPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function loadApiDocsWorkspace() {
-    const [meResponse, keyResponse, presetResponse] = await Promise.all([
-      apiFetch<User>("/auth/me"),
+    const meResponse = await apiFetch<User>("/auth/me");
+
+    if (meResponse.role !== "IWL_ADMIN") {
+      throw new Error("Only IWL admins can manage API access.");
+    }
+
+    const [keyResponse, presetResponse] = await Promise.all([
       apiFetch<ApiKeyRow[]>("/api-keys"),
       apiFetch<ApiKeyPreset[]>("/api-keys/presets")
     ]);

@@ -1,29 +1,43 @@
 import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
-import { encryptJson } from "../lib/crypto";
+import { decryptJson, encryptJson } from "../lib/crypto";
+import { prisma } from "../lib/prisma";
 import { decryptCredentials } from "./integration-credentials";
+import {
+  bongaSmsRequiredCredentialKeys,
+  combineBongaSmsCredentials,
+  renderSmsTemplate,
+  sendSms,
+  type SmsProvider
+} from "./sms-service";
 
 const memberPinLength = 6;
 const memberOtpTtlMinutes = 15;
 const memberPinDeliveryProvider = "AFRICAS_TALKING";
-const memberPinSmsProviders = ["AFRICAS_TALKING", "BONGA_SMS"] as const;
+const memberPinSmsProviders = ["BONGA_SMS", "AFRICAS_TALKING"] as const;
+const bongaMemberPinDeliveryKeys = [
+  ...bongaSmsRequiredCredentialKeys,
+  "BONGA_SMS_ENDPOINT",
+  "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
+  "BONGA_SMS_OTP_TEMPLATE"
+];
 const memberPinSmsProviderEnv: Record<(typeof memberPinSmsProviders)[number], string[]> = {
+  BONGA_SMS: bongaMemberPinDeliveryKeys,
   AFRICAS_TALKING: [
     "AFRICASTALKING_USERNAME",
     "AFRICASTALKING_API_KEY",
     "AFRICASTALKING_SENDER_ID"
-  ],
-  BONGA_SMS: [
-    "BONGA_SMS_CLIENT_ID",
-    "BONGA_SMS_API_KEY",
-    "BONGA_SMS_API_SECRET"
   ]
 };
 const memberPinDeliveryChannel = "SMS";
 const memberPinDeliveryStatus = "QUEUED";
 const defaultPinPurpose = "DEFAULT_PIN";
 const currentOtpPurpose = "CURRENT_OTP";
+const defaultPinTemplate =
+  "Your Intelli Cash default meeting PIN is {pin}. Keep it private; it is saved on the mobile app for offline meeting unlock.";
+const currentOtpTemplate =
+  "Your Intelli Cash meeting OTP is {otp}. It expires in {ttlMinutes} minutes and is for online meeting unlock.";
 
 export const memberPinDeliverySelect = {
   id: true,
@@ -71,6 +85,87 @@ export function serializeMemberPinDelivery(delivery: MemberPinDeliveryPublic) {
   };
 }
 
+function isSmsProvider(provider: string): provider is SmsProvider {
+  return provider === "BONGA_SMS" || provider === "AFRICAS_TALKING";
+}
+
+async function resolveSmsCredentials(provider: SmsProvider) {
+  const config = await prisma.integrationConfig.findUnique({
+    where: { provider },
+    select: { credentialsJson: true }
+  });
+  const storedCredentials = decryptCredentials(config?.credentialsJson);
+
+  if (provider === "BONGA_SMS") {
+    return combineBongaSmsCredentials(storedCredentials);
+  }
+
+  return Object.fromEntries(
+    memberPinSmsProviderEnv[provider]
+      .map((key) => [key, storedCredentials[key] || process.env[key]])
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+  );
+}
+
+type MemberPinDeliveryPayload = {
+  provider?: string;
+  phone?: string;
+  body?: string;
+};
+
+export async function sendQueuedMemberPinDelivery(
+  deliveryId: string,
+  dependencies: { fetch?: typeof fetch; networkEnabled?: boolean } = {}
+) {
+  const delivery = await prisma.memberPinDelivery.findUnique({
+    where: { id: deliveryId },
+    select: {
+      ...memberPinDeliverySelect,
+      messageCiphertext: true
+    }
+  });
+
+  if (!delivery || delivery.status !== memberPinDeliveryStatus) {
+    if (!delivery) return null;
+    const { messageCiphertext: _messageCiphertext, ...publicDelivery } = delivery;
+    return publicDelivery;
+  }
+
+  const payload = decryptJson<MemberPinDeliveryPayload>(delivery.messageCiphertext);
+  const provider = isSmsProvider(delivery.provider) ? delivery.provider : null;
+  const message = typeof payload.body === "string" ? payload.body : "";
+  const phone = typeof payload.phone === "string" && payload.phone ? payload.phone : delivery.phone;
+
+  if (!provider || !message) {
+    const failed = await prisma.memberPinDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "FAILED" },
+      select: memberPinDeliverySelect
+    });
+    return failed;
+  }
+
+  const result = await sendSms(
+    {
+      provider,
+      phone,
+      message,
+      credentials: await resolveSmsCredentials(provider)
+    },
+    dependencies
+  );
+  const updated = await prisma.memberPinDelivery.update({
+    where: { id: delivery.id },
+    data: {
+      status: result.status,
+      sentAt: result.status === "SENT" ? new Date() : null
+    },
+    select: memberPinDeliverySelect
+  });
+
+  return updated;
+}
+
 async function resolveMemberPinDeliveryProvider(tx: Prisma.TransactionClient) {
   const configs = await tx.integrationConfig.findMany({
     where: { provider: { in: [...memberPinSmsProviders] } },
@@ -88,6 +183,38 @@ async function resolveMemberPinDeliveryProvider(tx: Prisma.TransactionClient) {
   return memberPinDeliveryProvider;
 }
 
+async function resolveMemberPinDeliveryIntegration(tx: Prisma.TransactionClient) {
+  const provider = await resolveMemberPinDeliveryProvider(tx);
+  const config = await tx.integrationConfig.findUnique({
+    where: { provider },
+    select: { credentialsJson: true }
+  });
+  const credentials = decryptCredentials(config?.credentialsJson);
+
+  if (provider === "BONGA_SMS") {
+    return {
+      provider,
+      credentials: combineBongaSmsCredentials(credentials)
+    };
+  }
+
+  return { provider, credentials };
+}
+
+function messageTemplateFor(
+  integration: { provider: string; credentials: Record<string, string> },
+  purpose: typeof defaultPinPurpose | typeof currentOtpPurpose
+) {
+  if (integration.provider === "BONGA_SMS") {
+    const templateKey =
+      purpose === defaultPinPurpose ? "BONGA_SMS_DEFAULT_PIN_TEMPLATE" : "BONGA_SMS_OTP_TEMPLATE";
+    const template = integration.credentials[templateKey];
+    if (template?.trim()) return template.trim();
+  }
+
+  return purpose === defaultPinPurpose ? defaultPinTemplate : currentOtpTemplate;
+}
+
 export async function generateAndQueueMemberPin<TSelect extends Prisma.MemberSelect>(
   tx: Prisma.TransactionClient,
   member: MemberPinTarget,
@@ -98,8 +225,9 @@ export async function generateAndQueueMemberPin<TSelect extends Prisma.MemberSel
 ) {
   const pin = generateMemberPin();
   const now = new Date();
-  const provider = await resolveMemberPinDeliveryProvider(tx);
-  const messageBody = `Your Intelli Cash default meeting PIN is ${pin}. Keep it private; it is saved on the mobile app for offline meeting unlock.`;
+  const integration = await resolveMemberPinDeliveryIntegration(tx);
+  const provider = integration.provider;
+  const messageBody = renderSmsTemplate(messageTemplateFor(integration, defaultPinPurpose), { pin });
   const pinHash = await bcrypt.hash(pin, 12);
 
   const updatedMember = await tx.member.update({
@@ -129,6 +257,7 @@ export async function generateAndQueueMemberPin<TSelect extends Prisma.MemberSel
         phone: member.phone,
         pin,
         body: messageBody,
+        template: messageTemplateFor(integration, defaultPinPurpose),
         generatedAt: now.toISOString()
       })
     },
@@ -149,8 +278,12 @@ export async function generateAndQueueMemberOtp<TSelect extends Prisma.MemberSel
   const otp = generateMemberPin();
   const now = new Date();
   const expiresAt = otpExpiresAt(now);
-  const provider = await resolveMemberPinDeliveryProvider(tx);
-  const messageBody = `Your Intelli Cash meeting OTP is ${otp}. It expires in ${memberOtpTtlMinutes} minutes and is for online meeting unlock.`;
+  const integration = await resolveMemberPinDeliveryIntegration(tx);
+  const provider = integration.provider;
+  const messageBody = renderSmsTemplate(messageTemplateFor(integration, currentOtpPurpose), {
+    otp,
+    ttlMinutes: memberOtpTtlMinutes
+  });
   const otpHash = await bcrypt.hash(otp, 12);
 
   const updatedMember = await tx.member.update({
@@ -179,6 +312,7 @@ export async function generateAndQueueMemberOtp<TSelect extends Prisma.MemberSel
         purpose: currentOtpPurpose,
         phone: member.phone,
         body: messageBody,
+        template: messageTemplateFor(integration, currentOtpPurpose),
         generatedAt: now.toISOString(),
         expiresAt: expiresAt.toISOString()
       })

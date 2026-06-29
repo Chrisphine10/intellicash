@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAdmin, requireAuth } from "../middleware/auth";
 import { groupScopeForUser, programmeScopeForUser } from "../services/account-scope";
 import { ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -40,7 +40,7 @@ type AuditEventWithActor = {
   } | null;
 };
 
-router.get("/audit/events", requireAuth("audit:read"), async (req, res, next) => {
+router.get("/audit/events", requireAuth("audit:read"), requireAdmin, async (req, res, next) => {
   try {
     const events = await prisma.auditEvent.findMany({
       orderBy: { createdAt: "desc" },

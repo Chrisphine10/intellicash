@@ -605,6 +605,53 @@ model MemberPinDelivery {
   @@index([status, createdAt])
 }
 
+model SmsBroadcast {
+  id                String   @id @default(cuid())
+  requestedByUserId String?
+  targetType        String
+  targetGroupId     String?
+  targetMemberId    String?
+  provider          String
+  message           String
+  status            String   @default("QUEUED")
+  recipientCount    Int      @default(0)
+  queuedCount       Int      @default(0)
+  sentCount         Int      @default(0)
+  failedCount       Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  recipients SmsBroadcastRecipient[]
+
+  @@index([createdAt])
+  @@index([targetType, createdAt])
+  @@index([targetGroupId, createdAt])
+  @@index([targetMemberId, createdAt])
+}
+
+model SmsBroadcastRecipient {
+  id                String    @id @default(cuid())
+  broadcastId       String
+  memberId          String?
+  groupId           String?
+  memberName        String
+  phone             String
+  provider          String
+  status            String    @default("QUEUED")
+  providerReference String?
+  providerStatus    String?
+  providerMessage   String?
+  sentAt            DateTime?
+  createdAt         DateTime  @default(now())
+
+  broadcast SmsBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId])
+  @@index([memberId, createdAt])
+  @@index([groupId, createdAt])
+  @@index([status, createdAt])
+}
+
 model MeetingStepRecord {
   id          String    @id @default(cuid())
   meetingId   String

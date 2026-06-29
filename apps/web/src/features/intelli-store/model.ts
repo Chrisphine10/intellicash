@@ -11,6 +11,14 @@ export const repaymentStatuses = ["NOT_FINANCED", "FINANCED", "PARTIALLY_PAID", 
 export const productStatuses = ["ACTIVE", "INACTIVE", "ARCHIVED"];
 export const supplierStatuses = ["ACTIVE", "INACTIVE"];
 export const installmentFrequencies = ["WEEKLY", "BIWEEKLY", "MONTHLY"];
+export const repaymentMethods = [
+  { value: "CASH", label: "Cash / in-person" },
+  { value: "MPESA", label: "M-Pesa" },
+  { value: "PAYSTACK", label: "Paystack (card / mobile money)" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "WALLET", label: "Partner wallet" },
+  { value: "OTHER", label: "Other" }
+];
 export const productCategories = [
   "AGRI_EQUIPMENT",
   "FARM_INPUTS",
@@ -132,6 +140,7 @@ export type RequestActionForm = {
 export type RepaymentForm = {
   installmentId: string;
   amountKes: string;
+  method: string;
   source: string;
   provider: string;
   providerReference: string;
@@ -153,6 +162,7 @@ export function defaultRepaymentForm(): RepaymentForm {
   return {
     installmentId: "",
     amountKes: "",
+    method: "CASH",
     source: "MANUAL",
     provider: "",
     providerReference: "",

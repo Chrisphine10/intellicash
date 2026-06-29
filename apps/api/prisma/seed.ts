@@ -124,6 +124,8 @@ export async function seedDatabase() {
   await prisma.integrationConfig.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.auditEvent.deleteMany();
+  await prisma.smsBroadcastRecipient.deleteMany();
+  await prisma.smsBroadcast.deleteMany();
   await prisma.creditScore.deleteMany();
   await prisma.vote.deleteMany();
   await prisma.ledgerEntry.deleteMany();
@@ -1379,7 +1381,11 @@ function requiredEnvForProvider(provider: string) {
     BONGA_SMS: [
       "BONGA_SMS_CLIENT_ID",
       "BONGA_SMS_API_KEY",
-      "BONGA_SMS_API_SECRET"
+      "BONGA_SMS_API_SECRET",
+      "BONGA_SMS_SERVICE_ID",
+      "BONGA_SMS_ENDPOINT",
+      "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
+      "BONGA_SMS_OTP_TEMPLATE"
     ],
     IPRS: ["IPRS_BASE_URL", "IPRS_CLIENT_ID", "IPRS_CLIENT_SECRET"],
     KCB_BUNI: [

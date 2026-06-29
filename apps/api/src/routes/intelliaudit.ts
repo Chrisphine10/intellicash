@@ -27,11 +27,13 @@ import { env } from "../config/env";
 import { appendAuditEvent } from "../services/audit-service";
 import { groupScopeForUser, programmeScopeForUser } from "../services/account-scope";
 import { generateIntelliAuditLlmResponse, intelliAuditSystemPolicy } from "../services/intelliaudit-llm";
-import { requireAuth, type AuthenticatedUser } from "../middleware/auth";
+import { requireAdmin, requireAuth, type AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
+
+router.use("/intelliaudit", requireAuth(), requireAdmin);
 
 const genericConnectorProviders = [
   "DATABASE",
@@ -891,7 +893,9 @@ router.post(
 
       const scope = normalizeIntelliAuditScope({ scopeType: batch.scopeType, scopeId: batch.scopeId });
       await assertScopeAccess(req.user, scope, "approve");
-      assertNotSelfApproval(req.user?.id ?? "", batch.createdByUserId, "Reconciliation approval");
+      if (req.user?.role !== "IWL_ADMIN") {
+        assertNotSelfApproval(req.user?.id ?? "", batch.createdByUserId, "Reconciliation approval");
+      }
 
       const approved = await prisma.intelliAuditReconciliationBatch.update({
         where: { id: batch.id },
@@ -1054,7 +1058,9 @@ router.post(
 
       const scope = normalizeIntelliAuditScope({ scopeType: report.scopeType, scopeId: report.scopeId });
       await assertScopeAccess(req.user, scope, "approve");
-      assertNotSelfApproval(req.user?.id ?? "", report.generatedByUserId, "Report approval");
+      if (req.user?.role !== "IWL_ADMIN") {
+        assertNotSelfApproval(req.user?.id ?? "", report.generatedByUserId, "Report approval");
+      }
 
       const approved = await prisma.intelliAuditReportDraft.update({
         where: { id: report.id },

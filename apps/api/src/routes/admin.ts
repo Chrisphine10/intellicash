@@ -469,7 +469,13 @@ const partnerSchema = z.object({
   name: z.string().min(2),
   type: z.string().min(2),
   status: z.string().default("ACTIVE"),
-  apiScope: z.string().default("PROGRAMME")
+  apiScope: z.string().default("PROGRAMME"),
+  county: z.string().nullable().optional(),
+  contactName: z.string().nullable().optional(),
+  contactPhone: z.string().nullable().optional(),
+  valueProposition: z.string().nullable().optional(),
+  capacity: z.string().nullable().optional(),
+  linkageType: z.string().nullable().optional()
 });
 
 const partnerUpdateSchema = z.object({

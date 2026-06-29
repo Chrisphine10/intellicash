@@ -2,8 +2,31 @@ import React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  BadgeCheck,
+  Banknote,
+  Bot,
+  Building2,
+  CalendarCheck,
+  CircleHelp,
+  ClipboardList,
   Download,
+  FolderKanban,
+  HandCoins,
+  Landmark,
+  Leaf,
+  Mail,
+  MapPinned,
+  Megaphone,
+  Network,
+  PackagePlus,
+  Phone,
+  Rocket,
+  Send,
+  ShieldCheck,
   ShoppingBag,
+  Smartphone,
+  Sprout,
+  TrendingUp,
   UsersRound
 } from "@/lib/theme-icons";
 import { PublicSiteFooter } from "../components/public-site-footer";
@@ -32,6 +55,29 @@ type IllustrationKind =
   | "package"
   | "trust"
   | "growth";
+
+const illustrationIcons: Record<
+  IllustrationKind,
+  React.ComponentType<{ className?: string; size?: number | string }>
+> = {
+  ai: Bot,
+  banking: Building2,
+  champions: Rocket,
+  enterprise: Leaf,
+  finance: HandCoins,
+  groups: UsersRound,
+  growth: TrendingUp,
+  lenders: Banknote,
+  map: MapPinned,
+  marketing: Megaphone,
+  package: PackagePlus,
+  partners: Landmark,
+  payments: Smartphone,
+  reports: ClipboardList,
+  training: CalendarCheck,
+  trust: ShieldCheck,
+  web3: Network
+};
 
 const operatingSignals = [
   { label: "Digital championship", illustration: "champions" },
@@ -222,10 +268,125 @@ const secondaryPlatformScreenshots = [
   }
 ];
 
+const supportEmail = "support@intellicash.co.ke";
+const supportPhone = "+254 700 000 000";
+const supportPhoneHref = "tel:+254700000000";
+
+// NOTE: Illustrative testimonials by role only (no named people/organizations).
+// TODO: Replace with real, attributed and consented quotes before public launch.
+const testimonials = [
+  {
+    quote:
+      "We unlock meetings and record savings even when the network is down, then everything syncs once we are back online.",
+    name: "Group Chairperson",
+    role: "VSLA, Kiambu County",
+    illustration: "groups"
+  },
+  {
+    quote:
+      "The impact reports give us trustworthy field quality and reach without exposing members' private financial records.",
+    name: "Partner Programme Lead",
+    role: "Green enterprise programme",
+    illustration: "partners"
+  },
+  {
+    quote:
+      "Payments, stock requests, and customer follow-up now live in one place, so we spend more time growing the enterprise.",
+    name: "Green Enterprise Owner",
+    role: "Climate-smart agribusiness",
+    illustration: "enterprise"
+  }
+] as const satisfies ReadonlyArray<{
+  quote: string;
+  name: string;
+  role: string;
+  illustration: IllustrationKind;
+}>;
+
+// NOTE: Access tiers reflect the current programme-funded model, not final commercial pricing.
+// TODO: Confirm commercial terms / amounts with the business before launch.
+const pricingTiers = [
+  {
+    name: "Group accounts",
+    price: "Free",
+    cadence: "via partner programmes",
+    text: "For VSLAs, Chamas, credit unions, and cooperatives onboarded through a partner.",
+    features: [
+      "Offline-first meeting unlock & passbook",
+      "Member registration & roles",
+      "Store requests & repayments",
+      "Android app + installable PWA"
+    ],
+    cta: { label: "Register a group", href: "#group-registration" },
+    featured: false
+  },
+  {
+    name: "Partners & donors",
+    price: "Custom",
+    cadence: "tailored to programme",
+    text: "For NGOs, donors, government programmes, and accelerators running field operations.",
+    features: [
+      "Banking infrastructure & partner wallet",
+      "Quality & impact reports",
+      "SMS broadcasts & notifications",
+      "Programme funding rails"
+    ],
+    cta: { label: "Talk to us", href: "/contact" },
+    featured: true
+  },
+  {
+    name: "Lenders & funds",
+    price: "Custom",
+    cadence: "tailored to portfolio",
+    text: "For MFIs, SACCOs, and funds identifying green businesses ready for responsible capital.",
+    features: [
+      "Credit & repayment signals",
+      "Portfolio & county reports",
+      "M-Pesa, Paystack & KCB Buni payouts",
+      "Audit & ledger visibility"
+    ],
+    cta: { label: "Talk to us", href: "/contact" },
+    featured: false
+  }
+] as const;
+
+const faqs = [
+  {
+    question: "Does Intelli-Cash work offline?",
+    answer:
+      "Yes. Intelli-Cash is an offline-first Progressive Web App. Field teams can open the app, unlock meetings, and capture records without a connection; data syncs automatically when connectivity returns."
+  },
+  {
+    question: "Who is Intelli-Cash for?",
+    answer:
+      "VSLAs, Chamas, credit unions, cooperatives, and green enterprises, plus the partners, donors, lenders, and field teams that support them."
+  },
+  {
+    question: "How does a group get started?",
+    answer:
+      "Groups register through a partner programme or the Register group section on this page. Members are then onboarded with roles, KYC, and meeting PINs."
+  },
+  {
+    question: "Which payment rails are supported?",
+    answer:
+      "M-Pesa, Paystack, and KCB Buni for mobile money and banking, partner wallets for programme funding, and Web3 contract rails for transparent value movement."
+  },
+  {
+    question: "How is group money protected?",
+    answer:
+      "Three independent key-holders approve each meeting before money can move, transactions require member approval, and the ledger is append-only, signed, and auditable."
+  },
+  {
+    question: "Is there a mobile app?",
+    answer:
+      "Yes. Intelli-Cash is available on the Google Play Store and can also be installed directly from the browser as a PWA."
+  }
+];
+
 export default function LandingPage() {
   return (
     <main className="landing-page">
-      <section className="landing-hero">
+      <section className="landing-hero is-minimal">
         <PublicSiteHeader
           ariaLabel="Landing navigation"
           playStoreUrl={playStoreUrl}
@@ -271,7 +432,25 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="landing-hero-scene" aria-hidden="true">
-          <LandingIllustration kind="champions" />
+          <div className="hero-screen-stack">
+            <figure className="hero-screen hero-screen-main">
+              <img alt="" height={1100} src={featuredPlatformScreenshot.src} width={1440} />
+            </figure>
+            <figure className="hero-screen hero-screen-side">
+              <img alt="" height={1100} src="/screenshots/member-meetings.png" width={1440} />
+            </figure>
+            <div className="hero-icon-strip">
+              <span>
+                <BadgeCheck size={18} />
+              </span>
+              <span>
+                <FolderKanban size={18} />
+              </span>
+              <span>
+                <ShoppingBag size={18} />
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -485,6 +664,133 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+      <section className="landing-section testimonials-section" id="testimonials" aria-labelledby="testimonials-title">
+        <div className="landing-section-header wide">
+          <p className="eyebrow">Voices From The Field</p>
+          <h2 id="testimonials-title">Built around the people doing the work</h2>
+          <p>
+            How groups, partners, and green enterprises describe working with
+            Intelli-Cash in the field.
+          </p>
+        </div>
+        <div className="testimonial-grid">
+          {testimonials.map((item) => (
+            <figure className="testimonial-card" key={item.name}>
+              <blockquote>{item.quote}</blockquote>
+              <figcaption>
+                <LandingIllustration compact kind={item.illustration} />
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{item.role}</small>
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+        <p className="section-footnote">Illustrative examples by role &mdash; verified, attributed quotes will be added before launch.</p>
+      </section>
+
+      <section className="landing-section pricing-section" id="pricing" aria-labelledby="pricing-title">
+        <div className="landing-section-header wide">
+          <p className="eyebrow">Plans &amp; Access</p>
+          <h2 id="pricing-title">Access that matches how you work</h2>
+          <p>
+            Groups join free through partner programmes. Partners, donors, and
+            lenders get tailored access for their operations.
+          </p>
+        </div>
+        <div className="pricing-grid">
+          {pricingTiers.map((tier) => (
+            <article className={`pricing-card${tier.featured ? " is-featured" : ""}`} key={tier.name}>
+              {tier.featured ? <span className="pricing-badge">Most common</span> : null}
+              <h3>{tier.name}</h3>
+              <p className="pricing-price">
+                <strong>{tier.price}</strong>
+                <span>{tier.cadence}</span>
+              </p>
+              <p className="pricing-text">{tier.text}</p>
+              <ul className="pricing-features">
+                {tier.features.map((feature) => (
+                  <li key={feature}>
+                    <BadgeCheck size={18} />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              {tier.cta.href.startsWith("/") ? (
+                <Link className={`button${tier.featured ? "" : " secondary"}`} href={tier.cta.href}>
+                  {tier.cta.label}
+                  <ArrowRight size={18} />
+                </Link>
+              ) : (
+                <a className={`button${tier.featured ? "" : " secondary"}`} href={tier.cta.href}>
+                  {tier.cta.label}
+                  <ArrowRight size={18} />
+                </a>
+              )}
+            </article>
+          ))}
+        </div>
+        <p className="section-footnote">Tiers reflect the current programme-funded model; final commercial terms to be confirmed.</p>
+      </section>
+
+      <section className="landing-section faq-section" id="faq" aria-labelledby="faq-title">
+        <div className="landing-section-header">
+          <p className="eyebrow">Frequently Asked Questions</p>
+          <h2 id="faq-title">Answers before you start</h2>
+        </div>
+        <div className="faq-list">
+          {faqs.map((faq) => (
+            <details className="faq-item" key={faq.question}>
+              <summary>
+                <CircleHelp size={20} />
+                <span>{faq.question}</span>
+                <i className="faq-marker" aria-hidden="true" />
+              </summary>
+              <p>{faq.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section landing-contact-band" id="contact" aria-labelledby="contact-band-title">
+        <div className="contact-band-copy">
+          <p className="eyebrow">Contact</p>
+          <h2 id="contact-band-title">Talk to the Intelli-Cash team</h2>
+          <p>
+            Reach us for group registration, partner and donor support, green
+            enterprise services, and platform help.
+          </p>
+          <div className="hero-actions">
+            <Link className="button" href="/contact">
+              Contact us
+              <ArrowRight size={18} />
+            </Link>
+            <a className="button secondary" href="#group-registration">
+              Register group
+              <UsersRound size={18} />
+            </a>
+          </div>
+        </div>
+        <div className="contact-band-channels">
+          <a className="contact-band-card" href={`mailto:${supportEmail}`}>
+            <Mail size={22} />
+            <strong>Email</strong>
+            <span>{supportEmail}</span>
+          </a>
+          <a className="contact-band-card" href={supportPhoneHref}>
+            <Phone size={22} />
+            <strong>Phone</strong>
+            <span>{supportPhone}</span>
+          </a>
+          <a className="contact-band-card" href={`mailto:${supportEmail}?subject=Field%20support%20request`}>
+            <Send size={22} />
+            <strong>Field support</strong>
+            <span>Kenya field operations</span>
+          </a>
+        </div>
+      </section>
+
       <PublicSiteFooter playStoreUrl={playStoreUrl} showAccessLinks={false} />
     </main>
   );
@@ -497,38 +803,24 @@ function LandingIllustration({
   kind: IllustrationKind;
   compact?: boolean;
 }) {
+  const Icon = illustrationIcons[kind];
+
   return (
-    <svg
+    <span
       aria-hidden="true"
-      className={`landing-illustration ${compact ? "compact" : ""}`}
-      focusable="false"
-      viewBox="0 0 320 220"
+      className={`landing-illustration landing-icon-illustration ${compact ? "compact" : ""}`}
     >
-      <rect className="illustration-panel" height="204" rx="30" width="292" x="14" y="8" />
-      <circle className="illustration-sun" cx="254" cy="48" r="22" />
-      <path
-        className="illustration-blob"
-        d="M40 66c15-24 49-39 84-30 31 8 42 31 76 27 27-3 48-24 74-11 24 12 30 45 17 72-18 39-75 43-119 43-55 0-121-4-144-42-12-20-11-49 12-59Z"
-      />
-      <ellipse className="illustration-ground" cx="160" cy="181" rx="104" ry="15" />
-      <g className="illustration-person left-person">
-        <circle className="illustration-skin" cx="82" cy="104" r="13" />
-        <path className="illustration-hair" d="M69 101c2-15 17-21 28-12 8 7 2 16-7 16-9 0-14-6-21-4Z" />
-        <path className="illustration-shirt-alt" d="M61 146c3-24 11-35 24-35 15 0 23 12 27 35Z" />
-        <path className="illustration-line" d="M70 147l-6 32M101 147l8 32" />
-        <path className="illustration-line" d="M104 125l22-14" />
-      </g>
-      <g className="illustration-person right-person">
-        <circle className="illustration-skin" cx="236" cy="109" r="12" />
-        <path className="illustration-hair" d="M224 108c0-12 11-22 24-14 7 5 8 13 3 18-8-8-18-4-27-4Z" />
-        <path className="illustration-shirt" d="M215 149c3-23 10-34 23-34s22 12 25 34Z" />
-        <path className="illustration-line" d="M224 149l-8 31M254 149l7 31" />
-        <path className="illustration-line" d="M218 129l-20-12" />
-      </g>
-      <IllustrationObject kind={kind} />
-      <path className="illustration-leaf" d="M45 151c16-17 37-20 54-10-17 23-41 29-54 10Z" />
-      <path className="illustration-line" d="M48 151c18-2 33-4 48-10" />
-    </svg>
+      <span className="landing-icon-core">
+        <Icon size={compact ? 30 : 58} />
+      </span>
+      {!compact ? (
+        <span className="landing-icon-bars">
+          <i />
+          <i />
+          <i />
+        </span>
+      ) : null}
+    </span>
   );
 }
 

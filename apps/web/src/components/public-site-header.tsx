@@ -26,6 +26,8 @@ const partnerLinks = [
   { label: "Request access", href: "/partners#signup" }
 ];
 
+type NavMenuKey = "app" | "partners" | "services";
+
 export function PublicSiteHeader({
   allowMobileMenu = true,
   ariaLabel = "Website navigation",
@@ -33,7 +35,14 @@ export function PublicSiteHeader({
   showAccessLinks = true
 }: PublicSiteHeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const closeMenu = () => setIsOpen(false);
+  const [openMenu, setOpenMenu] = useState<NavMenuKey | null>(null);
+  const closeMenu = () => {
+    setIsOpen(false);
+    setOpenMenu(null);
+  };
+  const toggleMenu = (menu: NavMenuKey) => {
+    setOpenMenu((current) => (current === menu ? null : menu));
+  };
 
   return (
     <nav
@@ -67,12 +76,19 @@ export function PublicSiteHeader({
         <Link className="landing-nav-link" href="/contact" onClick={closeMenu}>
           Contact us
         </Link>
-        <div className="nav-menu-group">
-          <button className="nav-menu-trigger" type="button" aria-haspopup="true">
+        <div className={`nav-menu-group ${openMenu === "services" ? "nav-menu-open" : ""}`}>
+          <button
+            aria-controls="public-services-menu"
+            aria-expanded={openMenu === "services"}
+            aria-haspopup="true"
+            className="nav-menu-trigger"
+            onClick={() => toggleMenu("services")}
+            type="button"
+          >
             Services
             <ChevronDown size={15} />
           </button>
-          <div className="nav-submenu">
+          <div className="nav-submenu" id="public-services-menu">
             {platformLinks.map((link) => (
               <Link href={link.href} key={link.href} onClick={closeMenu}>
                 {link.label}
@@ -80,12 +96,19 @@ export function PublicSiteHeader({
             ))}
           </div>
         </div>
-        <div className="nav-menu-group">
-          <button className="nav-menu-trigger" type="button" aria-haspopup="true">
+        <div className={`nav-menu-group ${openMenu === "partners" ? "nav-menu-open" : ""}`}>
+          <button
+            aria-controls="public-partners-menu"
+            aria-expanded={openMenu === "partners"}
+            aria-haspopup="true"
+            className="nav-menu-trigger"
+            onClick={() => toggleMenu("partners")}
+            type="button"
+          >
             Partners
             <ChevronDown size={15} />
           </button>
-          <div className="nav-submenu">
+          <div className="nav-submenu" id="public-partners-menu">
             {partnerLinks.map((link) => (
               <Link href={link.href} key={link.href} onClick={closeMenu}>
                 {link.label}
@@ -93,12 +116,19 @@ export function PublicSiteHeader({
             ))}
           </div>
         </div>
-        <div className="nav-menu-group">
-          <button className="nav-menu-trigger" type="button" aria-haspopup="true">
+        <div className={`nav-menu-group ${openMenu === "app" ? "nav-menu-open" : ""}`}>
+          <button
+            aria-controls="public-app-menu"
+            aria-expanded={openMenu === "app"}
+            aria-haspopup="true"
+            className="nav-menu-trigger"
+            onClick={() => toggleMenu("app")}
+            type="button"
+          >
             App
             <ChevronDown size={15} />
           </button>
-          <div className="nav-submenu">
+          <div className="nav-submenu" id="public-app-menu">
             <a href={playStoreUrl} onClick={closeMenu} rel="noopener noreferrer" target="_blank">
               <Download size={15} />
               Play Store

@@ -4,7 +4,7 @@ import React from "react";
 import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, KeyRound, ShieldCheck, UserPlus } from "@/lib/theme-icons";
+import { ArrowLeft, KeyRound, Pencil, ShieldCheck, UserPlus, X } from "@/lib/theme-icons";
 import { memberRoles } from "@intellicash/shared";
 import { apiFetch, humanizeEnum } from "../../../../../lib/api";
 import { CollectionView } from "../../../../../components/dashboard/collection-view";
@@ -21,7 +21,8 @@ const defaultForm = {
   fullName: "",
   phone: "",
   role: "MEMBER",
-  kycStatus: "PENDING"
+  kycStatus: "PENDING",
+  status: "ACTIVE"
 };
 
 export default function GroupMembersPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,8 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
   const [members, setMembers] = useState<Member[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [form, setForm] = useState(defaultForm);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editForm, setEditForm] = useState(defaultForm);
   const [pinForm, setPinForm] = useState({ memberId: "" });
   const [otpForm, setOtpForm] = useState({ memberId: "" });
   const [saving, setSaving] = useState(false);
@@ -62,7 +65,28 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
     };
   }, [id]);
 
+  useEffect(() => {
+    document.body.classList.toggle("modal-open", Boolean(editingMember));
+    return () => document.body.classList.remove("modal-open");
+  }, [editingMember]);
+
   const canWrite = user?.permissions?.includes("members:write") ?? false;
+
+  function openEditMember(member: Member) {
+    setEditingMember(member);
+    setEditForm({
+      fullName: member.fullName,
+      phone: member.phone,
+      role: member.role,
+      kycStatus: member.kycStatus,
+      status: member.status
+    });
+    setMessage(null);
+  }
+
+  function closeEditMember() {
+    setEditingMember(null);
+  }
 
   async function createMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -124,6 +148,33 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  async function submitMemberEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingMember) return;
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const updated = await apiFetch<Member>(`/groups/${id}/members/${editingMember.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullName: editForm.fullName,
+          phone: editForm.phone,
+          role: editForm.role,
+          kycStatus: editForm.kycStatus,
+          status: editForm.status
+        })
+      });
+      setMembers((current) => current.map((candidate) => (candidate.id === updated.id ? updated : candidate)));
+      setEditingMember(null);
+      setMessage({ ok: true, text: `${updated.fullName} updated.` });
+    } catch (updateError) {
+      setMessage({ ok: false, text: updateError instanceof Error ? updateError.message : "Member update failed" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function updateMember(member: Member, kycStatus: string) {
     setSaving(true);
     setMessage(null);
@@ -159,7 +210,91 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
         <span className="pill">{members.length} members</span>
       </section>
 
-      {message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
+      {!editingMember && message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
+
+      {editingMember && canWrite ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Edit member">
+          <button className="modal-backdrop" onClick={closeEditMember} type="button" aria-label="Close member editor" />
+          <section className="data-card credential-modal">
+            <header>
+              <div>
+                <h3>Edit Member</h3>
+                <span>Profile, role, KYC, and activation status.</span>
+              </div>
+              <button className="icon-button" onClick={closeEditMember} type="button" aria-label="Close">
+                <X size={18} />
+              </button>
+            </header>
+            <form className="credential-form" onSubmit={submitMemberEdit}>
+              <div className="credential-grid">
+                <label className="credential-field">
+                  <span>Name</span>
+                  <input
+                    onChange={(event) => setEditForm((current) => ({ ...current, fullName: event.target.value }))}
+                    required
+                    value={editForm.fullName}
+                  />
+                </label>
+                <label className="credential-field">
+                  <span>Phone</span>
+                  <input
+                    onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))}
+                    required
+                    value={editForm.phone}
+                  />
+                </label>
+                <label className="credential-field">
+                  <span>Role</span>
+                  <select
+                    onChange={(event) => setEditForm((current) => ({ ...current, role: event.target.value }))}
+                    value={editForm.role}
+                  >
+                    {memberRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {humanizeEnum(role)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="credential-field">
+                  <span>KYC</span>
+                  <select
+                    onChange={(event) => setEditForm((current) => ({ ...current, kycStatus: event.target.value }))}
+                    value={editForm.kycStatus}
+                  >
+                    <option value="PENDING">Pending</option>
+                    <option value="VERIFIED">Verified</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </label>
+                <label className="credential-field">
+                  <span>Status</span>
+                  <select
+                    onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value }))}
+                    value={editForm.status}
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="SUSPENDED">Suspended</option>
+                  </select>
+                </label>
+              </div>
+              {message ? (
+                <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
+              ) : null}
+              <div className="credential-actions">
+                <button className="button" disabled={saving} type="submit">
+                  <Pencil size={16} />
+                  {saving ? "Saving" : "Save member"}
+                </button>
+                <button className="button secondary" onClick={closeEditMember} type="button">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {canWrite ? (
         <section className="data-card">
@@ -329,6 +464,15 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
                     <div className="record-card-actions">
                       <button
                         className="button secondary"
+                        disabled={saving}
+                        onClick={() => openEditMember(member)}
+                        type="button"
+                      >
+                        <Pencil size={15} />
+                        Edit
+                      </button>
+                      <button
+                        className="button secondary"
                         disabled={saving || member.kycStatus === "VERIFIED"}
                         onClick={() => updateMember(member, "VERIFIED")}
                         type="button"
@@ -370,15 +514,26 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
               sortable: false,
               cell: (member) =>
                 canWrite ? (
-                  <button
-                    className="button secondary table-action-button"
-                    disabled={saving || member.kycStatus === "VERIFIED"}
-                    onClick={() => updateMember(member, "VERIFIED")}
-                    type="button"
-                  >
-                    <ShieldCheck size={15} />
-                    Verify
-                  </button>
+                  <div className="record-card-actions">
+                    <button
+                      className="button secondary table-action-button"
+                      disabled={saving}
+                      onClick={() => openEditMember(member)}
+                      type="button"
+                    >
+                      <Pencil size={15} />
+                      Edit
+                    </button>
+                    <button
+                      className="button secondary table-action-button"
+                      disabled={saving || member.kycStatus === "VERIFIED"}
+                      onClick={() => updateMember(member, "VERIFIED")}
+                      type="button"
+                    >
+                      <ShieldCheck size={15} />
+                      Verify
+                    </button>
+                  </div>
                 ) : (
                   "No action"
                 )

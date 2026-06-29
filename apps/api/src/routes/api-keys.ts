@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { Permission } from "@intellicash/shared";
 import { apiKeyPresets, apiKeyTokenPrefix, findApiKeyPreset } from "../domain/api-keys";
-import { requireAuth } from "../middleware/auth";
+import { requireAdmin, requireAuth } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
 import { permissionsForRoleFromStore } from "../services/role-permission-service";
 import { createOpaqueToken, sha256 } from "../lib/crypto";
@@ -47,7 +47,7 @@ async function serializeApiKey(apiKey: {
   };
 }
 
-router.get("/api-keys/presets", requireAuth("api-keys:read"), async (_req, res, next) => {
+router.get("/api-keys/presets", requireAuth("api-keys:read"), requireAdmin, async (_req, res, next) => {
   try {
     ok(res, apiKeyPresets);
   } catch (error) {
@@ -55,7 +55,7 @@ router.get("/api-keys/presets", requireAuth("api-keys:read"), async (_req, res, 
   }
 });
 
-router.get("/api-keys", requireAuth("api-keys:read"), async (req, res, next) => {
+router.get("/api-keys", requireAuth("api-keys:read"), requireAdmin, async (req, res, next) => {
   try {
     const keys = await prisma.apiKey.findMany({
       where: { userId: req.user?.id },
@@ -68,7 +68,7 @@ router.get("/api-keys", requireAuth("api-keys:read"), async (req, res, next) => 
   }
 });
 
-router.post("/api-keys", requireAuth("api-keys:write"), async (req, res, next) => {
+router.post("/api-keys", requireAuth("api-keys:write"), requireAdmin, async (req, res, next) => {
   try {
     if (!req.user) {
       throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
@@ -115,7 +115,7 @@ router.post("/api-keys", requireAuth("api-keys:write"), async (req, res, next) =
   }
 });
 
-router.delete("/api-keys/:id", requireAuth("api-keys:write"), async (req, res, next) => {
+router.delete("/api-keys/:id", requireAuth("api-keys:write"), requireAdmin, async (req, res, next) => {
   try {
     const apiKeyId = z.string().parse(req.params.id);
     const existing = await prisma.apiKey.findFirst({

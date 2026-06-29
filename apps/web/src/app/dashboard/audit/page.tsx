@@ -5,7 +5,7 @@ import { FileText, Fingerprint, Hash, UserCheck } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { DataTable } from "../../../components/dashboard/data-table";
 import { StatCard } from "../../../components/dashboard/stat-card";
-import type { AuditEvent } from "../../../components/dashboard/types";
+import type { AuditEvent, User } from "../../../components/dashboard/types";
 
 export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -17,6 +17,11 @@ export default function AuditPage() {
 
     async function loadAudit() {
       try {
+        const me = await apiFetch<User>("/auth/me");
+        if (me.role !== "IWL_ADMIN") {
+          throw new Error("Only IWL admins can manage audits.");
+        }
+
         const response = await apiFetch<AuditEvent[]>("/audit/events");
         if (mounted) setEvents(response);
       } catch (auditError) {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { appendAuditEvent } from "../services/audit-service";
 import { getIntegrationAdapter, getIntegrationHealth } from "../domain/integrations";
-import { requireAuth } from "../middleware/auth";
+import { requireAdmin, requireAuth } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import {
@@ -20,7 +20,7 @@ const credentialSchema = z.object({
 
 router.get(
   "/integrations/GOOGLE_MAPS/public-config",
-  requireAuth("integrations:read"),
+  requireAuth(),
   async (_req, res, next) => {
     try {
       const adapter = getIntegrationAdapter("GOOGLE_MAPS");
@@ -59,7 +59,7 @@ router.get(
   }
 );
 
-router.get("/integrations/health", requireAuth("integrations:read"), async (req, res, next) => {
+router.get("/integrations/health", requireAuth("integrations:read"), requireAdmin, async (req, res, next) => {
   try {
     const { credentialsByProvider, metaByProvider } = await getStoredCredentialContext();
     const health = getIntegrationHealth(credentialsByProvider, metaByProvider);
@@ -81,8 +81,48 @@ router.get("/integrations/health", requireAuth("integrations:read"), async (req,
 });
 
 router.get(
+  "/integrations/credentials",
+  requireAuth("integrations:write"),
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const { credentialsByProvider, metaByProvider } = await getStoredCredentialContext();
+      const health = getIntegrationHealth(credentialsByProvider, metaByProvider);
+      const providers = health.statuses.map((status) => {
+        const storedCredentials = credentialsByProvider[status.provider] ?? {};
+
+        return {
+          provider: status.provider,
+          displayName: status.displayName,
+          credentialsUpdatedAt: status.credentialsUpdatedAt ?? null,
+          credentials: Object.fromEntries(
+            status.requiredEnv.map((key) => [key, storedCredentials[key] ?? ""])
+          )
+        };
+      });
+
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "INTEGRATION",
+        entityId: "credentials",
+        type: "INTEGRATION_HEALTH_CHECKED",
+        payload: {
+          credentialValuesViewed: true,
+          providers: providers.map((provider) => provider.provider)
+        }
+      });
+
+      ok(res, { providers });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
   "/integrations/:provider/status",
   requireAuth("integrations:read"),
+  requireAdmin,
   async (req, res, next) => {
     try {
       const adapter = getIntegrationAdapter(String(req.params.provider ?? ""));
@@ -116,9 +156,50 @@ router.get(
   }
 );
 
+router.get(
+  "/integrations/:provider/credentials",
+  requireAuth("integrations:write"),
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const adapter = getIntegrationAdapter(String(req.params.provider ?? ""));
+
+      if (!adapter) {
+        throw new ApiHttpError(404, "INTEGRATION_NOT_FOUND", "Integration provider is unknown.");
+      }
+
+      const config = await prisma.integrationConfig.upsert({
+        where: { provider: adapter.provider },
+        create: {
+          provider: adapter.provider,
+          displayName: adapter.displayName,
+          requiredEnvJson: JSON.stringify(adapter.requiredEnv)
+        },
+        update: {
+          displayName: adapter.displayName,
+          requiredEnvJson: JSON.stringify(adapter.requiredEnv)
+        }
+      });
+      const storedCredentials = decryptCredentials(config.credentialsJson);
+      const credentials = Object.fromEntries(
+        adapter.requiredEnv.map((key) => [key, storedCredentials[key] ?? ""])
+      );
+
+      ok(res, {
+        provider: adapter.provider,
+        displayName: adapter.displayName,
+        credentials
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.put(
   "/integrations/:provider/credentials",
   requireAuth("integrations:write"),
+  requireAdmin,
   async (req, res, next) => {
     try {
       const adapter = getIntegrationAdapter(String(req.params.provider ?? ""));
@@ -189,6 +270,7 @@ router.put(
 router.delete(
   "/integrations/:provider/credentials",
   requireAuth("integrations:write"),
+  requireAdmin,
   async (req, res, next) => {
     try {
       const adapter = getIntegrationAdapter(String(req.params.provider ?? ""));
@@ -230,6 +312,7 @@ router.delete(
 router.post(
   "/integrations/:provider/test",
   requireAuth("integrations:test"),
+  requireAdmin,
   async (req, res, next) => {
     try {
       const adapter = getIntegrationAdapter(String(req.params.provider ?? ""));

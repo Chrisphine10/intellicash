@@ -11,6 +11,8 @@ import {
 } from "../services/account-scope";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { createPaymentReference } from "../services/payment-service";
+import { creditBalance, debitAvailable, recordWalletTransaction } from "../services/wallet-service";
 
 const router = Router();
 
@@ -33,6 +35,25 @@ const repaymentStatusSchema = z.enum([
   "DEFAULTED"
 ]);
 const repaymentSourceSchema = z.enum(["MANUAL", "EXTERNAL_REFERENCE"]);
+const repaymentMethodSchema = z.enum([
+  "CASH",
+  "MPESA",
+  "PAYSTACK",
+  "BANK_TRANSFER",
+  "WALLET",
+  "OTHER"
+]);
+
+// Payment options surfaced to the user when posting a repayment. `gateway`
+// marks methods that can be reconciled automatically once webhooks are wired.
+const STORE_PAYMENT_METHODS = [
+  { value: "CASH", label: "Cash / in-person", gateway: false },
+  { value: "MPESA", label: "M-Pesa", gateway: true },
+  { value: "PAYSTACK", label: "Paystack (card / mobile money)", gateway: true },
+  { value: "BANK_TRANSFER", label: "Bank transfer", gateway: false },
+  { value: "WALLET", label: "Partner wallet", gateway: false },
+  { value: "OTHER", label: "Other", gateway: false }
+] as const;
 
 const storeSupplierSchema = z.object({
   name: z.string().min(2),
@@ -126,6 +147,7 @@ const repaymentCreateSchema = z.object({
   amountCents: z.number().int().min(1),
   installmentId: z.string().optional(),
   source: repaymentSourceSchema.default("MANUAL"),
+  method: repaymentMethodSchema.default("CASH"),
   provider: z.string().optional(),
   providerReference: z.string().optional(),
   receivedAt: z.string().datetime().optional(),
@@ -773,6 +795,87 @@ async function allocateRepayment(
 
   await refreshRequestRepaymentStatus(tx, requestId, now);
   return createdRepayments;
+}
+
+const FINANCING_REF_PREFIX = "SCRFIN-";
+
+async function findActiveFinancingTransaction(tx: Prisma.TransactionClient, requestId: string) {
+  return tx.partnerWalletTransaction.findFirst({
+    where: {
+      type: "STORE_CREDIT_FINANCING",
+      status: { not: "REVERSED" },
+      internalReference: { startsWith: `${FINANCING_REF_PREFIX}${requestId}-` }
+    }
+  });
+}
+
+/**
+ * Deploy the financier partner's capital for a financed request. Idempotent: if
+ * an active financing transaction already exists for the request, it is a no-op,
+ * so repeated PATCHes (e.g. APPROVED then FULFILLED) never double-debit.
+ */
+async function applyFinancierFinancing(
+  tx: Prisma.TransactionClient,
+  request: {
+    id: string;
+    financierPartnerId: string | null;
+    financedAmountCents: number;
+    programmeId: string;
+    productName?: string | null;
+    actorUserId?: string | null;
+  }
+) {
+  if (!request.financierPartnerId || request.financedAmountCents <= 0) return;
+  if (await findActiveFinancingTransaction(tx, request.id)) return;
+
+  const { walletId } = await debitAvailable(tx, {
+    partnerId: request.financierPartnerId,
+    amountCents: request.financedAmountCents,
+    errorCode: "STORE_CREDIT_INSUFFICIENT_CAPITAL",
+    errorMessage:
+      "Financing partner wallet has insufficient available balance to fund this request."
+  });
+
+  await recordWalletTransaction(tx, {
+    walletId,
+    partnerId: request.financierPartnerId,
+    programmeId: request.programmeId,
+    actorUserId: request.actorUserId,
+    type: "STORE_CREDIT_FINANCING",
+    amountCents: request.financedAmountCents,
+    description: `Capital deployed for store credit ${request.id}${
+      request.productName ? ` (${request.productName})` : ""
+    }`,
+    internalReference: `${FINANCING_REF_PREFIX}${request.id}-${Date.now()}`
+  });
+}
+
+/** Refund deployed capital when a request is un-financed. */
+async function reverseFinancierFinancing(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+  partnerId: string
+) {
+  const financing = await findActiveFinancingTransaction(tx, requestId);
+  if (!financing) return;
+
+  const { walletId } = await creditBalance(tx, {
+    partnerId,
+    amountCents: financing.amountCents
+  });
+  await tx.partnerWalletTransaction.update({
+    where: { id: financing.id },
+    data: { status: "REVERSED" }
+  });
+  await recordWalletTransaction(tx, {
+    walletId,
+    partnerId,
+    programmeId: financing.programmeId,
+    type: "STORE_CREDIT_FINANCING_REVERSED",
+    amountCents: financing.amountCents,
+    description: `Reversed deployed capital for store credit ${requestId}`,
+    internalReference: `SCRFINREV-${requestId}-${Date.now()}`
+  });
 }
 
 async function createCreditRequestFromPayload({
@@ -1563,6 +1666,11 @@ router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), a
         include: creditRequestInclude
       });
 
+      // Refund deployed capital if the request was just un-financed.
+      if (financierChanged && !nextFinancierPartnerId && existing.financierPartnerId) {
+        await reverseFinancierFinancing(tx, updatedRequest.id, existing.financierPartnerId);
+      }
+
       const isFinancedOrApproved =
         Boolean(updatedRequest.financierPartnerId) &&
         (financierChanged ||
@@ -1572,6 +1680,15 @@ router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), a
           updatedRequest.repaymentStatus === "PARTIALLY_PAID");
 
       if (isFinancedOrApproved) {
+        // Deploy the financier's capital (idempotent) before building the schedule.
+        await applyFinancierFinancing(tx, {
+          id: updatedRequest.id,
+          financierPartnerId: updatedRequest.financierPartnerId,
+          financedAmountCents: updatedRequest.financedAmountCents,
+          programmeId: updatedRequest.programmeId,
+          productName: updatedRequest.product?.name,
+          actorUserId: req.user?.id
+        });
         await generateInstallmentSchedule(tx, updatedRequest.id);
         return tx.storeCreditRequest.findUniqueOrThrow({
           where: { id: updatedRequest.id },
@@ -1637,12 +1754,30 @@ router.post("/intelli-store/credit-requests/:id/repayments", requireAuth("store:
       throw new ApiHttpError(400, "STORE_CREDIT_NOT_FINANCED", "Repayments can only be posted after a request is financed.");
     }
 
+    const financierPartnerId = existing.financierPartnerId;
     const updated = await prisma.$transaction(async (tx) => {
       await generateInstallmentSchedule(tx, existing.id);
       await allocateRepayment(tx, {
         ...body,
         requestId: existing.id,
         recordedByUserId: req.user?.id
+      });
+
+      // Return the repaid capital (and yield) to the financier's wallet.
+      const { walletId } = await creditBalance(tx, {
+        partnerId: financierPartnerId,
+        amountCents: body.amountCents
+      });
+      await recordWalletTransaction(tx, {
+        walletId,
+        partnerId: financierPartnerId,
+        actorUserId: req.user?.id,
+        type: "STORE_CREDIT_REPAYMENT",
+        provider: body.method,
+        amountCents: body.amountCents,
+        description: `Loan repayment received for store credit ${existing.id} via ${body.method}`,
+        internalReference: createPaymentReference("SCRREP"),
+        providerReference: body.providerReference ?? null
       });
 
       return tx.storeCreditRequest.findUniqueOrThrow({
@@ -1668,6 +1803,14 @@ router.post("/intelli-store/credit-requests/:id/repayments", requireAuth("store:
     }).catch(() => null);
 
     ok(res.status(201), updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/intelli-store/payment-methods", requireAuth("store:read"), async (_req, res, next) => {
+  try {
+    ok(res, STORE_PAYMENT_METHODS);
   } catch (error) {
     next(error);
   }

@@ -17,6 +17,8 @@ import PartnerLoginPage from "../src/app/partner-login/page";
 import SettingsPage from "../src/app/dashboard/settings/page";
 import PaymentsAdminPage from "../src/app/dashboard/payments/page";
 import ProgrammesPage from "../src/app/dashboard/programmes/page";
+import PartnersAdminPage from "../src/app/dashboard/partners/page";
+import IntegrationsPage from "../src/app/dashboard/integrations/page";
 import ReportsPage from "../src/app/dashboard/reports/page";
 import IntelliStorePage from "../src/app/intelli-store/page";
 import LandingPage from "../src/app/page";
@@ -24,7 +26,7 @@ import ContactPage from "../src/app/contact/page";
 import PublicPartnersPage from "../src/app/partners/page";
 import { DashboardShell } from "../src/components/dashboard/dashboard-shell";
 import { formatKes, humanizeEnum } from "../src/lib/api";
-import { navigationItems } from "../src/lib/navigation";
+import { getNavigationItemsForRole, navigationItems } from "../src/lib/navigation";
 
 const routerPushMock = vi.hoisted(() => vi.fn());
 
@@ -58,40 +60,127 @@ describe("web smoke helpers", () => {
     expect(screen.getByText("IntelliAudit")).toBeInTheDocument();
     expect(screen.getByText("API Docs")).toBeInTheDocument();
     expect(screen.getByText("Integrations")).toBeInTheDocument();
+    expect(screen.getByText("SMS")).toBeInTheDocument();
   });
 
-  it("scopes the API Docs navigation item to integration roles", () => {
+  it("scopes the API Docs navigation item to admins", () => {
     const apiDocs = navigationItems.find((item) => item.href === "/dashboard/api-docs");
 
     expect(apiDocs).toEqual(
       expect.objectContaining({
         label: "API Docs",
-        roles: ["IWL_ADMIN", "PARTNER_OFFICER", "LENDER", "READ_ONLY"]
+        roles: ["IWL_ADMIN"]
       })
     );
+    expect(apiDocs?.roles).not.toContain("PARTNER_OFFICER");
+    expect(apiDocs?.roles).not.toContain("LENDER");
+    expect(apiDocs?.roles).not.toContain("READ_ONLY");
     expect(apiDocs?.roles).not.toContain("GROUP_ACCOUNT");
     expect(apiDocs?.roles).not.toContain("MEMBER");
   });
 
   it("keeps group account navigation focused on app actions", () => {
-    const groupItems = navigationItems.filter((item) => item.roles.includes("GROUP_ACCOUNT"));
+    const groupItems = getNavigationItemsForRole("GROUP_ACCOUNT");
 
     expect(groupItems.map((item) => item.label)).toEqual([
       "Dashboard",
+      "My Group",
       "Meetings",
       "Intelli-Store",
       "Reports"
     ]);
-    expect(groupItems.map((item) => item.label)).not.toContain("Groups");
+    expect(groupItems.map((item) => item.href)).toContain("/dashboard/groups");
+    expect(groupItems.map((item) => item.label)).not.toContain("Payments");
+    expect(groupItems.map((item) => item.label)).not.toContain("Integrations");
   });
 
-  it("orders member navigation as dashboard, meetings, then passbook", () => {
-    const memberItems = navigationItems.filter((item) => item.roles.includes("MEMBER"));
-
-    expect(memberItems.slice(0, 3).map((item) => item.label)).toEqual([
+  it("keeps every role menu scoped to relevant dashboard workspaces", () => {
+    expect(getNavigationItemsForRole("IWL_ADMIN").map((item) => item.label)).toEqual([
       "Dashboard",
+      "Groups",
+      "Programs",
       "Meetings",
-      "Passbook"
+      "Partners",
+      "VA / CBT",
+      "Intelli-Store",
+      "Reports",
+      "IntelliAudit",
+      "Audit",
+      "Payments",
+      "Users",
+      "SMS",
+      "Integrations",
+      "API Docs",
+      "Settings"
+    ]);
+    expect(getNavigationItemsForRole("PARTNER_OFFICER").map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Programs",
+      "Groups",
+      "Meetings",
+      "VA / CBT",
+      "Partners",
+      "Intelli-Store",
+      "Reports"
+    ]);
+    expect(getNavigationItemsForRole("MEMBER").map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Passbook",
+      "Meetings",
+      "Intelli-Store",
+      "Programs"
+    ]);
+    expect(getNavigationItemsForRole("LENDER").map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Programs",
+      "Groups",
+      "Intelli-Store",
+      "Reports"
+    ]);
+    expect(getNavigationItemsForRole("READ_ONLY").map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Programs",
+      "Groups",
+      "Meetings",
+      "Partners",
+      "VA / CBT",
+      "Intelli-Store",
+      "Reports"
+    ]);
+  });
+
+  it("orders member navigation by VSLA priority", () => {
+    const memberItems = getNavigationItemsForRole("MEMBER");
+
+    expect(memberItems.map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Passbook",
+      "Meetings",
+      "Intelli-Store",
+      "Programs"
+    ]);
+  });
+
+  it("orders admin navigation by operational priority", () => {
+    const adminItems = getNavigationItemsForRole("IWL_ADMIN");
+
+    expect(adminItems.map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Groups",
+      "Programs",
+      "Meetings",
+      "Partners",
+      "VA / CBT",
+      "Intelli-Store",
+      "Reports",
+      "IntelliAudit",
+      "Audit",
+      "Payments",
+      "Users",
+      "SMS",
+      "Integrations",
+      "API Docs",
+      "Settings"
     ]);
   });
 
@@ -204,7 +293,7 @@ describe("web smoke helpers", () => {
     expect(profileButton).toHaveAttribute("title", "Mary Njeri");
     fireEvent.click(profileButton);
     expect(screen.getByRole("menuitem", { name: /Account/i })).toHaveAttribute("href", "/dashboard/account");
-    expect(screen.getByRole("menuitem", { name: /Settings/i })).toHaveAttribute("href", "/dashboard/settings");
+    expect(screen.queryByRole("menuitem", { name: /Settings/i })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Help & Support/i })).toHaveAttribute("href", "/dashboard/help-support");
 
     fireEvent.click(notificationButton);
@@ -255,9 +344,10 @@ describe("web smoke helpers", () => {
     expect(await screen.findByRole("button", { name: /Download app/i })).toBeInTheDocument();
     const bottomTabs = screen.getByLabelText("Group account app navigation");
     expect(within(bottomTabs).getByText("Dashboard")).toBeInTheDocument();
+    expect(within(bottomTabs).getByText("Group")).toBeInTheDocument();
     expect(within(bottomTabs).getByText("Meetings")).toBeInTheDocument();
     expect(within(bottomTabs).getByText("Store")).toBeInTheDocument();
-    expect(within(bottomTabs).getByText("Reports")).toBeInTheDocument();
+    expect(within(bottomTabs).queryByText("Reports")).not.toBeInTheDocument();
     expect(within(bottomTabs).queryByText("Groups")).not.toBeInTheDocument();
     expect(within(bottomTabs).queryByText("Entry")).not.toBeInTheDocument();
     expect(within(bottomTabs).getByText("Account")).toBeInTheDocument();
@@ -624,6 +714,53 @@ describe("web smoke helpers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps group creation focused on required fields first", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        let data: unknown = {};
+
+        if (url.includes("/auth/me")) {
+          data = {
+            id: "admin-1",
+            name: "IWL Platform Admin",
+            email: "admin@intellicash.co.ke",
+            role: "IWL_ADMIN",
+            permissions: ["groups:read", "groups:write", "programmes:read", "village-agents:read"]
+          };
+        } else if (url.includes("/programmes")) {
+          data = [{ id: "programme-1", name: "Green Enterprise Fund" }];
+        } else if (url.includes("/village-agents")) {
+          data = [{ id: "agent-1", name: "Grace Wanjiku" }];
+        } else if (url.includes("/groups")) {
+          data = [];
+        }
+
+        return new Response(JSON.stringify({ data }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      })
+    );
+
+    render(<GroupsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create group" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create group" });
+
+    expect(within(dialog).getByText("Required details")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Group name")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Code")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("County")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Green Enterprise Fund")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("GPS latitude")).not.toBeVisible();
+
+    fireEvent.click(within(dialog).getByText("GPS and savings defaults"));
+    expect(within(dialog).getByLabelText("GPS latitude")).toBeVisible();
+    vi.unstubAllGlobals();
+  });
+
   it("renders VA / CBT edit controls for write users", async () => {
     vi.stubGlobal(
       "fetch",
@@ -817,6 +954,193 @@ describe("web smoke helpers", () => {
         allowDonations: true
       })
     );
+    vi.unstubAllGlobals();
+  });
+
+  it("lets admins create partners with profile details", async () => {
+    let createdBody: Record<string, unknown> | null = null;
+    const partners = [
+      {
+        id: "partner-1",
+        name: "FLOURISH",
+        type: "NGO",
+        status: "ACTIVE",
+        apiScope: "PROGRAMME",
+        county: "Kiambu",
+        contactName: "Jane Partner",
+        contactPhone: "+254700000100",
+        valueProposition: "VSLA digitisation",
+        capacity: "County implementation",
+        linkageType: "IMPLEMENTING_PARTNER",
+        _count: { programmes: 1, users: 0, webhookSubscriptions: 0 }
+      }
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        let data: unknown = {};
+
+        if (url.includes("/auth/me")) {
+          data = {
+            id: "admin-1",
+            name: "IWL Platform Admin",
+            email: "admin@intellicash.co.ke",
+            role: "IWL_ADMIN",
+            permissions: ["partners:read", "partners:write", "programmes:read"]
+          };
+        } else if (url.endsWith("/partners") && init?.method === "POST") {
+          createdBody = JSON.parse(String(init.body));
+          const createdPartner = {
+            id: "partner-2",
+            ...createdBody,
+            _count: { programmes: 0, users: 0, webhookSubscriptions: 0 }
+          };
+          partners.unshift(createdPartner as (typeof partners)[number]);
+          data = createdPartner;
+        } else if (url.endsWith("/partners")) {
+          data = partners;
+        } else if (url.includes("/programmes")) {
+          data = [];
+        }
+
+        return new Response(JSON.stringify({ data }), {
+          status: init?.method === "POST" ? 201 : 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      })
+    );
+
+    render(<PartnersAdminPage />);
+
+    expect(await screen.findByText("FLOURISH")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Create partner/i }));
+
+    expect(screen.getByText("Create Partner")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Green Growth Fund" } });
+    fireEvent.change(screen.getByLabelText("County"), { target: { value: "Nairobi" } });
+    fireEvent.change(screen.getByLabelText("Contact name"), { target: { value: "Amina Otieno" } });
+    fireEvent.change(screen.getByLabelText("Contact phone"), { target: { value: "+254722000111" } });
+    fireEvent.change(screen.getByLabelText("Linkage type"), { target: { value: "FUNDING_PARTNER" } });
+    fireEvent.change(screen.getByLabelText("Capacity"), { target: { value: "Enterprise finance" } });
+    fireEvent.change(screen.getByLabelText("Value proposition"), { target: { value: "Affordable group financing" } });
+    fireEvent.click(within(screen.getByRole("dialog", { name: /Create partner/i })).getByRole("button", { name: /Create partner/i }));
+
+    expect(await screen.findByText("Green Growth Fund partner created.")).toBeInTheDocument();
+    expect(createdBody).toEqual(
+      expect.objectContaining({
+        name: "Green Growth Fund",
+        type: "NGO",
+        status: "ACTIVE",
+        apiScope: "PROGRAMME",
+        county: "Nairobi",
+        contactName: "Amina Otieno",
+        contactPhone: "+254722000111",
+        linkageType: "FUNDING_PARTNER",
+        capacity: "Enterprise finance",
+        valueProposition: "Affordable group financing"
+      })
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("shows stored integration values to admins in the provider form", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        let data: unknown = {};
+
+        if (url.includes("/auth/me")) {
+          data = {
+            id: "admin-1",
+            name: "IWL Platform Admin",
+            email: "admin@intellicash.co.ke",
+            role: "IWL_ADMIN",
+            permissions: ["integrations:read", "integrations:write", "integrations:test"]
+          };
+        } else if (url.includes("/integrations/health")) {
+          data = {
+            configured: 1,
+            total: 1,
+            statuses: [
+              {
+                provider: "BONGA_SMS",
+                displayName: "Bonga SMS",
+                configured: true,
+                enabled: true,
+                mode: "sandbox",
+                requiredEnv: [
+                  "BONGA_SMS_CLIENT_ID",
+                  "BONGA_SMS_API_KEY",
+                  "BONGA_SMS_API_SECRET",
+                  "BONGA_SMS_SERVICE_ID",
+                  "BONGA_SMS_ENDPOINT",
+                  "BONGA_SMS_OTP_TEMPLATE"
+                ],
+                missingEnv: [],
+                envCredentialKeys: [],
+                storedCredentialKeys: [
+                  "BONGA_SMS_CLIENT_ID",
+                  "BONGA_SMS_API_KEY",
+                  "BONGA_SMS_API_SECRET",
+                  "BONGA_SMS_SERVICE_ID",
+                  "BONGA_SMS_ENDPOINT",
+                  "BONGA_SMS_OTP_TEMPLATE"
+                ],
+                networkTestsAllowed: false
+              }
+            ]
+          };
+        } else if (url.includes("/integrations/credentials")) {
+          data = {
+            providers: [
+              {
+                provider: "BONGA_SMS",
+                displayName: "Bonga SMS",
+                credentials: {
+                  BONGA_SMS_CLIENT_ID: "1120",
+                  BONGA_SMS_API_KEY: "api-key-demo",
+                  BONGA_SMS_API_SECRET: "api-secret-demo",
+                  BONGA_SMS_SERVICE_ID: "5843",
+                  BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms",
+                  BONGA_SMS_OTP_TEMPLATE: "Your Intelli Cash meeting OTP is {otp}."
+                }
+              }
+            ]
+          };
+        } else if (url.includes("/integrations/BONGA_SMS/credentials")) {
+          data = {
+            provider: "BONGA_SMS",
+            displayName: "Bonga SMS",
+            credentials: {
+              BONGA_SMS_CLIENT_ID: "1120",
+              BONGA_SMS_API_KEY: "api-key-demo",
+              BONGA_SMS_API_SECRET: "api-secret-demo",
+              BONGA_SMS_SERVICE_ID: "5843",
+              BONGA_SMS_ENDPOINT: "http://167.172.14.50:4002/v1/send-sms",
+              BONGA_SMS_OTP_TEMPLATE: "Your Intelli Cash meeting OTP is {otp}."
+            }
+          };
+        }
+
+        return new Response(JSON.stringify({ data }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      })
+    );
+
+    render(<IntegrationsPage />);
+
+    expect(await screen.findByText("api-key-demo")).toBeInTheDocument();
+    expect(screen.getByText("api-secret-demo")).toBeInTheDocument();
+    expect(screen.getByText("http://167.172.14.50:4002/v1/send-sms")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("api-key-demo")).toHaveAttribute("type", "text");
+    expect(screen.getByDisplayValue("api-secret-demo")).toHaveAttribute("type", "text");
+    expect(screen.getByDisplayValue("Your Intelli Cash meeting OTP is {otp}.")).toBeInTheDocument();
+    expect(screen.queryByText(/Secrets stay masked/i)).not.toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 
@@ -1569,7 +1893,7 @@ describe("web smoke helpers", () => {
     {
       role: "READ_ONLY",
       heading: "Oversight dashboard",
-      cards: ["Reports", "Audit events", "Groups", "Integration status", "Public projects"]
+      cards: ["Reports", "Oversight reports", "Groups", "Operational scope", "Public projects"]
     },
     {
       role: "IWL_ADMIN",
@@ -1587,18 +1911,14 @@ describe("web smoke helpers", () => {
         "members:read",
         "meetings:read",
         "ledger:read",
-        "store:read",
-        "audit:read",
-        "integrations:read"
+        "store:read"
       ],
       LENDER: [
         "programmes:read",
         "groups:read",
         "members:read",
         "ledger:read",
-        "store:read",
-        "audit:read",
-        "integrations:read"
+        "store:read"
       ],
       READ_ONLY: [
         "partners:read",
@@ -1608,9 +1928,7 @@ describe("web smoke helpers", () => {
         "members:read",
         "meetings:read",
         "ledger:read",
-        "store:read",
-        "audit:read",
-        "integrations:read"
+        "store:read"
       ],
       IWL_ADMIN: ["users:read", "payments:read", "partners:read", "programmes:read", "groups:read", "store:read", "audit:read", "integrations:read"]
     };

@@ -130,18 +130,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read",
     "store:write",
     "votes:read",
-    "analytics:read",
-    "audit:read",
-    "intelliaudit:read",
-    "intelliaudit:write",
-    "intelliaudit:approve",
-    "evidence:write",
-    "connectors:sync",
-    "reports:approve",
-    "integrations:read",
-    "api-keys:read",
-    "api-keys:write",
-    "webhooks:write"
+    "analytics:read"
   ],
   GROUP_ACCOUNT: [
     "programmes:read",
@@ -157,12 +146,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:write",
     "votes:read",
     "votes:write",
-    "analytics:read",
-    "intelliaudit:read",
-    "intelliaudit:write",
-    "intelliaudit:approve",
-    "evidence:write",
-    "reports:approve"
+    "analytics:read"
   ],
   MEMBER: [
     "programmes:read",
@@ -185,17 +169,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read",
     "store:write",
     "votes:read",
-    "analytics:read",
-    "audit:read",
-    "intelliaudit:read",
-    "intelliaudit:write",
-    "intelliaudit:approve",
-    "evidence:write",
-    "connectors:sync",
-    "reports:approve",
-    "integrations:read",
-    "api-keys:read",
-    "api-keys:write"
+    "analytics:read"
   ],
   READ_ONLY: [
     "partners:read",
@@ -207,10 +181,6 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "ledger:read",
     "votes:read",
     "analytics:read",
-    "audit:read",
-    "intelliaudit:read",
-    "integrations:read",
-    "api-keys:read",
     "store:read"
   ],
 };

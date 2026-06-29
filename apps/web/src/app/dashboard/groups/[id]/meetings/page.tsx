@@ -6,7 +6,17 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowLeft, BookOpenText, CheckCircle2, DoorOpen, KeyRound, LockKeyhole, UserCheck } from "@/lib/theme-icons";
 import { meetingSteps } from "@intellicash/shared";
-import { apiFetch, humanizeEnum } from "../../../../../lib/api";
+import { ApiClientError, apiFetch, humanizeEnum } from "../../../../../lib/api";
+import {
+  clearOfflineMeetingSchedule,
+  getMeetingDeviceId,
+  loadGroupMeetingWorkspace,
+  loadOfflineMeetingSchedules,
+  queueMeetingDraft,
+  queueOfflineMeetingSchedule,
+  storeGroupMeetingWorkspace,
+  type OfflineMeetingScheduleDraft
+} from "../../../../../lib/meeting-offline-store";
 import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { MeetingRow, Member, User } from "../../../../../components/dashboard/types";
 
@@ -24,6 +34,14 @@ interface MeetingForm {
 const defaultMeetingForm: MeetingForm = {
   title: "",
   scheduledAt: ""
+};
+
+type MeetingWorkspaceCache = {
+  group: GroupSummary;
+  meetings: MeetingRow[];
+  members: Member[];
+  user: User;
+  cachedAt: string;
 };
 
 const defaultUnlockSubmissions = [
@@ -45,22 +63,86 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
     submissions: defaultUnlockSubmissions
   });
   const [memberKeyForm, setMemberKeyForm] = useState({ meetingId: "", pin: "" });
+  const [pendingSchedules, setPendingSchedules] = useState<OfflineMeetingScheduleDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function isOffline() {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+  }
+
+  function isNetworkFailure(error: unknown) {
+    return (
+      isOffline() ||
+      (error instanceof ApiClientError && error.status === 0) ||
+      (error instanceof TypeError && error.message.toLowerCase().includes("fetch")) ||
+      (error instanceof Error && error.message.includes("Network request failed"))
+    );
+  }
+
+  function offlineScheduleAsMeeting(schedule: OfflineMeetingScheduleDraft): MeetingRow {
+    return {
+      id: schedule.id,
+      title: schedule.title,
+      status: "QUEUED_OFFLINE",
+      scheduledAt: schedule.scheduledAt,
+      openedAt: null,
+      closedAt: null,
+      unlockStatus: "PENDING",
+      gpsCompliant: schedule.gpsCompliant,
+      transactionTotal: 0,
+      minutes: null,
+      steps: [],
+      attendance: [],
+      keySubmissions: []
+    };
+  }
+
+  function applyWorkspace(workspace: MeetingWorkspaceCache, schedules: OfflineMeetingScheduleDraft[]) {
+    setGroup(workspace.group);
+    setMeetings([...schedules.map(offlineScheduleAsMeeting), ...workspace.meetings]);
+    setMembers(workspace.members);
+    setUser(workspace.user);
+    setPendingSchedules(schedules);
+  }
+
   async function loadPage() {
-    const [groupResponse, meetingResponse, memberResponse, meResponse] = await Promise.all([
-      apiFetch<GroupSummary>(`/groups/${id}`),
-      apiFetch<MeetingRow[]>(`/groups/${id}/meetings`),
-      apiFetch<Member[]>(`/groups/${id}/members`),
-      apiFetch<User>("/auth/me")
-    ]);
-    setGroup(groupResponse);
-    setMeetings(meetingResponse);
-    setMembers(memberResponse);
-    setUser(meResponse);
+    const schedules = await loadOfflineMeetingSchedules(id);
+
+    try {
+      const [groupResponse, meetingResponse, memberResponse, meResponse] = await Promise.all([
+        apiFetch<GroupSummary>(`/groups/${id}`),
+        apiFetch<MeetingRow[]>(`/groups/${id}/meetings`),
+        apiFetch<Member[]>(`/groups/${id}/members`),
+        apiFetch<User>("/auth/me")
+      ]);
+      const workspace = {
+        group: groupResponse,
+        meetings: meetingResponse,
+        members: memberResponse,
+        user: meResponse,
+        cachedAt: new Date().toISOString()
+      };
+      await storeGroupMeetingWorkspace(id, workspace);
+      applyWorkspace(workspace, schedules);
+      if (schedules.length > 0) {
+        setMessage({
+          ok: false,
+          text: `${schedules.length} offline scheduled ${schedules.length === 1 ? "meeting is" : "meetings are"} waiting to sync.`
+        });
+      }
+    } catch (loadError) {
+      const cached = await loadGroupMeetingWorkspace<GroupSummary, MeetingRow, Member, User>(id);
+      if (!cached) throw loadError;
+
+      applyWorkspace(cached, schedules);
+      setMessage({
+        ok: false,
+        text: `Offline mode: showing cached meetings from ${new Date(cached.cachedAt).toLocaleString("en-KE")}.`
+      });
+    }
   }
 
   useEffect(() => {
@@ -100,6 +182,21 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
 
     try {
       const scheduledAt = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : new Date().toISOString();
+      if (isOffline()) {
+        const queued = await queueOfflineMeetingSchedule({
+          groupId: id,
+          title: form.title,
+          scheduledAt,
+          gpsCompliant: false
+        });
+        const schedules = await loadOfflineMeetingSchedules(id);
+        setPendingSchedules(schedules);
+        setMeetings((current) => [offlineScheduleAsMeeting(queued), ...current]);
+        setForm(defaultMeetingForm);
+        setMessage({ ok: true, text: `${queued.title} saved offline. Sync when the connection is available.` });
+        return;
+      }
+
       const created = await apiFetch<MeetingRow>(`/groups/${id}/meetings`, {
         method: "POST",
         body: JSON.stringify({ title: form.title, scheduledAt })
@@ -110,7 +207,49 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
       await loadPage();
       setMessage({ ok: true, text: `${created.title} scheduled.` });
     } catch (saveError) {
-      setMessage({ ok: false, text: saveError instanceof Error ? saveError.message : "Meeting failed to save" });
+      if (isNetworkFailure(saveError)) {
+        const scheduledAt = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : new Date().toISOString();
+        const queued = await queueOfflineMeetingSchedule({
+          groupId: id,
+          title: form.title,
+          scheduledAt,
+          gpsCompliant: false
+        });
+        const schedules = await loadOfflineMeetingSchedules(id);
+        setPendingSchedules(schedules);
+        setMeetings((current) => [offlineScheduleAsMeeting(queued), ...current]);
+        setForm(defaultMeetingForm);
+        setMessage({ ok: true, text: `${queued.title} saved offline. Sync when the connection is available.` });
+      } else {
+        setMessage({ ok: false, text: saveError instanceof Error ? saveError.message : "Meeting failed to save" });
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function syncOfflineSchedules() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const schedules = await loadOfflineMeetingSchedules(id);
+      let synced = 0;
+      for (const schedule of schedules) {
+        await apiFetch<MeetingRow>(`/groups/${id}/meetings`, {
+          method: "POST",
+          body: JSON.stringify({
+            title: schedule.title,
+            scheduledAt: schedule.scheduledAt,
+            gpsCompliant: schedule.gpsCompliant
+          })
+        });
+        await clearOfflineMeetingSchedule(id, schedule.id);
+        synced += 1;
+      }
+      await loadPage();
+      setMessage({ ok: true, text: `${synced} offline scheduled ${synced === 1 ? "meeting" : "meetings"} synced.` });
+    } catch (syncError) {
+      setMessage({ ok: false, text: syncError instanceof Error ? syncError.message : "Offline schedule sync failed." });
     } finally {
       setSaving(false);
     }
@@ -168,14 +307,38 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
 
   async function recordAttendance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await postAction(
-      `/groups/${id}/meetings/${attendanceForm.meetingId}/attendance`,
-      "Attendance recorded.",
-      {
-        memberId: attendanceForm.memberId,
-        status: attendanceForm.status
+    try {
+      if (isOffline()) throw new ApiClientError({ status: 0, code: "NETWORK_ERROR", message: "Offline", path: "attendance", method: "POST" });
+      await postAction(
+        `/groups/${id}/meetings/${attendanceForm.meetingId}/attendance`,
+        "Attendance recorded.",
+        {
+          memberId: attendanceForm.memberId,
+          status: attendanceForm.status
+        }
+      );
+    } catch (attendanceError) {
+      if (!isNetworkFailure(attendanceError)) {
+        setMessage({ ok: false, text: attendanceError instanceof Error ? attendanceError.message : "Attendance failed." });
+        return;
       }
-    );
+      await queueMeetingDraft({
+        groupId: id,
+        meetingId: attendanceForm.meetingId,
+        deviceId: getMeetingDeviceId(),
+        keySubmissions: [],
+        attendance: [
+          {
+            memberId: attendanceForm.memberId,
+            status: attendanceForm.status as "PRESENT" | "ABSENT" | "LATE" | "EXCUSED",
+            clientRequestId: `attendance-${attendanceForm.meetingId}-${attendanceForm.memberId}-${Date.now()}`
+          }
+        ],
+        ledgerEntries: [],
+        savedAt: new Date().toISOString()
+      });
+      setMessage({ ok: true, text: "Attendance saved offline. Sync from the meeting entry screen when online." });
+    }
   }
 
   if (loading) return <div className="loading-panel">Loading...</div>;
@@ -230,6 +393,17 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                 </button>
               </div>
             </form>
+            {pendingSchedules.length > 0 ? (
+              <div className="notice warning">
+                <strong>{pendingSchedules.length} offline scheduled {pendingSchedules.length === 1 ? "meeting" : "meetings"}</strong>
+                <span> saved on this device.</span>
+                <div className="credential-actions">
+                  <button className="button secondary" disabled={saving || isOffline()} onClick={syncOfflineSchedules} type="button">
+                    Sync offline schedules
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="data-card">
@@ -469,6 +643,7 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
               cell: (meeting) => {
                 const step = nextStep(meeting);
                 if (!canWrite) return "No action";
+                if (meeting.status === "QUEUED_OFFLINE") return "Waiting to sync";
                 let primaryAction: React.ReactNode = "No action";
                 if (meeting.status === "SCHEDULED") {
                   primaryAction = (

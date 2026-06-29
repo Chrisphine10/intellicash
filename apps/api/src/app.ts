@@ -16,6 +16,7 @@ import { notificationsRouter } from "./routes/notifications";
 import { partnerPortalRouter } from "./routes/partner-portal";
 import { paymentsRouter } from "./routes/payments";
 import { reportsRouter } from "./routes/reports";
+import { smsBroadcastsRouter } from "./routes/sms-broadcasts";
 import { uploadsRouter } from "./routes/uploads";
 import { webhooksRouter } from "./routes/webhooks";
 import { ApiHttpError, fail, ok } from "./lib/http";
@@ -75,6 +76,7 @@ export function createApp(options: { includeNotFoundHandler?: boolean } = {}) {
   app.use("/api/v1", intelliStoreRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);
+  app.use("/api/v1", smsBroadcastsRouter);
   app.use("/api/v1", webhooksRouter);
 
   if (options.includeNotFoundHandler ?? true) {

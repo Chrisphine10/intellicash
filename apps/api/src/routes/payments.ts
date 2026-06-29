@@ -18,6 +18,7 @@ import {
   verifyPaystackSignature,
   walletAvailable
 } from "../services/payment-service";
+import { holdFunds } from "../services/wallet-service";
 
 const router = Router();
 const providerSchema = z.enum(["MPESA_DARAJA", "PAYSTACK"]);
@@ -154,25 +155,24 @@ router.post("/partner-wallet/withdrawals", requireAuth("payments:write"), async 
   try {
     const partnerId = requirePartnerAccount(req.user);
     const body = withdrawalSchema.parse(req.body);
-    const wallet = await ensureWallet(partnerId);
-    const available = walletAvailable(wallet.balanceCents, wallet.heldCents);
-
-    if (available < body.amountCents) {
-      throw new ApiHttpError(400, "INSUFFICIENT_FUNDS", "Withdrawal exceeds available wallet balance.");
-    }
-    if (body.provider === "MPESA_DARAJA" && !body.payoutPhoneNumber) {
-      throw new ApiHttpError(400, "PAYOUT_PHONE_REQUIRED", "M-Pesa withdrawals require a recipient phone number.");
-    }
-    if (body.provider === "PAYSTACK" && !body.payoutRecipientCode) {
-      throw new ApiHttpError(400, "PAYSTACK_RECIPIENT_REQUIRED", "Paystack withdrawals require a recipient code.");
-    }
 
     const internalReference = createPaymentReference("WDR");
     const transaction = await prisma.$transaction(async (tx) => {
-      await tx.partnerWallet.update({
-        where: { id: wallet.id },
-        data: { heldCents: { increment: body.amountCents } }
+      // Reserve funds atomically: the availability check and the hold are part
+      // of the same transaction, closing the previous check-then-act race.
+      const wallet = await holdFunds(tx, {
+        partnerId,
+        amountCents: body.amountCents,
+        errorCode: "INSUFFICIENT_FUNDS",
+        errorMessage: "Withdrawal exceeds available wallet balance."
       });
+
+      if (body.provider === "MPESA_DARAJA" && !body.payoutPhoneNumber) {
+        throw new ApiHttpError(400, "PAYOUT_PHONE_REQUIRED", "M-Pesa withdrawals require a recipient phone number.");
+      }
+      if (body.provider === "PAYSTACK" && !body.payoutRecipientCode) {
+        throw new ApiHttpError(400, "PAYSTACK_RECIPIENT_REQUIRED", "Paystack withdrawals require a recipient code.");
+      }
 
       return tx.partnerWalletTransaction.create({
         data: {

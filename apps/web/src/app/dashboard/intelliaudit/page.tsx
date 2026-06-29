@@ -90,6 +90,7 @@ const connectorProviders = [
 ];
 
 const standards = ["IFRS", "ISA", "IPSAS", "SACCO", "NGO_DONOR", "WORLD_BANK", "CGAP", "VSLA", "CUSTOM"];
+const adminOnlyAuditMessage = "Only IWL admins can manage audits.";
 
 function cacheKey(name: string) {
   return `intelliaudit:${name}`;
@@ -207,9 +208,13 @@ export default function IntelliAuditPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [me, overviewResponse, evidenceResponse, reconciliationResponse, reportResponse, standardResponse] =
+      const me = await apiFetch<User>("/auth/me");
+      if (me.role !== "IWL_ADMIN") {
+        throw new Error(adminOnlyAuditMessage);
+      }
+
+      const [overviewResponse, evidenceResponse, reconciliationResponse, reportResponse, standardResponse] =
         await Promise.all([
-          apiFetch<User>("/auth/me"),
           apiFetch<IntelliAuditOverview>("/intelliaudit/overview"),
           apiFetch<IntelliAuditEvidencePayload>("/intelliaudit/evidence"),
           apiFetch<IntelliAuditReconciliation[]>("/intelliaudit/reconciliations"),
@@ -230,6 +235,16 @@ export default function IntelliAuditPage() {
       writeCached("standards", standardResponse);
       setMessage(null);
     } catch (error) {
+      if (error instanceof Error && error.message === adminOnlyAuditMessage) {
+        setOverview(null);
+        setEvidence({ sources: [], documents: [], records: [], findings: [] });
+        setReconciliations([]);
+        setReports([]);
+        setStandardRefs([]);
+        setMessage({ ok: false, text: adminOnlyAuditMessage });
+        return;
+      }
+
       setOverview(readCached<IntelliAuditOverview | null>("overview", null));
       setEvidence(readCached<IntelliAuditEvidencePayload>("evidence", evidence));
       setReconciliations(readCached<IntelliAuditReconciliation[]>("reconciliations", []));
@@ -452,6 +467,9 @@ export default function IntelliAuditPage() {
 
   if (loading && !overview) {
     return <div className="loading-panel">Loading...</div>;
+  }
+  if (message?.text === adminOnlyAuditMessage) {
+    return <div className="error">{adminOnlyAuditMessage}</div>;
   }
 
   return (

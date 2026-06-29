@@ -24,6 +24,7 @@ import {
   generateAndQueueMemberOtp,
   generateAndQueueMemberPin,
   serializeMemberPinDelivery,
+  sendQueuedMemberPinDelivery,
   type MemberPinDeliveryPublic
 } from "../services/member-pin-service";
 import {
@@ -1034,7 +1035,8 @@ router.post("/groups/:id/members/:memberId/pin", requireAuth("members:write"), a
         select: memberSelect
       })
     );
-    ok(res, serializeMember(result.member, result.delivery));
+    const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
+    ok(res, serializeMember(result.member, delivery ?? result.delivery));
   } catch (error) {
     next(error);
   }
@@ -1056,7 +1058,8 @@ router.post("/groups/:id/members/:memberId/otp", requireAuth("meeting-keys:write
         select: memberSelect
       })
     );
-    ok(res, serializeMember(result.member, result.delivery));
+    const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
+    ok(res, serializeMember(result.member, delivery ?? result.delivery));
   } catch (error) {
     next(error);
   }
@@ -1080,7 +1083,8 @@ router.post("/members/me/pin", requireAuth("meeting-keys:write"), async (req, re
         select: memberSelect
       })
     );
-    ok(res, serializeMember(result.member, result.delivery));
+    const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
+    ok(res, serializeMember(result.member, delivery ?? result.delivery));
   } catch (error) {
     next(error);
   }
@@ -1104,7 +1108,8 @@ router.post("/members/me/otp", requireAuth("meeting-keys:write"), async (req, re
         select: memberSelect
       })
     );
-    ok(res, serializeMember(result.member, result.delivery));
+    const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
+    ok(res, serializeMember(result.member, delivery ?? result.delivery));
   } catch (error) {
     next(error);
   }
@@ -1231,7 +1236,13 @@ router.post("/groups/:id/meetings/:meetingId/otp-batch", requireAuth("meeting-ke
         )
       );
     }, credentialTransactionOptions);
-    ok(res, results.map((result) => serializeMember(result.member, result.delivery)));
+    const deliveredResults = await Promise.all(
+      results.map(async (result) => ({
+        member: result.member,
+        delivery: (await sendQueuedMemberPinDelivery(result.delivery.id)) ?? result.delivery
+      }))
+    );
+    ok(res, deliveredResults.map((result) => serializeMember(result.member, result.delivery)));
   } catch (error) {
     next(error);
   }

@@ -150,7 +150,11 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
     requiredEnv: [
       "BONGA_SMS_CLIENT_ID",
       "BONGA_SMS_API_KEY",
-      "BONGA_SMS_API_SECRET"
+      "BONGA_SMS_API_SECRET",
+      "BONGA_SMS_SERVICE_ID",
+      "BONGA_SMS_ENDPOINT",
+      "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
+      "BONGA_SMS_OTP_TEMPLATE"
     ]
   }),
   IPRS: new SandboxAdapter({

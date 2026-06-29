@@ -57,6 +57,7 @@ import {
   productCategories,
   productInventoryLabel,
   productStatuses,
+  repaymentMethods,
   repaymentStatuses,
   requestOutstandingCents,
   requestStatuses,
@@ -598,6 +599,7 @@ export default function DashboardIntelliStorePage() {
         body: JSON.stringify({
           amountCents: kesInputToCents(form.amountKes),
           installmentId: form.installmentId || undefined,
+          method: form.method,
           source: form.source,
           provider: form.provider || undefined,
           providerReference: form.providerReference || undefined,
@@ -1690,6 +1692,16 @@ export default function DashboardIntelliStorePage() {
                         <label className="credential-field">
                           <span>Amount (KES)</span>
                           <input min="1" onChange={(event) => updateRepaymentForm(request.id, { amountKes: event.target.value })} step="1" type="number" value={repaymentForm.amountKes} />
+                        </label>
+                        <label className="credential-field">
+                          <span>Payment method</span>
+                          <select onChange={(event) => updateRepaymentForm(request.id, { method: event.target.value })} value={repaymentForm.method}>
+                            {repaymentMethods.map((paymentMethod) => (
+                              <option key={paymentMethod.value} value={paymentMethod.value}>
+                                {paymentMethod.label}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label className="credential-field">
                           <span>Source</span>

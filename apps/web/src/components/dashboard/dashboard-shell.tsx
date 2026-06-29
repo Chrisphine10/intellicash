@@ -18,7 +18,7 @@ import {
   X
 } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../lib/api";
-import { navigationItems } from "../../lib/navigation";
+import { getNavigationItemsForRole, navigationSections } from "../../lib/navigation";
 import { FallbackImage } from "../fallback-image";
 import { DEFAULT_AVATAR_PLACEHOLDER } from "../../lib/placeholders";
 import { ThemeToggle } from "../theme-toggle";
@@ -142,11 +142,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     );
   }, [pathname]);
   const visibleNavigation = useMemo(
-    () =>
-      navigationItems.filter((item) =>
-        user ? item.roles.includes(user.role) : item.href === "/dashboard"
-      ),
+    () => getNavigationItemsForRole(user?.role),
     [user]
+  );
+  const groupedNavigation = useMemo(
+    () =>
+      navigationSections
+        .map((section) => ({
+          ...section,
+          items: visibleNavigation.filter((item) => item.section === section.key)
+        }))
+        .filter((section) => section.items.length > 0),
+    [visibleNavigation]
   );
   const unreadNotificationCount = useMemo(
     () => notifications.filter((notification) => !notification.readAt).length,
@@ -155,8 +162,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const groupBottomNavigation = useMemo(() => {
     if (user?.role !== "GROUP_ACCOUNT") return [];
 
-    const primaryTabs = new Set(["Dashboard", "Meetings", "Intelli-Store", "Reports"]);
-    return visibleNavigation.filter((item) => primaryTabs.has(item.label));
+    const primaryTabs = ["Dashboard", "My Group", "Meetings", "Intelli-Store"];
+    const tabs = primaryTabs.flatMap((label) =>
+      visibleNavigation.filter((item) => item.label === label)
+    );
+
+    return [
+      ...tabs,
+      { label: "Account", href: "/dashboard/account", icon: UserRound }
+    ];
   }, [user, visibleNavigation]);
 
   useEffect(() => {
@@ -189,11 +203,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || pathname === "/dashboard") return;
 
-    const profileRouteAllowed = [
-      "/dashboard/account",
-      "/dashboard/settings",
-      "/dashboard/help-support"
-    ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    const profileRouteAllowed =
+      ["/dashboard/account", "/dashboard/help-support"].some((route) =>
+        pathname === route || pathname.startsWith(`${route}/`)
+      ) ||
+      (user.role === "IWL_ADMIN" &&
+        (pathname === "/dashboard/settings" || pathname.startsWith("/dashboard/settings/")));
     const scopedGroupRouteAllowed =
       user.role === "GROUP_ACCOUNT" && pathname.startsWith("/dashboard/groups/");
     const routeAllowed = visibleNavigation.some((item) =>
@@ -352,19 +367,23 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const currentLanguageLabel = languagePreferenceLabels[currentLanguage];
 
   const isGroupAccountPwa = user?.role === "GROUP_ACCOUNT";
-  const isGroupBottomTabRoute = groupBottomNavigation.some((item) => pathname === item.href);
+  const isGroupBottomTabRoute = groupBottomNavigation.some((item) =>
+    item.href === "/dashboard" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
   const groupPwaRouteClass =
     isGroupAccountPwa && pathname === "/dashboard"
       ? "group-pwa-route-dashboard"
-      : isGroupAccountPwa && pathname === "/dashboard/meetings"
-        ? "group-pwa-route-meetings"
-        : isGroupAccountPwa && pathname === "/dashboard/intelli-store"
-          ? "group-pwa-route-store"
-          : isGroupAccountPwa && pathname === "/dashboard/reports"
-            ? "group-pwa-route-reports"
-            : isGroupAccountPwa && pathname === "/dashboard/account"
-              ? "group-pwa-route-account"
-              : "";
+      : isGroupAccountPwa && pathname.startsWith("/dashboard/groups")
+        ? "group-pwa-route-groups"
+        : isGroupAccountPwa && pathname === "/dashboard/meetings"
+          ? "group-pwa-route-meetings"
+          : isGroupAccountPwa && pathname === "/dashboard/intelli-store"
+            ? "group-pwa-route-store"
+            : isGroupAccountPwa && pathname === "/dashboard/reports"
+              ? "group-pwa-route-reports"
+              : isGroupAccountPwa && pathname === "/dashboard/account"
+                ? "group-pwa-route-account"
+                : "";
 
   return (
     <div
@@ -397,25 +416,30 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </button>
         </div>
         <nav className="nav-list" aria-label="Primary navigation">
-          {visibleNavigation.map((item) => {
-            const Icon = item.icon;
-            const active =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
+          {groupedNavigation.map((section) => (
+            <div className="nav-section" key={section.key}>
+              <span className="nav-section-label">{section.label}</span>
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname.startsWith(item.href);
 
-            return (
-              <Link
-                className={`nav-item ${active ? "active" : ""}`}
-                href={item.href}
-                key={item.label}
-                onClick={() => setIsNavigationOpen(false)}
-              >
-                <Icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
+                return (
+                  <Link
+                    className={`nav-item ${active ? "active" : ""}`}
+                    href={item.href}
+                    key={item.label}
+                    onClick={() => setIsNavigationOpen(false)}
+                  >
+                    <Icon size={18} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
@@ -600,10 +624,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                         <UserRound size={16} />
                         <span>Account</span>
                       </Link>
-                      <Link className="profile-menu-item" href="/dashboard/settings" role="menuitem">
-                        <SettingsIcon size={16} />
-                        <span>Settings</span>
-                      </Link>
+                      {user?.role === "IWL_ADMIN" ? (
+                        <Link className="profile-menu-item" href="/dashboard/settings" role="menuitem">
+                          <SettingsIcon size={16} />
+                          <span>Settings</span>
+                        </Link>
+                      ) : null}
                       <Link className="profile-menu-item" href="/dashboard/help-support" role="menuitem">
                         <CircleHelp size={16} />
                         <span>Help & Support</span>
@@ -633,7 +659,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             return (
               <Link className={`bottom-tab-item ${active ? "active" : ""}`} href={item.href} key={item.label}>
                 <Icon size={18} />
-                <span>{item.label === "Intelli-Store" ? "Store" : item.label}</span>
+                <span>{item.label === "Intelli-Store" ? "Store" : item.label === "My Group" ? "Group" : item.label}</span>
               </Link>
             );
           })}

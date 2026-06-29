@@ -29,6 +29,8 @@ services:
         value: false
       - key: ENABLE_PAYMENT_NETWORK_CALLS
         value: false
+      - key: ENABLE_SMS_NETWORK_CALLS
+        value: true
       - key: INTELLIAUDIT_LLM_PROVIDER
         value: disabled
       - key: INTELLIAUDIT_LLM_BASE_URL
@@ -52,6 +54,14 @@ services:
       - key: BONGA_SMS_API_KEY
         sync: false
       - key: BONGA_SMS_API_SECRET
+        sync: false
+      - key: BONGA_SMS_SERVICE_ID
+        sync: false
+      - key: BONGA_SMS_ENDPOINT
+        value: http://167.172.14.50:4002/v1/send-sms
+      - key: BONGA_SMS_DEFAULT_PIN_TEMPLATE
+        sync: false
+      - key: BONGA_SMS_OTP_TEMPLATE
         sync: false
       - key: MPESA_CONSUMER_KEY
         sync: false
@@ -124,6 +134,8 @@ services:
         value: false
       - key: ENABLE_PAYMENT_NETWORK_CALLS
         value: false
+      - key: ENABLE_SMS_NETWORK_CALLS
+        value: true
       - key: INTELLIAUDIT_LLM_PROVIDER
         value: disabled
       - key: INTELLIAUDIT_ENABLE_CONNECTOR_NETWORK_CALLS

@@ -15,7 +15,7 @@ import {
 import type { PortfolioSummary } from "@intellicash/shared";
 import { apiFetch, formatKes, humanizeEnum } from "../../lib/api";
 import { StatCard } from "../../components/dashboard/stat-card";
-import { navigationItems } from "../../lib/navigation";
+import { getNavigationItemsForRole } from "../../lib/navigation";
 import type {
   AuditEvent,
   GroupRow,
@@ -37,11 +37,11 @@ interface MeetingWithGroup extends MeetingRow {
 }
 
 function canReadAudit(role: string) {
-  return ["IWL_ADMIN", "PARTNER_OFFICER", "LENDER", "READ_ONLY"].includes(role);
+  return role === "IWL_ADMIN";
 }
 
 function canReadIntegrations(role: string) {
-  return ["IWL_ADMIN", "PARTNER_OFFICER", "LENDER", "READ_ONLY"].includes(role);
+  return role === "IWL_ADMIN";
 }
 
 function canReadMeetings(role: string) {
@@ -51,9 +51,7 @@ function canReadMeetings(role: string) {
 function canReadStoreRequests(user: User) {
   if (user.permissions) return user.permissions.includes("store:read");
 
-  return navigationItems.some(
-    (item) => item.href === "/dashboard/intelli-store" && item.roles.includes(user.role)
-  );
+  return getNavigationItemsForRole(user.role).some((item) => item.href === "/dashboard/intelli-store");
 }
 
 function requestOutstandingCents(request: StoreCreditRequest) {
@@ -235,7 +233,7 @@ function formatShortDateTime(value: string) {
 }
 
 function visibleModules(user: User) {
-  return navigationItems.filter((item) => item.href !== "/dashboard" && item.roles.includes(user.role));
+  return getNavigationItemsForRole(user.role).filter((item) => item.href !== "/dashboard");
 }
 
 function DashboardIntro({
@@ -863,7 +861,7 @@ function PartnerOfficerDashboard({
 }) {
   const visibleProgrammes = portfolio?.groups ?? groups.length;
   const activeRequests = activeStoreRequestList(storeRequests);
-  const serviceQuality = integrations?.total && integrations.configured === integrations.total ? "Ready" : "Check";
+  const serviceQuality = liveMeetings > 0 ? "Active" : "Open";
   const upcomingMeetings = [...meetings]
     .filter((meeting) => meeting.status !== "SEALED")
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
@@ -884,7 +882,7 @@ function PartnerOfficerDashboard({
         <StatCard icon={<ShoppingBag size={20} />} label="Programmes" note="Service delivery" value={visibleProgrammes.toString()} />
         <StatCard icon={<UsersRound size={20} />} label="Groups reached" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
         <StatCard icon={<Activity size={20} />} label="Live sessions" note="Programme meetings" value={liveMeetings.toString()} />
-        <StatCard icon={<ShieldCheck size={20} />} label="Service quality" note={`${auditEvents.length} audit events`} value={serviceQuality} />
+        <StatCard icon={<ShieldCheck size={20} />} label="Service quality" note="Reports and field follow-up" value={serviceQuality} />
       </section>
 
       <section className="dashboard-data-grid">
@@ -926,19 +924,19 @@ function PartnerOfficerDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/intelliaudit" count={auditEvents.length} title="Service quality">
+        <DashboardDataCard actionHref="/dashboard/reports" title="Service quality">
           <div className="list">
             <div className="list-row">
               <div>
                 <strong>Field evidence</strong>
-                <span>Documents, approvals, and quality review</span>
+                <span>Programme delivery, meetings, and group follow-up</span>
               </div>
               <span className="pill blue">Tracked</span>
             </div>
             <div className="list-row">
               <div>
-                <strong>Provider readiness</strong>
-                <span>{integrationReadiness(integrations)} integrations configured</span>
+                <strong>Reports</strong>
+                <span>Use reports for scoped delivery summaries</span>
               </div>
               <span className="pill">{serviceQuality}</span>
             </div>
@@ -1009,7 +1007,7 @@ function LenderDashboard({
         <StatCard icon={<ShoppingBag size={20} />} label="Applications" note={`${reviewRequests.length} active`} value={storeRequests.length.toString()} />
         <StatCard icon={<UsersRound size={20} />} label="Groups for review" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
         <StatCard icon={<ShieldCheck size={20} />} label="Credit signals" note="Average readiness score" value={score?.toString() ?? "Pending"} />
-        <StatCard icon={<Activity size={20} />} label="Evidence" note={`${integrationReadiness(integrations)} integrations configured`} value={auditEvents.length.toString()} />
+        <StatCard icon={<Activity size={20} />} label="Evidence" note="Credit review records" value={groups.length.toString()} />
       </section>
 
       <section className="dashboard-data-grid">
@@ -1045,18 +1043,18 @@ function LenderDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/intelliaudit" count={auditEvents.length} title="Evidence">
+        <DashboardDataCard actionHref="/dashboard/reports" count={groups.length} title="Evidence">
           <div className="list">
-            {auditEvents.slice(0, 5).map((event) => (
-              <div className="list-row" key={event.id}>
+            {groups.slice(0, 5).map((group) => (
+              <div className="list-row" key={group.id}>
                 <div>
-                  <strong>{humanizeEnum(event.type)}</strong>
-                  <span>{event.entityType} - {event.actor?.name ?? "System"}</span>
+                  <strong>{group.name}</strong>
+                  <span>{group.code} - {humanizeEnum(group.phase)}</span>
                 </div>
-                <span className="pill">{formatShortDateTime(event.createdAt)}</span>
+                <span className="pill blue">{latestGroupScore(group)?.toString() ?? "Pending"}</span>
               </div>
             ))}
-            {auditEvents.length === 0 ? <div className="empty-state">No evidence events</div> : null}
+            {groups.length === 0 ? <div className="empty-state">No evidence records</div> : null}
           </div>
         </DashboardDataCard>
 
@@ -1107,9 +1105,9 @@ function ReadOnlyDashboard({
 
       <section className="stat-grid dashboard-stat-grid">
         <StatCard icon={<ShieldCheck size={20} />} label="Reports" note="Observation workspace" value="Open" />
-        <StatCard icon={<Activity size={20} />} label="Audit events" note="System visibility" value={auditEvents.length.toString()} />
+        <StatCard icon={<Activity size={20} />} label="Oversight" note="Report access" value="Scoped" />
         <StatCard icon={<UsersRound size={20} />} label="Groups" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
-        <StatCard icon={<ShoppingBag size={20} />} label="Integration status" note="Configured providers" value={integrationReadiness(integrations)} />
+        <StatCard icon={<ShoppingBag size={20} />} label="Projects" note="Visible records" value={groups.length.toString()} />
       </section>
 
       <section className="dashboard-data-grid">
@@ -1125,37 +1123,29 @@ function ReadOnlyDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/audit" count={auditEvents.length} title="Audit events">
+        <DashboardDataCard actionHref="/dashboard/reports" title="Oversight reports">
           <div className="list">
-            {auditEvents.slice(0, 5).map((event) => (
-              <div className="list-row" key={event.id}>
-                <div>
-                  <strong>{humanizeEnum(event.type)}</strong>
-                  <span>{event.entityType} - {event.actor?.name ?? "System"}</span>
-                </div>
-                <span className="pill">{formatShortDateTime(event.createdAt)}</span>
+            <div className="list-row">
+              <div>
+                <strong>Observation reports</strong>
+                <span>Read-only reports remain scoped to this account.</span>
               </div>
-            ))}
-            {auditEvents.length === 0 ? <div className="empty-state">No audit events</div> : null}
+              <span className="pill blue">Open</span>
+            </div>
           </div>
         </DashboardDataCard>
 
         <GroupPrioritySection groups={groups} title="Groups" />
 
-        <DashboardDataCard actionHref="/dashboard/integrations" count={integrations?.total ?? 0} title="Integration status">
+        <DashboardDataCard actionHref="/dashboard/reports" count={groups.length} title="Operational scope">
           <div className="list">
-            {integrations?.statuses.slice(0, 5).map((status) => (
-              <div className="list-row" key={status.provider}>
-                <div>
-                  <strong>{status.displayName}</strong>
-                  <span>{status.configured ? "Available" : `${status.missingEnv.length} missing`}</span>
-                </div>
-                <span className={`pill ${status.configured ? "blue" : "gold"}`}>
-                  {status.configured ? "Ready" : "Gated"}
-                </span>
+            <div className="list-row">
+              <div>
+                <strong>Visible groups</strong>
+                <span>Reports and project records available to this account.</span>
               </div>
-            ))}
-            {!integrations ? <div className="empty-state">No integration data</div> : null}
+              <span className="pill">{groups.length}</span>
+            </div>
           </div>
         </DashboardDataCard>
 

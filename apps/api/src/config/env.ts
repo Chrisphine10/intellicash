@@ -10,6 +10,7 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default("development-session-secret-change-me"),
   ALLOW_SANDBOX_NETWORK_TESTS: z.coerce.boolean().default(false),
   ENABLE_PAYMENT_NETWORK_CALLS: z.coerce.boolean().default(false),
+  ENABLE_SMS_NETWORK_CALLS: z.coerce.boolean().default(true),
   GOOGLE_MAPS_BROWSER_API_KEY: z.string().default(""),
   INTELLIAUDIT_LLM_PROVIDER: z.string().default("disabled"),
   INTELLIAUDIT_LLM_BASE_URL: z.string().default(""),

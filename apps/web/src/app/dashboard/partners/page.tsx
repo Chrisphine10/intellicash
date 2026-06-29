@@ -1,8 +1,9 @@
 "use client";
 
+import React from "react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { Building2, Link2, Network, Pencil, UsersRound, X } from "@/lib/theme-icons";
+import { Building2, Link2, Network, Pencil, Plus, UsersRound, X } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
@@ -27,6 +28,7 @@ export default function PartnersPage() {
   const [programmes, setProgrammes] = useState<ProgrammeRow[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [editingPartner, setEditingPartner] = useState<PartnerRow | null>(null);
+  const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
   const [form, setForm] = useState(defaultPartnerForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -66,13 +68,20 @@ export default function PartnersPage() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle("modal-open", Boolean(editingPartner));
+    document.body.classList.toggle("modal-open", isPartnerModalOpen);
     return () => document.body.classList.remove("modal-open");
-  }, [editingPartner]);
+  }, [isPartnerModalOpen]);
 
   const webhookCount = partners.reduce((sum, partner) => sum + partner._count.webhookSubscriptions, 0);
   const programmeGroups = programmes.reduce((sum, programme) => sum + programme._count.groups, 0);
   const canManagePartners = user?.permissions?.includes("partners:write") ?? false;
+
+  function openCreatePartner() {
+    setEditingPartner(null);
+    setForm(defaultPartnerForm);
+    setMessage(null);
+    setIsPartnerModalOpen(true);
+  }
 
   function openEditPartner(partner: PartnerRow) {
     setEditingPartner(partner);
@@ -89,34 +98,43 @@ export default function PartnersPage() {
       linkageType: partner.linkageType ?? ""
     });
     setMessage(null);
+    setIsPartnerModalOpen(true);
+  }
+
+  function closePartnerModal() {
+    setEditingPartner(null);
+    setIsPartnerModalOpen(false);
+    setForm(defaultPartnerForm);
   }
 
   async function submitPartner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editingPartner) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
-      const saved = await apiFetch<PartnerRow>(`/partners/${editingPartner.id}`, {
-        method: "PATCH",
+      const payload = {
+        name: form.name,
+        type: form.type,
+        status: form.status,
+        apiScope: form.apiScope,
+        county: form.county || null,
+        contactName: form.contactName || null,
+        contactPhone: form.contactPhone || null,
+        valueProposition: form.valueProposition || null,
+        capacity: form.capacity || null,
+        linkageType: form.linkageType || null
+      };
+      const saved = await apiFetch<PartnerRow>(editingPartner ? `/partners/${editingPartner.id}` : "/partners", {
+        method: editingPartner ? "PATCH" : "POST",
         body: JSON.stringify({
-          name: form.name,
-          type: form.type,
-          status: form.status,
-          apiScope: form.apiScope,
-          county: form.county || null,
-          contactName: form.contactName || null,
-          contactPhone: form.contactPhone || null,
-          valueProposition: form.valueProposition || null,
-          capacity: form.capacity || null,
-          linkageType: form.linkageType || null
+          ...payload
         })
       });
       await loadPartnersWorkspace();
-      setEditingPartner(null);
-      setMessage({ ok: true, text: `${saved.name} partner updated.` });
+      closePartnerModal();
+      setMessage({ ok: true, text: `${saved.name} partner ${editingPartner ? "updated" : "created"}.` });
     } catch (partnerError) {
       setMessage({ ok: false, text: partnerError instanceof Error ? partnerError.message : "Partner failed to save" });
     } finally {
@@ -141,22 +159,31 @@ export default function PartnersPage() {
             Partners
           </h2>
         </div>
+        <div className="page-heading-actions">
+          <span className="pill">{partners.length} partners</span>
+          {canManagePartners ? (
+            <button className="button" onClick={openCreatePartner} type="button">
+              <Plus size={16} />
+              Create partner
+            </button>
+          ) : null}
+        </div>
       </section>
 
-      {!editingPartner && message ? (
+      {!isPartnerModalOpen && message ? (
         <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
       ) : null}
 
-      {editingPartner && canManagePartners ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`Edit ${editingPartner.name}`}>
-          <button className="modal-backdrop" onClick={() => setEditingPartner(null)} type="button" aria-label="Close partner editor" />
+      {isPartnerModalOpen && canManagePartners ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={editingPartner ? `Edit ${editingPartner.name}` : "Create partner"}>
+          <button className="modal-backdrop" onClick={closePartnerModal} type="button" aria-label="Close partner editor" />
           <section className="data-card credential-modal">
             <header>
               <div>
-                <h3>Edit Partner</h3>
-                <span>{editingPartner.name}</span>
+                <h3>{editingPartner ? "Edit Partner" : "Create Partner"}</h3>
+                <span>{editingPartner ? editingPartner.name : "Register an implementing partner, lender, or support organization."}</span>
               </div>
-              <button className="icon-button" onClick={() => setEditingPartner(null)} type="button" aria-label="Close">
+              <button className="icon-button" onClick={closePartnerModal} type="button" aria-label="Close">
                 <X size={18} />
               </button>
             </header>
@@ -214,10 +241,10 @@ export default function PartnersPage() {
               {message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
               <div className="credential-actions">
                 <button className="button" disabled={saving} type="submit">
-                  <Pencil size={16} />
-                  {saving ? "Saving" : "Save partner"}
+                  {editingPartner ? <Pencil size={16} /> : <Plus size={16} />}
+                  {saving ? "Saving" : editingPartner ? "Save partner" : "Create partner"}
                 </button>
-                <button className="button secondary" onClick={() => setEditingPartner(null)} type="button">
+                <button className="button secondary" onClick={closePartnerModal} type="button">
                   Cancel
                 </button>
               </div>

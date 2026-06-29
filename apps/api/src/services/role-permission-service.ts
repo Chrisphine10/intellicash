@@ -5,6 +5,21 @@ import { prisma } from "../lib/prisma";
 const permissionSet = new Set<string>(permissions);
 const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
 const apiKeyPermissions = new Set<Permission>(["api-keys:read", "api-keys:write"]);
+const adminOnlyPermissions = new Set<Permission>([
+  "audit:read",
+  "intelliaudit:read",
+  "intelliaudit:write",
+  "intelliaudit:approve",
+  "evidence:write",
+  "connectors:sync",
+  "reports:approve",
+  "integrations:read",
+  "integrations:write",
+  "integrations:test",
+  "api-keys:read",
+  "api-keys:write",
+  "webhooks:write"
+]);
 let rolePermissionTemplateBootstrap: Promise<void> | null = null;
 
 function readPermissionValues(value: string | null | undefined) {
@@ -19,18 +34,29 @@ function readPermissionValues(value: string | null | undefined) {
 }
 
 function parsePermissions(value: string | null | undefined, role: Role): Permission[] {
-  if (!value) return rolePermissions[role];
+  if (!value) return permissionsForRoleWithAdminReserve(role, rolePermissions[role]);
 
   const parsed = readPermissionValues(value);
-  return parsed ?? rolePermissions[role];
+  return permissionsForRoleWithAdminReserve(role, parsed ?? rolePermissions[role]);
 }
 
 export function normalizePermissionList(values: Permission[]) {
   return Array.from(new Set(values.filter((permission) => permissionSet.has(permission))));
 }
 
+function permissionsForRoleWithAdminReserve(role: Role, values: Permission[]) {
+  const normalized = normalizePermissionList(values);
+  if (role === "IWL_ADMIN") return normalized;
+  return normalized.filter((permission) => !adminOnlyPermissions.has(permission));
+}
+
 export function validateRolePermissionUpdate(role: Role, values: Permission[]) {
   const normalized = normalizePermissionList(values);
+  const restricted = role === "IWL_ADMIN" ? [] : normalized.filter((permission) => adminOnlyPermissions.has(permission));
+
+  if (restricted.length > 0) {
+    throw new Error(`Only IWL admin can hold ${restricted.join(", ")}.`);
+  }
 
   if (role === "IWL_ADMIN") {
     const missing = protectedAdminPermissions.filter((permission) => !normalized.includes(permission));
@@ -66,6 +92,8 @@ async function ensureRolePermissionTemplatesOnce() {
     )
   );
 
+  await pruneReservedPermissionsFromNonAdminTemplates();
+
   if (existingRows.length === 0 || existingRowsHadApiKeyPermissions) return;
 
   const rows = await prisma.rolePermissionTemplate.findMany();
@@ -75,11 +103,34 @@ async function ensureRolePermissionTemplatesOnce() {
       const defaultsToAdd = rolePermissions[row.role].filter((permission) => apiKeyPermissions.has(permission));
       if (defaultsToAdd.length === 0) return null;
 
-      const merged = normalizePermissionList([...(readPermissionValues(row.permissionsJson) ?? []), ...defaultsToAdd]);
+      const merged = permissionsForRoleWithAdminReserve(
+        row.role,
+        [...(readPermissionValues(row.permissionsJson) ?? []), ...defaultsToAdd]
+      );
       return prisma.rolePermissionTemplate.update({
         where: { role: row.role },
         data: {
           permissionsJson: JSON.stringify(merged)
+        }
+      });
+    })
+  );
+}
+
+async function pruneReservedPermissionsFromNonAdminTemplates() {
+  const rows = await prisma.rolePermissionTemplate.findMany();
+  await Promise.all(
+    rows.map((row) => {
+      if (!isRole(row.role)) return null;
+      const stored = readPermissionValues(row.permissionsJson);
+      if (!stored) return null;
+      const sanitized = permissionsForRoleWithAdminReserve(row.role, stored);
+      if (JSON.stringify(stored) === JSON.stringify(sanitized)) return null;
+
+      return prisma.rolePermissionTemplate.update({
+        where: { role: row.role },
+        data: {
+          permissionsJson: JSON.stringify(sanitized)
         }
       });
     })

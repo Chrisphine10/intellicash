@@ -21,7 +21,9 @@ export default function SettingsPage() {
     async function loadSettings() {
       try {
         const me = await apiFetch<User>("/auth/me");
-        const health = await apiFetch<IntegrationHealth>("/integrations/health").catch(() => null);
+        const health = me.role === "IWL_ADMIN"
+          ? await apiFetch<IntegrationHealth>("/integrations/health").catch(() => null)
+          : null;
         const apiRoot = API_BASE_URL.replace(/\/api\/v1$/, "");
         const apiResponse = await fetch(`${apiRoot}/health`).catch(() => null);
 
@@ -41,6 +43,7 @@ export default function SettingsPage() {
   }, []);
 
   if (loading) return <div className="loading-panel">Loading...</div>;
+  if (user?.role !== "IWL_ADMIN") return <div className="error">Only IWL admins can manage settings.</div>;
   const languageLabel =
     languagePreferenceLabels[(user?.languagePreference ?? "ENGLISH") as LanguagePreference] ?? "English";
   const canManagePwa = user?.role === "IWL_ADMIN";

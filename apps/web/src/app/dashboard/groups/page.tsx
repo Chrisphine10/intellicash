@@ -126,8 +126,14 @@ export default function GroupsPage() {
 
   async function submitGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setMessage(null);
+
+    if (form.programmeIds.length === 0) {
+      setMessage({ ok: false, text: "Select at least one program for this group." });
+      return;
+    }
+
+    setSaving(true);
 
     try {
       const saved = await apiFetch<GroupRow>(editingGroup ? `/groups/${editingGroup.id}` : "/groups", {
@@ -203,203 +209,228 @@ export default function GroupsPage() {
       {isCreateOpen && canCreateGroups ? (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={editingGroup ? "Edit group" : "Create group"}>
           <button className="modal-backdrop" onClick={closeGroupModal} type="button" aria-label="Close group editor" />
-          <section className="data-card credential-modal">
+          <section className="data-card credential-modal group-editor-modal">
             <header>
               <div>
                 <h3>{editingGroup ? "Edit Group" : "Create Group"}</h3>
-                <span>New groups are assigned to programs only; they are not connected to other groups.</span>
+                <span>Start with the required setup. Optional operational defaults can stay unchanged.</span>
               </div>
               <button className="icon-button" onClick={closeGroupModal} type="button" aria-label="Close">
                 <X size={18} />
               </button>
             </header>
-            <form className="credential-form" onSubmit={submitGroup}>
-              <div className="credential-grid">
-                <label className="credential-field">
-                  <span>Group name</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                    required
-                    value={form.name}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Code</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-                    required
-                    value={form.code}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>County</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, county: event.target.value }))}
-                    required
-                    value={form.county}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Sub-county</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, subCounty: event.target.value }))}
-                    value={form.subCounty}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Phase</span>
-                  <select
-                    onChange={(event) => setForm((current) => ({ ...current, phase: event.target.value }))}
-                    value={form.phase}
-                  >
-                    {["MOBILISATION", "INTENSIVE", "DEVELOPMENT", "MATURITY", "POST_GRADUATION"].map((phase) => (
-                      <option key={phase} value={phase}>
-                        {humanizeEnum(phase)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="credential-field">
-                  <span>Programs</span>
-                  <select
-                    multiple
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        programmeIds: Array.from(event.currentTarget.selectedOptions).map(
-                          (option) => option.value
-                        )
-                      }))
-                    }
-                    required
-                    value={form.programmeIds}
-                  >
-                    {programmes.map((programme) => (
-                      <option key={programme.id} value={programme.id}>
-                        {programme.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="credential-field">
-                  <span>VA / CBT</span>
-                  <select
-                    onChange={(event) => setForm((current) => ({ ...current, villageAgentId: event.target.value }))}
-                    value={form.villageAgentId}
-                  >
-                    <option value="">Unassigned</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="credential-field">
-                  <span>Location</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
-                    value={form.location}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Meeting day</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, meetingDay: event.target.value }))}
-                    value={form.meetingDay}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Contact person</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, contactPersonName: event.target.value }))}
-                    value={form.contactPersonName}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Contact phone</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, contactPhone: event.target.value }))}
-                    value={form.contactPhone}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Objective</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, objective: event.target.value }))}
-                    value={form.objective}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>GPS latitude</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, gpsLatitude: event.target.value }))}
-                    step="0.000001"
-                    type="number"
-                    value={form.gpsLatitude}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>GPS longitude</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, gpsLongitude: event.target.value }))}
-                    step="0.000001"
-                    type="number"
-                    value={form.gpsLongitude}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>GPS radius meters</span>
-                  <input
-                    max="1000"
-                    min="10"
-                    onChange={(event) => setForm((current) => ({ ...current, gpsRadiusMeters: event.target.value }))}
-                    type="number"
-                    value={form.gpsRadiusMeters}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Share value</span>
-                  <input
-                    min="1"
-                    onChange={(event) => setForm((current) => ({ ...current, shareValue: event.target.value }))}
-                    step="1"
-                    type="number"
-                    value={form.shareValue}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Max shares per member per meeting</span>
-                  <input
-                    max="100"
-                    min="1"
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, maxSharesPerMemberPerMeeting: event.target.value }))
-                    }
-                    type="number"
-                    value={form.maxSharesPerMemberPerMeeting}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Constitution version</span>
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, constitutionVersion: event.target.value }))}
-                    value={form.constitutionVersion}
-                  />
-                </label>
-                <label className="credential-field">
-                  <span>Cycle number</span>
-                  <input
-                    min="1"
-                    onChange={(event) => setForm((current) => ({ ...current, cycleNumber: event.target.value }))}
-                    type="number"
-                    value={form.cycleNumber}
-                  />
-                </label>
+            <form className="credential-form group-editor-form" onSubmit={submitGroup}>
+              <div className="group-form-scroll">
+                <section className="group-form-section">
+                  <header>
+                    <strong>Required details</strong>
+                    <span>Name, code, county, and at least one program are enough to create a group.</span>
+                  </header>
+                  <div className="credential-grid group-essential-grid">
+                    <label className="credential-field">
+                      <span>Group name</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                        required
+                        value={form.name}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Code</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+                        required
+                        value={form.code}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>County</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, county: event.target.value }))}
+                        required
+                        value={form.county}
+                      />
+                    </label>
+                  </div>
+                  <fieldset className="programme-picker">
+                    <legend>Programs</legend>
+                    {programmes.length > 0 ? (
+                      <div className="programme-choice-list">
+                        {programmes.map((programme) => (
+                          <label className="programme-choice" key={programme.id}>
+                            <input
+                              checked={form.programmeIds.includes(programme.id)}
+                              onChange={(event) =>
+                                setForm((current) => ({
+                                  ...current,
+                                  programmeIds: event.target.checked
+                                    ? Array.from(new Set([...current.programmeIds, programme.id]))
+                                    : current.programmeIds.filter((programmeId) => programmeId !== programme.id)
+                                }))
+                              }
+                              type="checkbox"
+                            />
+                            <span>{programme.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>No programs are available. Create a program before adding a group.</p>
+                    )}
+                  </fieldset>
+                </section>
+
+                <details className="group-form-details" open={Boolean(editingGroup)}>
+                  <summary>Assignment and contact</summary>
+                  <div className="credential-grid group-details-grid">
+                    <label className="credential-field">
+                      <span>Sub-county</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, subCounty: event.target.value }))}
+                        value={form.subCounty}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Phase</span>
+                      <select
+                        onChange={(event) => setForm((current) => ({ ...current, phase: event.target.value }))}
+                        value={form.phase}
+                      >
+                        {["MOBILISATION", "INTENSIVE", "DEVELOPMENT", "MATURITY", "POST_GRADUATION"].map((phase) => (
+                          <option key={phase} value={phase}>
+                            {humanizeEnum(phase)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="credential-field">
+                      <span>VA / CBT</span>
+                      <select
+                        onChange={(event) => setForm((current) => ({ ...current, villageAgentId: event.target.value }))}
+                        value={form.villageAgentId}
+                      >
+                        <option value="">Unassigned</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="credential-field">
+                      <span>Location</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
+                        value={form.location}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Meeting day</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, meetingDay: event.target.value }))}
+                        value={form.meetingDay}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Contact person</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, contactPersonName: event.target.value }))}
+                        value={form.contactPersonName}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Contact phone</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, contactPhone: event.target.value }))}
+                        value={form.contactPhone}
+                      />
+                    </label>
+                    <label className="credential-field group-field-wide">
+                      <span>Objective</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, objective: event.target.value }))}
+                        value={form.objective}
+                      />
+                    </label>
+                  </div>
+                </details>
+
+                <details className="group-form-details" open={Boolean(editingGroup)}>
+                  <summary>GPS and savings defaults</summary>
+                  <div className="credential-grid group-details-grid">
+                    <label className="credential-field">
+                      <span>GPS latitude</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, gpsLatitude: event.target.value }))}
+                        step="0.000001"
+                        type="number"
+                        value={form.gpsLatitude}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>GPS longitude</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, gpsLongitude: event.target.value }))}
+                        step="0.000001"
+                        type="number"
+                        value={form.gpsLongitude}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>GPS radius meters</span>
+                      <input
+                        max="1000"
+                        min="10"
+                        onChange={(event) => setForm((current) => ({ ...current, gpsRadiusMeters: event.target.value }))}
+                        type="number"
+                        value={form.gpsRadiusMeters}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Share value</span>
+                      <input
+                        min="1"
+                        onChange={(event) => setForm((current) => ({ ...current, shareValue: event.target.value }))}
+                        step="1"
+                        type="number"
+                        value={form.shareValue}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Max shares per member per meeting</span>
+                      <input
+                        max="100"
+                        min="1"
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, maxSharesPerMemberPerMeeting: event.target.value }))
+                        }
+                        type="number"
+                        value={form.maxSharesPerMemberPerMeeting}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Constitution version</span>
+                      <input
+                        onChange={(event) => setForm((current) => ({ ...current, constitutionVersion: event.target.value }))}
+                        value={form.constitutionVersion}
+                      />
+                    </label>
+                    <label className="credential-field">
+                      <span>Cycle number</span>
+                      <input
+                        min="1"
+                        onChange={(event) => setForm((current) => ({ ...current, cycleNumber: event.target.value }))}
+                        type="number"
+                        value={form.cycleNumber}
+                      />
+                    </label>
+                  </div>
+                </details>
+
+                {message ? (
+                  <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
+                ) : null}
               </div>
-              {message ? (
-                <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
-              ) : null}
               <div className="credential-actions">
                 <button className="button" disabled={saving} type="submit">
                   {editingGroup ? <Pencil size={16} /> : <Plus size={16} />}
