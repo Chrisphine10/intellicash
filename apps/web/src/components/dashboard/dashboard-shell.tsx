@@ -92,7 +92,7 @@ const routeTitles = [
   },
   {
     match: "/dashboard/help-support",
-    title: "Help & Support"
+    title: "Help & Docs"
   }
 ];
 
@@ -632,7 +632,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                       ) : null}
                       <Link className="profile-menu-item" href="/dashboard/help-support" role="menuitem">
                         <CircleHelp size={16} />
-                        <span>Help & Support</span>
+                        <span>Help & Docs</span>
                       </Link>
                     </nav>
                   </div>

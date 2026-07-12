@@ -35,6 +35,7 @@ import {
 } from "../services/account-scope";
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, sha256 } from "../lib/crypto";
+import { canViewMemberContact, maskPhone } from "../lib/privacy";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -250,11 +251,13 @@ const memberSelect = {
   currentOtpExpiresAt: true
 } satisfies Prisma.MemberSelect;
 
+// Members embedded in meetings, attendance, ledger entries, and share-out
+// previews are identified by name only — no phone. Contact details are served
+// solely by the roster endpoint, masked by role. (DATA_PROTECTION.md §3.)
 const nestedMemberSelect = {
   id: true,
   groupId: true,
   fullName: true,
-  phone: true,
   role: true,
   kycStatus: true,
   status: true
@@ -282,16 +285,22 @@ const groupInclude = {
 
 function serializeMember<
   T extends {
+    phone?: string | null;
     pinHash?: string | null;
     pinSetAt?: Date | null;
     currentOtpHash?: string | null;
     currentOtpIssuedAt?: Date | null;
     currentOtpExpiresAt?: Date | null;
   }
->(member: T, delivery?: MemberPinDeliveryPublic | null) {
+>(member: T, options?: { viewerRole?: string | null; delivery?: MemberPinDeliveryPublic | null }) {
   const { pinHash: _pinHash, currentOtpHash: _currentOtpHash, ...safeMember } = member;
+  const phone =
+    typeof member.phone === "string" && !canViewMemberContact(options?.viewerRole)
+      ? maskPhone(member.phone)
+      : member.phone;
   const serialized = {
     ...safeMember,
+    ...(typeof member.phone === "string" ? { phone } : {}),
     pinSet: Boolean(_pinHash),
     defaultPinSet: Boolean(_pinHash),
     pinSetAt: member.pinSetAt ?? null,
@@ -300,7 +309,9 @@ function serializeMember<
     currentOtpExpiresAt: member.currentOtpExpiresAt ?? null
   };
 
-  return delivery ? { ...serialized, pinDelivery: serializeMemberPinDelivery(delivery) } : serialized;
+  return options?.delivery
+    ? { ...serialized, pinDelivery: serializeMemberPinDelivery(options.delivery) }
+    : serialized;
 }
 
 function meetingInclude(user?: AuthenticatedUser) {
@@ -963,7 +974,7 @@ router.get("/groups/:id/members", requireAuth("members:read"), async (req, res, 
       orderBy: { joinedAt: "asc" },
       select: memberSelect
     });
-    ok(res, members.map((member) => serializeMember(member)));
+    ok(res, members.map((member) => serializeMember(member, { viewerRole: req.user?.role })));
   } catch (error) {
     next(error);
   }
@@ -992,7 +1003,7 @@ router.post("/groups/:id/members", requireAuth("members:write"), async (req, res
       payload: { groupId: routeParam(req.params.id, "id"), memberId: result.member.id }
     });
 
-    ok(res.status(201), serializeMember(result.member, result.delivery));
+    ok(res.status(201), serializeMember(result.member, { viewerRole: req.user?.role, delivery: result.delivery }));
   } catch (error) {
     next(error);
   }
@@ -1013,7 +1024,7 @@ router.patch("/groups/:id/members/:memberId", requireAuth("members:write"), asyn
       data: payload,
       select: memberSelect
     });
-    ok(res, serializeMember(updated));
+    ok(res, serializeMember(updated, { viewerRole: req.user?.role }));
   } catch (error) {
     next(error);
   }
@@ -1036,7 +1047,7 @@ router.post("/groups/:id/members/:memberId/pin", requireAuth("members:write"), a
       })
     );
     const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
-    ok(res, serializeMember(result.member, delivery ?? result.delivery));
+    ok(res, serializeMember(result.member, { viewerRole: req.user?.role, delivery: delivery ?? result.delivery }));
   } catch (error) {
     next(error);
   }
@@ -1059,7 +1070,7 @@ router.post("/groups/:id/members/:memberId/otp", requireAuth("meeting-keys:write
       })
     );
     const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
-    ok(res, serializeMember(result.member, delivery ?? result.delivery));
+    ok(res, serializeMember(result.member, { viewerRole: req.user?.role, delivery: delivery ?? result.delivery }));
   } catch (error) {
     next(error);
   }
@@ -1084,7 +1095,7 @@ router.post("/members/me/pin", requireAuth("meeting-keys:write"), async (req, re
       })
     );
     const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
-    ok(res, serializeMember(result.member, delivery ?? result.delivery));
+    ok(res, serializeMember(result.member, { viewerRole: req.user?.role, delivery: delivery ?? result.delivery }));
   } catch (error) {
     next(error);
   }
@@ -1109,7 +1120,7 @@ router.post("/members/me/otp", requireAuth("meeting-keys:write"), async (req, re
       })
     );
     const delivery = await sendQueuedMemberPinDelivery(result.delivery.id);
-    ok(res, serializeMember(result.member, delivery ?? result.delivery));
+    ok(res, serializeMember(result.member, { viewerRole: req.user?.role, delivery: delivery ?? result.delivery }));
   } catch (error) {
     next(error);
   }
@@ -1242,7 +1253,7 @@ router.post("/groups/:id/meetings/:meetingId/otp-batch", requireAuth("meeting-ke
         delivery: (await sendQueuedMemberPinDelivery(result.delivery.id)) ?? result.delivery
       }))
     );
-    ok(res, deliveredResults.map((result) => serializeMember(result.member, result.delivery)));
+    ok(res, deliveredResults.map((result) => serializeMember(result.member, { viewerRole: req.user?.role, delivery: result.delivery })));
   } catch (error) {
     next(error);
   }

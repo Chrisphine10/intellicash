@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import { decryptJson, encryptJson } from "../lib/crypto";
+import { maskPhone } from "../lib/privacy";
 import { prisma } from "../lib/prisma";
 import { decryptCredentials } from "./integration-credentials";
 import {
@@ -71,12 +72,7 @@ export function otpExpiresAt(from: Date) {
   return new Date(from.getTime() + memberOtpTtlMinutes * 60_000);
 }
 
-export function maskPhone(phone: string) {
-  const trimmed = phone.trim();
-  if (trimmed.length <= 6) return trimmed.replace(/\d(?=\d{2})/g, "*");
-
-  return `${trimmed.slice(0, 4)}${"*".repeat(Math.max(trimmed.length - 7, 3))}${trimmed.slice(-3)}`;
-}
+export { maskPhone };
 
 export function serializeMemberPinDelivery(delivery: MemberPinDeliveryPublic) {
   return {

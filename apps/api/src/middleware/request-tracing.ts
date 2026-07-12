@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
+import { redactUrlForLogs } from "../lib/privacy";
 
 const traceHeaderCandidates = ["x-request-id", "x-correlation-id"] as const;
 
@@ -39,7 +40,7 @@ export function requestTracingMiddleware(req: Request, res: Response, next: Next
       event: "api.request.completed",
       traceId,
       method: req.method,
-      path: req.originalUrl,
+      path: redactUrlForLogs(req.originalUrl),
       statusCode: res.statusCode,
       durationMs: Math.round(durationMs),
       userId: req.user?.id,

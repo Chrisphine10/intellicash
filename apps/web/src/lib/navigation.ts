@@ -7,6 +7,7 @@ import {
   FileText,
   FolderKanban,
   Landmark,
+  LifeBuoy,
   LockKeyhole,
   Megaphone,
   Settings,
@@ -22,7 +23,8 @@ export const navigationSections = [
   { key: "main", label: "Main" },
   { key: "work", label: "Work" },
   { key: "review", label: "Review" },
-  { key: "setup", label: "Setup" }
+  { key: "setup", label: "Setup" },
+  { key: "resources", label: "Resources" }
 ] as const;
 
 type NavigationSectionKey = (typeof navigationSections)[number]["key"];
@@ -177,6 +179,14 @@ export const navigationItems: NavigationItem[] = [
     roles: ["IWL_ADMIN"],
     section: "setup",
     priority: { default: 50, IWL_ADMIN: 50 }
+  },
+  {
+    label: "Help & Docs",
+    href: "/dashboard/help-support",
+    icon: LifeBuoy,
+    roles: allRoles,
+    section: "resources",
+    priority: { default: 10 }
   }
 ];
 

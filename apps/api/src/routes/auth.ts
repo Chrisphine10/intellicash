@@ -6,6 +6,7 @@ import { appendAuditEvent } from "../services/audit-service";
 import {
   createSession,
   requireAuth,
+  resolveUserFromRequest,
   serializeExpiredSessionCookie,
   serializeSessionCookie
 } from "../middleware/auth";
@@ -108,19 +109,25 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
-router.post("/logout", requireAuth(), async (req, res, next) => {
+router.post("/logout", async (req, res, next) => {
   try {
+    // Logout is idempotent and best-effort: resolve the current session if one
+    // exists, but always clear the cookie and return success even when the
+    // caller is already unauthenticated (expired/cleared session). This avoids
+    // a spurious 401 on a fire-and-forget client logout.
+    const user = await resolveUserFromRequest(req);
+
     if (req.sessionTokenHash) {
       await prisma.session.deleteMany({ where: { tokenHash: req.sessionTokenHash } });
     }
 
-    if (req.user) {
+    if (user) {
       await appendAuditEvent({
-        actorUserId: req.user.id,
+        actorUserId: user.id,
         entityType: "USER",
-        entityId: req.user.id,
+        entityId: user.id,
         type: "AUTH_LOGOUT",
-        payload: { email: req.user.email }
+        payload: { email: user.email }
       });
     }
 

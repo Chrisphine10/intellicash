@@ -2604,6 +2604,20 @@ describe("Intellicash API", () => {
     expect(visibleMembers.body.data[0].fullName).toBe("Mary Njeri");
     const memberId = visibleMembers.body.data[0].id;
 
+    // Member contact protection: an operational group account sees full member
+    // phone numbers; an oversight partner account sees the same roster with
+    // phones masked, and names are never masked. (DATA_PROTECTION.md §3.7)
+    const groupRoster = await groupAgent.get(`/api/v1/groups/${groupId}/members`).expect(200);
+    const partnerRoster = await partnerAgent.get(`/api/v1/groups/${groupId}/members`).expect(200);
+    const groupMemberRow = groupRoster.body.data.find((row: { id: string }) => row.id === memberId);
+    const partnerMemberRow = partnerRoster.body.data.find((row: { id: string }) => row.id === memberId);
+
+    expect(groupMemberRow.phone).toMatch(/^\+?\d{5,}$/);
+    expect(groupMemberRow.phone).not.toContain("*");
+    expect(partnerMemberRow.phone).toContain("*");
+    expect(partnerMemberRow.phone).not.toBe(groupMemberRow.phone);
+    expect(partnerMemberRow.fullName).toBe(groupMemberRow.fullName);
+
     const visibleLedger = await memberAgent.get(`/api/v1/groups/${groupId}/ledger`).expect(200);
     expect(visibleLedger.body.data.length).toBeGreaterThan(0);
     expect(

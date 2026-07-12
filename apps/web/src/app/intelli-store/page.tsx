@@ -75,6 +75,7 @@ export default function IntelliStorePage() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -107,9 +108,20 @@ export default function IntelliStorePage() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle("modal-open", isBookingOpen);
+    document.body.classList.toggle("modal-open", isBookingOpen || isCartOpen);
     return () => document.body.classList.remove("modal-open");
-  }, [isBookingOpen]);
+  }, [isBookingOpen, isCartOpen]);
+
+  useEffect(() => {
+    if (!isCartOpen) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsCartOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isCartOpen]);
 
   const totals = useMemo(
     () =>
@@ -371,14 +383,54 @@ export default function IntelliStorePage() {
             ) : null}
           </section>
 
-          <aside className="store-cart-panel" aria-label="Cart">
+        </div>
+
+        <button
+          aria-label={`Open cart, ${totals.quantity} item${totals.quantity === 1 ? "" : "s"}`}
+          className="store-cart-fab"
+          onClick={() => setIsCartOpen(true)}
+          type="button"
+        >
+          <ShoppingCart size={20} />
+          <span className="store-cart-fab-copy">
+            <strong>Cart</strong>
+            {totals.quantity > 0 ? <em>{formatKes(totals.amountCents)}</em> : null}
+          </span>
+          {totals.quantity > 0 ? (
+            <span className="store-cart-fab-badge" key={totals.quantity}>
+              {totals.quantity}
+            </span>
+          ) : null}
+        </button>
+
+        {isCartOpen ? (
+        <div className="store-cart-drawer-root" role="dialog" aria-modal="true" aria-label="Cart">
+          <button
+            aria-label="Close cart"
+            className="store-cart-backdrop"
+            onClick={() => setIsCartOpen(false)}
+            type="button"
+          />
+          <aside className="store-cart-panel store-cart-drawer">
             <header>
               <div>
                 <p className="eyebrow">Cart</p>
                 <h2>{totals.quantity} item{totals.quantity === 1 ? "" : "s"}</h2>
               </div>
               <span className="pill">{formatKes(totals.amountCents)}</span>
+              <button
+                aria-label="Close cart"
+                className="icon-button"
+                onClick={() => setIsCartOpen(false)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
             </header>
+
+            {message ? (
+              <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
+            ) : null}
 
             <div className="cart-line-list">
               {cart.map((item) => {
@@ -489,6 +541,17 @@ export default function IntelliStorePage() {
                   />
                 </label>
               </div>
+              <label className="consent-check">
+                <input required type="checkbox" />
+                <span>
+                  I consent to Intelli-Cash using these details to review this
+                  request and arrange delivery, as described in the{" "}
+                  <a href="/privacy" rel="noopener noreferrer" target="_blank">
+                    privacy notice
+                  </a>
+                  .
+                </span>
+              </label>
               <button className="button" disabled={saving || cart.length === 0} type="submit">
                 <Send size={16} />
                 {saving ? "Submitting" : "Submit cart request"}
@@ -496,6 +559,7 @@ export default function IntelliStorePage() {
             </form>
           </aside>
         </div>
+        ) : null}
 
         <section className="store-distribution-band" aria-label="Bookable VA and CBT support">
           <header>
@@ -601,6 +665,17 @@ export default function IntelliStorePage() {
                   />
                 </label>
               </div>
+              <label className="consent-check">
+                <input required type="checkbox" />
+                <span>
+                  I consent to Intelli-Cash using these details to arrange this
+                  booking, as described in the{" "}
+                  <a href="/privacy" rel="noopener noreferrer" target="_blank">
+                    privacy notice
+                  </a>
+                  .
+                </span>
+              </label>
               <div className="credential-actions">
                 <button className="button" disabled={saving} type="submit">
                   {saving ? "Submitting" : "Submit booking"}

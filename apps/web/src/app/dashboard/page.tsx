@@ -3,6 +3,7 @@
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -331,6 +332,7 @@ function DashboardDataCard({
 }
 
 export default function DashboardOverviewPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [groups, setGroups] = useState<GroupRow[]>([]);
@@ -390,6 +392,15 @@ export default function DashboardOverviewPage() {
         setLedger(ledgerResponse);
         setStoreRequests(storeRequestResponse);
       } catch (overviewError) {
+        if (
+          overviewError instanceof Error &&
+          "status" in overviewError &&
+          (overviewError as { status: number }).status === 401
+        ) {
+          router.push("/login");
+          return;
+        }
+
         if (mounted) {
           setError(overviewError instanceof Error ? overviewError.message : "Dashboard failed");
         }
@@ -402,7 +413,7 @@ export default function DashboardOverviewPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
   const activeGroups = useMemo(
     () => groups.filter((group) => group.phase !== "POST_GRADUATION").length,

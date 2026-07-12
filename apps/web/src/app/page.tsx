@@ -16,17 +16,17 @@ import {
   Leaf,
   Mail,
   MapPinned,
-  Megaphone,
-  Network,
+  MegaphoneHornIcon,
+  NetworkNodesIcon,
   PackagePlus,
   Phone,
-  Rocket,
+  RocketLaunchIcon,
   Send,
   ShieldCheck,
   ShoppingBag,
   Smartphone,
   Sprout,
-  TrendingUp,
+  TrendingUpChartIcon,
   UsersRound
 } from "@/lib/theme-icons";
 import { PublicSiteFooter } from "../components/public-site-footer";
@@ -62,21 +62,21 @@ const illustrationIcons: Record<
 > = {
   ai: Bot,
   banking: Building2,
-  champions: Rocket,
+  champions: RocketLaunchIcon,
   enterprise: Leaf,
   finance: HandCoins,
   groups: UsersRound,
-  growth: TrendingUp,
+  growth: TrendingUpChartIcon,
   lenders: Banknote,
   map: MapPinned,
-  marketing: Megaphone,
+  marketing: MegaphoneHornIcon,
   package: PackagePlus,
   partners: Landmark,
   payments: Smartphone,
   reports: ClipboardList,
   training: CalendarCheck,
   trust: ShieldCheck,
-  web3: Network
+  web3: NetworkNodesIcon
 };
 
 const operatingSignals = [
@@ -393,6 +393,8 @@ export default function LandingPage() {
           showAccessLinks={false}
         />
 
+        <HeroOrbitMotif />
+
         <div className="landing-hero-content">
           <p className="eyebrow">Digital Championship Platform</p>
           <h1>Intelli-Cash</h1>
@@ -425,10 +427,22 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="hero-metrics" aria-label="Platform highlights">
-            <span>Digital championship</span>
-            <span>VSLAs, Chamas, credit unions</span>
-            <span>Green enterprise finance</span>
-            <span>AI + digital marketing</span>
+            <span>
+              <RocketLaunchIcon size={15} />
+              Digital championship
+            </span>
+            <span>
+              <UsersRound size={15} />
+              VSLAs, Chamas, credit unions
+            </span>
+            <span>
+              <Leaf size={15} />
+              Green enterprise finance
+            </span>
+            <span>
+              <Bot size={15} />
+              AI + digital marketing
+            </span>
           </div>
         </div>
         <div className="landing-hero-scene" aria-hidden="true">
@@ -793,6 +807,47 @@ export default function LandingPage() {
 
       <PublicSiteFooter playStoreUrl={playStoreUrl} showAccessLinks={false} />
     </main>
+  );
+}
+
+const ORBIT_MEMBER_COUNT = 12;
+const ORBIT_RADIUS = 168;
+const ORBIT_CENTER = 200;
+
+const orbitNodes = Array.from({ length: ORBIT_MEMBER_COUNT }, (_, index) => {
+  const angle = (index / ORBIT_MEMBER_COUNT) * Math.PI * 2 - Math.PI / 2;
+  return {
+    isPot: index === 0,
+    x: ORBIT_CENTER + ORBIT_RADIUS * Math.cos(angle),
+    y: ORBIT_CENTER + ORBIT_RADIUS * Math.sin(angle)
+  };
+});
+
+/**
+ * Decorative backdrop for the hero: a ring of member nodes orbiting a shared
+ * pot, standing in for the rotating-contribution cycle at the heart of a
+ * VSLA/Chama meeting. Purely atmospheric (aria-hidden), so it never competes
+ * with the real product screenshots layered above it.
+ */
+function HeroOrbitMotif() {
+  return (
+    <div aria-hidden="true" className="landing-hero-motif">
+      <svg className="hero-orbit-motif" viewBox="0 0 400 400">
+        <circle className="hero-orbit-ring" cx={ORBIT_CENTER} cy={ORBIT_CENTER} r={ORBIT_RADIUS} />
+        <circle className="hero-orbit-core" cx={ORBIT_CENTER} cy={ORBIT_CENTER} r={46} />
+        <g className="hero-orbit-nodes">
+          {orbitNodes.map((node, index) => (
+            <circle
+              className={`hero-orbit-node${node.isPot ? " is-pot" : ""}`}
+              cx={node.x}
+              cy={node.y}
+              key={index}
+              r={node.isPot ? 9 : 5}
+            />
+          ))}
+        </g>
+      </svg>
+    </div>
   );
 }
 

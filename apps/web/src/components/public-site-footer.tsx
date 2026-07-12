@@ -16,7 +16,8 @@ const footerLinks = [
   { label: "Partners", href: "/partners" },
   { label: "Projects", href: "/partners#projects" },
   { label: "Request access", href: "/partners#signup" },
-  { label: "Contact us", href: "/contact" }
+  { label: "Contact us", href: "/contact" },
+  { label: "Privacy notice", href: "/privacy" }
 ];
 
 const accessLinks = [

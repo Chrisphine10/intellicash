@@ -996,9 +996,37 @@ async function createCreditRequestFromPayload({
   });
 }
 
+// Anonymous visitors only need organization names and coverage data. Contact
+// people, phone numbers, and emails of suppliers, partners, and VA / CBT
+// agents stay behind authenticated, role-scoped endpoints (DATA_PROTECTION.md).
+const publicPartnerSelect = {
+  id: true,
+  name: true,
+  type: true,
+  status: true,
+  county: true
+} satisfies Prisma.PartnerSelect;
+
+const publicAgentSelect = {
+  id: true,
+  name: true,
+  county: true,
+  location: true,
+  status: true,
+  programmeId: true
+} satisfies Prisma.VillageAgentSelect;
+
 function publicProductInclude(): Prisma.StoreProductInclude {
   return {
-    supplier: true,
+    supplier: {
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        county: true,
+        location: true
+      }
+    },
     programmeLinks: {
       where: {
         programme: { publicStatus: "ONGOING" }
@@ -1006,8 +1034,11 @@ function publicProductInclude(): Prisma.StoreProductInclude {
       include: {
         programme: {
           include: {
-            partner: true,
-            partnerLinks: { include: { partner: true }, orderBy: { role: "asc" } },
+            partner: { select: publicPartnerSelect },
+            partnerLinks: {
+              include: { partner: { select: publicPartnerSelect } },
+              orderBy: { role: "asc" }
+            },
             _count: {
               select: {
                 groups: true,
@@ -1018,7 +1049,7 @@ function publicProductInclude(): Prisma.StoreProductInclude {
           }
         },
         defaultAgents: {
-          include: { villageAgent: true },
+          include: { villageAgent: { select: publicAgentSelect } },
           orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }]
         }
       },
@@ -1048,8 +1079,9 @@ router.get("/public/intelli-store", async (_req, res, next) => {
           programme: { publicStatus: "ONGOING" }
         },
         orderBy: [{ county: "asc" }, { name: "asc" }],
-        include: {
-          programme: { include: { partner: true } },
+        select: {
+          ...publicAgentSelect,
+          programme: { include: { partner: { select: publicPartnerSelect } } },
           groups: {
             select: {
               id: true,
@@ -1096,7 +1128,16 @@ router.post("/public/intelli-store/credit-requests", async (req, res, next) => {
       payload: creditRequest
     });
 
-    ok(res.status(201), creditRequest);
+    // Anonymous callers get their confirmation without the embedded agent,
+    // financier, or supplier contact records (staff PII stays internal).
+    const { distributionAgent, financierPartner, requester, product, programme, ...confirmation } =
+      creditRequest;
+
+    ok(res.status(201), {
+      ...confirmation,
+      product: { id: product.id, name: product.name, slug: product.slug },
+      programme: { id: programme.id, name: programme.name }
+    });
   } catch (error) {
     next(error);
   }
@@ -1210,7 +1251,15 @@ router.post("/public/intelli-store/booking-requests", async (req, res, next) => 
       payload: bookingRequest
     });
 
-    ok(res.status(201), bookingRequest);
+    // Anonymous callers get their confirmation without the agent's contact
+    // record; the agent name is enough for the booking acknowledgement.
+    const { villageAgent, programme: bookedProgramme, ...bookingConfirmation } = bookingRequest;
+
+    ok(res.status(201), {
+      ...bookingConfirmation,
+      villageAgent: villageAgent ? { id: villageAgent.id, name: villageAgent.name } : null,
+      programme: bookedProgramme ? { id: bookedProgramme.id, name: bookedProgramme.name } : null
+    });
   } catch (error) {
     next(error);
   }

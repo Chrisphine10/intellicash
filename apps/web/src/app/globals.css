@@ -1046,7 +1046,7 @@ button {
   max-width: min(340px, calc(100vw - 48px));
   border: 1px solid rgba(6, 63, 32, 0.14);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   box-shadow: 0 18px 42px rgba(8, 15, 11, 0.16);
   color: var(--ink);
   padding: 9px 10px;
@@ -1823,7 +1823,7 @@ tr:last-child td {
   min-height: 26px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--muted);
   padding: 0 9px;
   font-size: 11px;
@@ -1885,7 +1885,7 @@ tr:last-child td {
 }
 
 .passbook-transactions-table {
-  background: #ffffff;
+  background: var(--surface-raised);
 }
 
 .amount-cell {
@@ -2170,7 +2170,7 @@ tr:last-child td {
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--muted);
   padding: 0 9px;
   font-size: 12px;
@@ -2301,7 +2301,7 @@ tr:last-child td {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
   min-height: 132px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 9px;
 }
 
@@ -2443,7 +2443,7 @@ tr:last-child td {
 
 .meeting-calendar-day-view {
   border-top: 1px solid var(--line);
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 10px;
 }
 
@@ -2806,7 +2806,7 @@ tr:last-child td {
   min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 0 12px;
 }
@@ -2880,7 +2880,7 @@ tr:last-child td {
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface-raised);
   color: var(--ink);
   cursor: pointer;
   padding: 10px 12px;
@@ -3083,7 +3083,7 @@ tr:last-child td {
   width: fit-content;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 4px;
   box-shadow: var(--shadow);
 }
@@ -3124,7 +3124,7 @@ tr:last-child td {
   gap: 5px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 12px;
   text-align: left;
@@ -3156,7 +3156,7 @@ tr:last-child td {
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 12px;
 }
 
@@ -3181,7 +3181,7 @@ tr:last-child td {
 .permission-domain {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   overflow: hidden;
 }
 
@@ -3257,7 +3257,7 @@ tr:last-child td {
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--green-700);
   padding: 0 10px;
   font-size: 12px;
@@ -3285,7 +3285,7 @@ tr:last-child td {
   min-height: 58px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 10px;
   transition:
     border-color 140ms ease,
@@ -3400,7 +3400,7 @@ tr:last-child td {
   min-height: 96px;
   border: 1px solid var(--line);
   border-right: 0;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 12px;
 }
 
@@ -3422,7 +3422,7 @@ tr:last-child td {
   height: 18px;
   border-top: 1px solid var(--line);
   border-right: 1px solid var(--line);
-  background: #ffffff;
+  background: var(--surface-raised);
   content: "";
   transform: translateY(-50%) rotate(45deg);
 }
@@ -3632,7 +3632,7 @@ tr:last-child td {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 10px;
 }
 
@@ -4175,7 +4175,7 @@ tr:last-child td {
   min-height: 78px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 12px;
   text-align: left;
@@ -4251,7 +4251,7 @@ tr:last-child td {
   overflow-x: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 8px;
   box-shadow: none;
 }
@@ -4274,7 +4274,7 @@ tr:last-child td {
   min-height: 100px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 12px;
   text-align: left;
@@ -4628,7 +4628,7 @@ tr:last-child td {
   max-width: 108px;
   border: 1px solid rgba(0, 138, 58, 0.24);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--green-dark);
   padding: 5px 8px;
   box-shadow: 0 10px 22px rgba(8, 15, 11, 0.12);
@@ -4678,7 +4678,7 @@ tr:last-child td {
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 12px;
 }
 
@@ -4718,7 +4718,7 @@ tr:last-child td {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 10px;
 }
@@ -4806,7 +4806,7 @@ tr:last-child td {
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   color: var(--ink);
   padding: 10px 12px;
 }
@@ -4836,7 +4836,7 @@ tr:last-child td {
   max-width: min(860px, 100%);
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 12px;
 }
 
@@ -4866,7 +4866,7 @@ tr:last-child td {
 .notice {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-raised);
   padding: 12px 14px;
   font-size: 13px;
   font-weight: 800;
@@ -7453,7 +7453,7 @@ tr:last-child td {
     height: 38px;
     margin-left: auto;
     border-color: rgba(255, 255, 255, 0.42);
-    background: #ffffff;
+    background: var(--surface-raised);
     color: var(--green-deep);
   }
 
@@ -7806,5 +7806,175 @@ html[data-theme="dark"] .credential-field em.warning {
   border-color: rgba(242, 185, 77, 0.28);
   background: rgba(242, 185, 77, 0.12);
   color: var(--gold);
+}
+
+/* ==========================================================================
+   Dark-mode: status pills and tinted secondary surfaces. These used
+   hardcoded light tints (#eef3ee, #eef2f3, #f8fbf9, …) that left their
+   token-colored text invisible on the dark ground. Give each a translucent
+   accent (pills) or a proper dark surface token (panels) so content stays
+   legible in both themes.
+   ========================================================================== */
+html[data-theme="dark"] .pill {
+  background: rgba(66, 233, 121, 0.16);
+  color: var(--green-dark);
+}
+
+html[data-theme="dark"] .pill.blue,
+html[data-theme="dark"] .system-list-meta small,
+html[data-theme="dark"] .report-tile-footer small {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .pill.gold {
+  background: rgba(242, 185, 77, 0.18);
+  color: var(--gold);
+}
+
+html[data-theme="dark"] .pill.red {
+  background: rgba(220, 90, 90, 0.22);
+  color: #ff9d9d;
+}
+
+html[data-theme="dark"] .role-picker-list,
+html[data-theme="dark"] .permission-toggle,
+html[data-theme="dark"] .permission-toggle-grid,
+html[data-theme="dark"] .account-scope-line span,
+html[data-theme="dark"] .sub-menu {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .role-picker-list button,
+html[data-theme="dark"] .dashboard-module-link,
+html[data-theme="dark"] .hierarchy-flow > div,
+html[data-theme="dark"] .hierarchy-flow > div:not(:last-child)::after {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .role-picker-list button.active {
+  border-color: var(--green);
+  background: var(--surface-tint);
+}
+
+html[data-theme="dark"] .account-scope-line span {
+  color: var(--green-dark);
+}
+
+html[data-theme="dark"] .pwa-splash-screen {
+  background:
+    radial-gradient(circle at center, rgba(66, 233, 121, 0.12), transparent 34%),
+    var(--bg);
+}
+
+/* ==========================================================================
+   Help & Docs page. Built on theme tokens only, so both light and dark
+   themes are covered without dedicated overrides.
+   ========================================================================== */
+.docs-intro {
+  margin-bottom: 20px;
+}
+
+.docs-lead {
+  margin: 12px 0 0;
+  max-width: 760px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.docs-section {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.docs-section-head h3 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.docs-steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: docs-step;
+}
+
+.docs-steps li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-theme-xs);
+}
+
+.docs-step-number {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-tint);
+  color: var(--green-dark);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.docs-steps li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.docs-steps li strong {
+  font-size: 15px;
+}
+
+.docs-steps li span {
+  color: var(--muted-strong, var(--muted));
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.docs-role-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  padding: 4px 16px;
+  box-shadow: var(--shadow-theme-xs);
+}
+
+.docs-guide-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.docs-guide-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.docs-guide-footer .pill {
+  max-width: 100%;
+}
+
+.docs-faq {
+  max-width: none;
+  margin: 0;
 }
 

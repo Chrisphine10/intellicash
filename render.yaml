@@ -6,7 +6,9 @@ services:
     rootDir: .
     buildCommand: npm install --include=dev && npm run db:generate && npm run build:api
     startCommand: npm run start:api
-    initialDeployHook: npm run db:seed:env -w @intellicash/api
+    # Runs after build, before the new version serves traffic (Starter+ plans).
+    # Idempotent: seeds only when the database is empty, so it is safe on every deploy.
+    preDeployCommand: npm run db:seed:if-empty -w @intellicash/api
     healthCheckPath: /health
     disk:
       name: intellicash-data

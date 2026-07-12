@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { demoAccounts, demoPassword } from "@intellicash/shared";
 import AccountPage from "../src/app/dashboard/account/page";
 import ApiDocsPage from "../src/app/dashboard/api-docs/page";
+import HelpDocsPage from "../src/app/dashboard/help-support/page";
 import DashboardOverviewPage from "../src/app/dashboard/page";
 import MemberPassbookPage from "../src/app/dashboard/passbook/page";
 import IntelliAuditPage from "../src/app/dashboard/intelliaudit/page";
@@ -63,6 +64,43 @@ describe("web smoke helpers", () => {
     expect(screen.getByText("SMS")).toBeInTheDocument();
   });
 
+  it("exposes a Help & Docs item to every role in the Resources section", () => {
+    const helpItem = navigationItems.find((item) => item.href === "/dashboard/help-support");
+
+    expect(helpItem).toEqual(
+      expect.objectContaining({ label: "Help & Docs", section: "resources" })
+    );
+    expect(new Set(helpItem?.roles)).toEqual(
+      new Set(["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY"])
+    );
+
+    for (const role of ["IWL_ADMIN", "GROUP_ACCOUNT", "MEMBER", "LENDER", "PARTNER_OFFICER", "READ_ONLY"] as const) {
+      expect(getNavigationItemsForRole(role).map((item) => item.label)).toContain("Help & Docs");
+    }
+  });
+
+  it("renders the Help & Docs guide with getting-started steps and feature links", () => {
+    render(<HelpDocsPage />);
+
+    expect(screen.getByRole("heading", { name: "How to use Intelli-Cash" })).toBeInTheDocument();
+    expect(screen.getByText("Four steps to get going")).toBeInTheDocument();
+    expect(screen.getByText("Sign in")).toBeInTheDocument();
+    expect(screen.getByText("Work offline when needed")).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: /Open Intelli-Store/i })).toHaveAttribute(
+      "href",
+      "/dashboard/intelli-store"
+    );
+    expect(screen.getByRole("link", { name: /Open reports/i })).toHaveAttribute("href", "/dashboard/reports");
+
+    expect(screen.getByText("Does Intelli-Cash work without internet?")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /support@intellicash\.co\.ke/i })).toHaveAttribute(
+      "href",
+      "mailto:support@intellicash.co.ke"
+    );
+    expect(screen.getByRole("link", { name: /Read privacy notice/i })).toHaveAttribute("href", "/privacy");
+  });
+
   it("scopes the API Docs navigation item to admins", () => {
     const apiDocs = navigationItems.find((item) => item.href === "/dashboard/api-docs");
 
@@ -87,7 +125,8 @@ describe("web smoke helpers", () => {
       "My Group",
       "Meetings",
       "Intelli-Store",
-      "Reports"
+      "Reports",
+      "Help & Docs"
     ]);
     expect(groupItems.map((item) => item.href)).toContain("/dashboard/groups");
     expect(groupItems.map((item) => item.label)).not.toContain("Payments");
@@ -111,7 +150,8 @@ describe("web smoke helpers", () => {
       "SMS",
       "Integrations",
       "API Docs",
-      "Settings"
+      "Settings",
+      "Help & Docs"
     ]);
     expect(getNavigationItemsForRole("PARTNER_OFFICER").map((item) => item.label)).toEqual([
       "Dashboard",
@@ -121,21 +161,24 @@ describe("web smoke helpers", () => {
       "VA / CBT",
       "Partners",
       "Intelli-Store",
-      "Reports"
+      "Reports",
+      "Help & Docs"
     ]);
     expect(getNavigationItemsForRole("MEMBER").map((item) => item.label)).toEqual([
       "Dashboard",
       "Passbook",
       "Meetings",
       "Intelli-Store",
-      "Programs"
+      "Programs",
+      "Help & Docs"
     ]);
     expect(getNavigationItemsForRole("LENDER").map((item) => item.label)).toEqual([
       "Dashboard",
       "Programs",
       "Groups",
       "Intelli-Store",
-      "Reports"
+      "Reports",
+      "Help & Docs"
     ]);
     expect(getNavigationItemsForRole("READ_ONLY").map((item) => item.label)).toEqual([
       "Dashboard",
@@ -145,7 +188,8 @@ describe("web smoke helpers", () => {
       "Partners",
       "VA / CBT",
       "Intelli-Store",
-      "Reports"
+      "Reports",
+      "Help & Docs"
     ]);
   });
 
@@ -157,7 +201,8 @@ describe("web smoke helpers", () => {
       "Passbook",
       "Meetings",
       "Intelli-Store",
-      "Programs"
+      "Programs",
+      "Help & Docs"
     ]);
   });
 
@@ -180,7 +225,8 @@ describe("web smoke helpers", () => {
       "SMS",
       "Integrations",
       "API Docs",
-      "Settings"
+      "Settings",
+      "Help & Docs"
     ]);
   });
 
@@ -294,7 +340,7 @@ describe("web smoke helpers", () => {
     fireEvent.click(profileButton);
     expect(screen.getByRole("menuitem", { name: /Account/i })).toHaveAttribute("href", "/dashboard/account");
     expect(screen.queryByRole("menuitem", { name: /Settings/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Help & Support/i })).toHaveAttribute("href", "/dashboard/help-support");
+    expect(screen.getByRole("menuitem", { name: /Help & Docs/i })).toHaveAttribute("href", "/dashboard/help-support");
 
     fireEvent.click(notificationButton);
 

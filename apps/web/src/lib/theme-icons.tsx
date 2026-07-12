@@ -577,3 +577,72 @@ export const WifiOff = AlertIcon;
 export const X = CloseIcon;
 export const XCircle = CloseIcon;
 export const Moon = MoonIcon;
+
+/**
+ * Dedicated marketing-site icons.
+ *
+ * The lucide-compatible aliases above intentionally reuse a small set of
+ * base glyphs (e.g. Rocket/Bot both render ShootingStarIcon, TrendingUp
+ * renders a plain arrow). That's fine for dense dashboard chrome, but the
+ * public landing page uses each glyph at a large, standalone size where the
+ * mismatch and duplication are obvious. These are purpose-drawn instead of
+ * reusing an unrelated alias, and are exported separately so dashboard
+ * screens keep their existing icon shapes.
+ */
+export const RocketLaunchIcon = createIcon(
+  "0 0 24 24",
+  <>
+    <path
+      d="M12 3.25c2.85 1.8 4.6 5.05 4.6 8.65 0 2.1-.58 3.84-1.32 5.28l-.9 1.58a.95.95 0 0 1-.83.49h-3.1a.95.95 0 0 1-.83-.49l-.9-1.58C7.98 15.74 7.4 14 7.4 11.9c0-3.6 1.75-6.85 4.6-8.65Z"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+    />
+    <circle cx="12" cy="10.75" r="1.75" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M7.4 13.9 5.2 15.1a1 1 0 0 0-.5 1.02l.42 2.55L7.6 16.6M16.6 13.9l2.2 1.2a1 1 0 0 1 .5 1.02l-.42 2.55-2.48-2.07"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+    />
+    <path d="M10.1 19.75c0 1.02.85 1.85 1.9 1.85s1.9-.83 1.9-1.85" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+  </>
+);
+
+export const MegaphoneHornIcon = createIcon(
+  "0 0 24 24",
+  <>
+    <path
+      d="M4.75 9.9h2.1l8.65-4.32a.9.9 0 0 1 1.3.8v11.24a.9.9 0 0 1-1.3.81L6.85 14.1h-2.1A1.1 1.1 0 0 1 3.65 13v-1.99a1.1 1.1 0 0 1 1.1-1.1Z"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+    />
+    <path d="M8.3 14.1l.95 3.85a1.1 1.1 0 0 0 1.07.84h.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    <path d="M18.75 9.35c.85.72 1.35 1.68 1.35 2.65s-.5 1.93-1.35 2.65" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+  </>
+);
+
+export const TrendingUpChartIcon = createIcon(
+  "0 0 24 24",
+  <path
+    d="M3.75 16.75 9 11l3.5 2.75 7.25-7.75M15.75 5.75h4.25v4.25"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="1.6"
+  />
+);
+
+export const NetworkNodesIcon = createIcon(
+  "0 0 24 24",
+  <>
+    <path d="M7.6 8.35 11.15 15M16.4 8.35 12.85 15M8.15 6.85h7.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    <circle cx="6" cy="6.85" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="18" cy="6.85" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="17.15" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+  </>
+);

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit } from "next/font/google";
+import { Fraunces, Outfit } from "next/font/google";
 import "./globals.css";
 import "./styles/public-site.css";
 import "./styles/meeting-entry.css";
@@ -7,6 +7,14 @@ import "./styles/meeting-entry.css";
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
+  display: "swap"
+});
+
+// Editorial display face for the public marketing site headlines only
+// (see public-site.css). Dashboard/app-shell typography is untouched.
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
   display: "swap"
 });
 
@@ -60,7 +68,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={outfit.variable} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
         <meta name="mobile-web-app-capable" content="yes" />

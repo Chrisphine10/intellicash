@@ -97,6 +97,14 @@ function responseTraceId(response: Response, payload: ApiPayload | null, fallbac
 function logClientApiError(error: ApiClientError) {
   if (process.env.NODE_ENV === "test") return;
 
+  // 401s are expected, routine control flow here: every dashboard page (and
+  // the shell) probes /auth/me on mount to decide whether to redirect to
+  // /login, so an unauthenticated visit always produces one. Logging it as a
+  // console.error trips Next's dev-mode red overlay for something that isn't
+  // a bug. Genuine failures still throw ApiClientError and are handled by
+  // the caller (inline error state or a login redirect) either way.
+  if (error.status === 401) return;
+
   console.error("[intellicash-api]", {
     status: error.status,
     code: error.code,
