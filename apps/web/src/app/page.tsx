@@ -269,8 +269,8 @@ const secondaryPlatformScreenshots = [
 ];
 
 const supportEmail = "support@intellicash.co.ke";
-const supportPhone = "+254 700 000 000";
-const supportPhoneHref = "tel:+254700000000";
+const supportPhone = "+254 768 706 799";
+const supportPhoneHref = "tel:+254768706799";
 
 // NOTE: Illustrative testimonials by role only (no named people/organizations).
 // TODO: Replace with real, attributed and consented quotes before public launch.
