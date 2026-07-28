@@ -1,4 +1,11 @@
 import React from "react";
+import {
+  FIELD_SUPPORT_EMAIL_HREF,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_HREF,
+  SUPPORT_PHONE,
+  SUPPORT_PHONE_HREF
+} from "@/lib/contact";
 import Link from "next/link";
 import {
   Activity,
@@ -257,7 +264,7 @@ export default function HelpDocsPage() {
               </div>
               <Mail size={18} />
             </header>
-            <a className="button" href="mailto:support@intellicash.co.ke">
+            <a className="button" href={SUPPORT_EMAIL_HREF}>
               <Mail size={16} />
               support@intellicash.co.ke
             </a>
@@ -271,9 +278,9 @@ export default function HelpDocsPage() {
               </div>
               <Phone size={18} />
             </header>
-            <a className="button secondary" href="tel:+254700000000">
+            <a className="button secondary" href={SUPPORT_PHONE_HREF}>
               <Phone size={16} />
-              +254 700 000 000
+              {SUPPORT_PHONE}
             </a>
           </article>
 

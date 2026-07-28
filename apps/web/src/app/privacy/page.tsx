@@ -1,4 +1,11 @@
 import React from "react";
+import {
+  FIELD_SUPPORT_EMAIL_HREF,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_HREF,
+  SUPPORT_PHONE,
+  SUPPORT_PHONE_HREF
+} from "@/lib/contact";
 import type { Metadata } from "next";
 import { PublicSiteFooter } from "../../components/public-site-footer";
 import { PublicSiteHeader } from "../../components/public-site-header";
@@ -126,8 +133,8 @@ export default function PrivacyPage() {
         </div>
         <p className="section-footnote">
           To exercise any of these rights, contact{" "}
-          <a href="mailto:support@intellicash.co.ke">support@intellicash.co.ke</a> or call{" "}
-          <a href="tel:+254700000000">+254 700 000 000</a>. We respond within 14 days. Retention:
+          <a href={SUPPORT_EMAIL_HREF}>{SUPPORT_EMAIL}</a> or call{" "}
+          <a href={SUPPORT_PHONE_HREF}>{SUPPORT_PHONE}</a>. We respond within 14 days. Retention:
           public store and booking requests are kept for 24 months after closure; group financial
           records are kept for the life of the group plus statutory retention periods; server logs
           are kept for 90 days.

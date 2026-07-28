@@ -1,4 +1,11 @@
 import React from "react";
+import {
+  FIELD_SUPPORT_EMAIL_HREF,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_HREF,
+  SUPPORT_PHONE,
+  SUPPORT_PHONE_HREF
+} from "@/lib/contact";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -27,22 +34,22 @@ const contactChannels = [
   {
     title: "Email",
     text: "Send group, partner, lender, or support questions.",
-    value: "support@intellicash.co.ke",
-    href: "mailto:support@intellicash.co.ke",
+    value: SUPPORT_EMAIL,
+    href: SUPPORT_EMAIL_HREF,
     icon: Mail
   },
   {
     title: "Phone",
     text: "Call or message the Intelli-Cash service desk.",
-    value: "+254 700 000 000",
-    href: "tel:+254700000000",
+    value: SUPPORT_PHONE,
+    href: SUPPORT_PHONE_HREF,
     icon: Phone
   },
   {
     title: "Field support",
     text: "Coordinate village agent visits and digital championship onboarding.",
     value: "Kenya field operations",
-    href: "mailto:support@intellicash.co.ke?subject=Field%20support%20request",
+    href: FIELD_SUPPORT_EMAIL_HREF,
     icon: MapPinned
   }
 ];
@@ -128,7 +135,7 @@ export default function ContactPage() {
           </div>
 
           <form
-            action="mailto:support@intellicash.co.ke"
+            action={SUPPORT_EMAIL_HREF}
             className="contact-form-panel"
             encType="text/plain"
             method="post"
@@ -163,7 +170,7 @@ export default function ContactPage() {
                 Send inquiry
                 <Send size={16} />
               </button>
-              <a className="button secondary" href="tel:+254700000000">
+              <a className="button secondary" href={SUPPORT_PHONE_HREF}>
                 Call support
                 <Phone size={16} />
               </a>

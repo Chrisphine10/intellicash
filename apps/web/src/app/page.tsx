@@ -1,4 +1,11 @@
 import React from "react";
+import {
+  FIELD_SUPPORT_EMAIL_HREF,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_HREF,
+  SUPPORT_PHONE,
+  SUPPORT_PHONE_HREF
+} from "@/lib/contact";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -268,9 +275,6 @@ const secondaryPlatformScreenshots = [
   }
 ];
 
-const supportEmail = "support@intellicash.co.ke";
-const supportPhone = "+254 768 706 799";
-const supportPhoneHref = "tel:+254768706799";
 
 // NOTE: Illustrative testimonials by role only (no named people/organizations).
 // TODO: Replace with real, attributed and consented quotes before public launch.
@@ -787,17 +791,17 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="contact-band-channels">
-          <a className="contact-band-card" href={`mailto:${supportEmail}`}>
+          <a className="contact-band-card" href={`mailto:${SUPPORT_EMAIL}`}>
             <Mail size={22} />
             <strong>Email</strong>
-            <span>{supportEmail}</span>
+            <span>{SUPPORT_EMAIL}</span>
           </a>
-          <a className="contact-band-card" href={supportPhoneHref}>
+          <a className="contact-band-card" href={SUPPORT_PHONE_HREF}>
             <Phone size={22} />
             <strong>Phone</strong>
-            <span>{supportPhone}</span>
+            <span>{SUPPORT_PHONE}</span>
           </a>
-          <a className="contact-band-card" href={`mailto:${supportEmail}?subject=Field%20support%20request`}>
+          <a className="contact-band-card" href={`mailto:${SUPPORT_EMAIL}?subject=Field%20support%20request`}>
             <Send size={22} />
             <strong>Field support</strong>
             <span>Kenya field operations</span>
