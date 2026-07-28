@@ -1,0 +1,55 @@
+name: CI
+
+# Gate on the things that have actually broken this project before:
+# a type error, a failing test, or a web build that only fails on the server.
+# Deployment is a separate workflow and will not run if this one fails.
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main, 'feat/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the VPS (v22.23.1) and the engines range (>=22.12 <26).
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci --include=dev
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w @intellicash/api
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build web
+        env:
+          # Single-process topology: the API is served by the same origin,
+          # so this must stay relative. An absolute localhost URL here is
+          # what ships a build whose browser calls all fail.
+          NEXT_PUBLIC_API_BASE_URL: /api/v1
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build -w @intellicash/web

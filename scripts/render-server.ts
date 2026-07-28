@@ -10,6 +10,11 @@ import { assertDurableDatabase } from "../apps/api/src/lib/storage-safety";
 assertDurableDatabase();
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3000);
+// Render routes to the container's public interface, so 0.0.0.0 stays the
+// default. Behind a reverse proxy (nginx on the VPS) bind HOST=127.0.0.1
+// instead, or the app is reachable on its raw port over plain http and
+// sidesteps TLS entirely.
+const host = process.env.HOST ?? "0.0.0.0";
 const webDir = resolve(process.cwd(), "apps/web");
 const nextApp = next({ dev: false, dir: webDir });
 const nextHandler = nextApp.getRequestHandler();
@@ -26,8 +31,8 @@ async function start() {
 
   server = createServer(app);
 
-  server.listen(port, "0.0.0.0", () => {
-    console.log(`Intelli-Cash web and API listening on port ${port}`);
+  server.listen(port, host, () => {
+    console.log(`Intelli-Cash web and API listening on ${host}:${port}`);
   });
 }
 

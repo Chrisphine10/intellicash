@@ -1,0 +1,169 @@
+name: Deploy to production
+
+# Deploys IntelliCash to the HostPinnacle VPS (intellicash.co.ke).
+#
+# This box is SHARED. hodi-admin.co.ke (GBV case data) and phinetech.co.ke run
+# on the same host, so every deploy asserts they are still healthy afterwards
+# and rolls back if they are not. An IntelliCash deploy must never be the
+# reason Hodi goes down.
+#
+# Safety model: back up the SQLite ledger and record the current commit before
+# touching anything; health-check after; restore the commit, rebuild and
+# restart if the check fails.
+
+on:
+  push:
+    # The production branch. `main` has diverged (31 commits that are not in
+    # this branch) and is NOT what production runs — do not repoint this at
+    # main until that divergence is resolved deliberately.
+    branches: [feat/production-readiness]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: 'Skip the web rebuild (config-only change)'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two deploys interleave on the same host.
+  group: intellicash-production-deploy
+  cancel-in-progress: false
+
+env:
+  APP_DIR: /var/www/intellicash/app
+  APP_USER: intellicash
+  SERVICE: intellicash.service
+  BRANCH: feat/production-readiness
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Record baseline of the co-hosted sites
+        run: |
+          for u in https://hodi-admin.co.ke https://phinetech.co.ke; do
+            printf '%-32s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || echo 000)"
+          done
+
+      - name: Pre-deploy backup and record rollback point
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             /usr/local/bin/intellicash-backup.sh
+             cd /var/www/intellicash/app
+             git rev-parse HEAD > /tmp/intellicash_rollback_commit
+             echo "Rollback point: $(cat /tmp/intellicash_rollback_commit)"'
+
+      - name: Deploy
+        env:
+          SKIP_BUILD: ${{ inputs.skip_build }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -e
+             cd ${{ env.APP_DIR }}
+
+             # Refuse to deploy over uncommitted work. Hodi accumulated ~1970
+             # dirty files from hand-edits on the host; a pull would destroy
+             # them silently. Fail loudly instead.
+             DIRTY=\$(git status --porcelain | wc -l)
+             if [ \"\$DIRTY\" -gt 0 ]; then
+               echo '::error::Working tree has uncommitted changes. Refusing to deploy.'
+               git status --porcelain | head -20
+               exit 1
+             fi
+
+             git fetch origin ${{ env.BRANCH }}
+             git reset --hard origin/${{ env.BRANCH }}
+             chown -R ${{ env.APP_USER }}:${{ env.APP_USER }} ${{ env.APP_DIR }}
+
+             # Build as the app user, never root.
+             sudo -u ${{ env.APP_USER }} env HOME=/var/www/intellicash \
+               NEXT_PUBLIC_API_BASE_URL=/api/v1 NEXT_TELEMETRY_DISABLED=1 \
+               bash -lc 'cd ${{ env.APP_DIR }} && npm ci --include=dev'
+
+             if [ \"\$SKIP_BUILD\" != 'true' ]; then
+               sudo -u ${{ env.APP_USER }} env HOME=/var/www/intellicash \
+                 NEXT_PUBLIC_API_BASE_URL=/api/v1 NEXT_TELEMETRY_DISABLED=1 \
+                 bash -lc 'cd ${{ env.APP_DIR }} && npm run build -w @intellicash/web'
+             fi
+
+             # start:render applies prisma migrate deploy before listening.
+             systemctl restart ${{ env.SERVICE }}"
+
+      - name: Health check
+        run: |
+          sleep 8
+          for i in 1 2 3 4 5 6; do
+            # /health is the API's own probe (render.yaml healthCheckPath).
+            # It is NOT under /api/v1 — checking there returns the web app's 404.
+            H=$(curl -s --max-time 20 https://intellicash.co.ke/health || echo '')
+            LOGIN=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://intellicash.co.ke/login || echo 000)
+            echo "attempt $i: /health -> $H, /login -> $LOGIN"
+            if echo "$H" | grep -q '"status":"ok"' && [ "$LOGIN" = "200" ]; then
+              echo 'IntelliCash healthy'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::IntelliCash did not become healthy'
+          exit 1
+
+      - name: Assert the co-hosted sites are unharmed
+        run: |
+          FAILED=0
+          for u in https://hodi-admin.co.ke https://phinetech.co.ke; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || echo 000)
+            echo "$u -> $CODE"
+            [ "$CODE" = "200" ] || FAILED=1
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo '::error::A co-hosted site is unhealthy after this deploy'
+            exit 1
+          fi
+
+      - name: Roll back on failure
+        if: failure()
+        run: |
+          echo '::warning::Deploy failed — rolling back'
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             cd /var/www/intellicash/app
+             if [ -f /tmp/intellicash_rollback_commit ]; then
+               git reset --hard "$(cat /tmp/intellicash_rollback_commit)"
+               chown -R intellicash:intellicash /var/www/intellicash/app
+               sudo -u intellicash env HOME=/var/www/intellicash \
+                 NEXT_PUBLIC_API_BASE_URL=/api/v1 NEXT_TELEMETRY_DISABLED=1 \
+                 bash -lc "cd /var/www/intellicash/app && npm ci --include=dev && npm run build -w @intellicash/web"
+               systemctl restart intellicash.service
+               echo "Rolled back to $(cat /tmp/intellicash_rollback_commit)"
+             else
+               echo "No rollback point recorded; manual intervention required"
+               exit 1
+             fi'
+          sleep 8
+          curl -s --max-time 20 https://intellicash.co.ke/health || true
+          echo
+          # The database is NOT restored automatically: a migration that ran
+          # forward may not be reversible, and silently reverting a ledger is
+          # worse than an outage. Backups are in /root/backups/intellicash-*.
+          echo '::warning::Code rolled back. Database was NOT restored — check /root/backups/ if a migration ran.'
+
+      - name: Clean up key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
