@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Fraunces, Outfit } from "next/font/google";
 import "./globals.css";
 import "./styles/public-site.css";
@@ -43,6 +44,12 @@ export const viewport: Viewport = {
   themeColor: "#1f7a36"
 };
 
+// A per-request CSP nonce cannot be stamped into HTML that was generated at
+// build time, so nonce-based CSP requires dynamic rendering. Without this the
+// nonce lands in the header but not on the script tags, and the page loads
+// looking correct while React never hydrates.
+export const dynamic = "force-dynamic";
+
 const themeInitializer = `
 (() => {
   try {
@@ -62,15 +69,20 @@ const themeInitializer = `
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Next stamps its OWN scripts with the nonce automatically, but not a
+  // hand-written <script>. Without this the theme initialiser is the one tag
+  // the CSP blocks, and the app loads with the wrong colour scheme.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitializer }} />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Intelli-Cash" />

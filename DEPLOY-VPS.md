@@ -44,6 +44,35 @@ app on a single port. So: one systemd unit, one nginx upstream, and
 `NEXT_PUBLIC_API_BASE_URL` must be the **relative** `/api/v1`. An absolute URL
 baked in at build time ships a UI whose every browser call fails.
 
+## Content-Security-Policy (why the site once rendered blank)
+
+`createApp()` mounts helmet. Its default `script-src 'self'` blocks the App
+Router's inline `self.__next_f.push(...)` bootstrap scripts, React never
+hydrates, and the page renders blank. That took the site down on 28 Jul 2026.
+
+Now: `createApp({ servesWebApp: true })` (set only by `render-server.ts`)
+disables helmet's CSP, and `apps/web/src/middleware.ts` issues a **per-request
+nonce** instead, so `'unsafe-inline'` is not needed. Notes:
+
+- **A nonce cannot be stamped into statically prerendered HTML**, so the root
+  layout sets `export const dynamic = "force-dynamic"`. Removing that silently
+  reverts the app to build-time HTML whose scripts carry no nonce - the page
+  then loads looking correct while React never hydrates.
+- Next nonces its own scripts but **not hand-written `<script>` tags**. The
+  theme initialiser reads the nonce via `headers().get("x-nonce")`. Any new
+  inline script must do the same or the CSP will block it.
+- Two CSP headers are intersected by the browser, so helmet must not add a
+  second one on the web path.
+- `/api/v1` and `/health` keep their own strict `default-src 'none'`.
+
+Verify after any change here - a header alone proves nothing:
+
+```bash
+curl -s -D - https://intellicash.co.ke/ -o /tmp/p.html | grep -i content-security-policy
+# every <script> must carry the SAME nonce as the header:
+grep -c 'nonce=' /tmp/p.html
+```
+
 ## Binding
 
 `render-server.ts` reads `HOST`, defaulting to `0.0.0.0` because Render requires

@@ -66,22 +66,32 @@ export function createApp(
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
-      contentSecurityPolicy: options.servesWebApp
-        ? {
-            useDefaults: true,
-            directives: {
-              // Next.js emits inline bootstrap scripts with no nonce of their
-              // own. Replace this with a nonce-based policy (a Next middleware
-              // issuing the nonce) to drop 'unsafe-inline' — see DEPLOY-VPS.md.
-              "script-src": ["'self'", "'unsafe-inline'"],
-              // XHR/fetch to this same origin, which is where /api/v1 lives.
-              "connect-src": ["'self'"],
-              "img-src": ["'self'", "data:", "blob:"]
-            }
-          }
-        : undefined
+      // When Next serves the HTML, apps/web/src/middleware.ts issues a
+      // per-request nonce and sets the CSP itself. A browser given two CSP
+      // headers enforces the INTERSECTION, so a second policy here would
+      // narrow the nonce policy back down and blank the page again. Helmet's
+      // other headers (HSTS, COOP, frame options, nosniff) still apply.
+      contentSecurityPolicy: options.servesWebApp ? false : undefined
     })
   );
+
+  if (options.servesWebApp) {
+    // JSON endpoints are not documents, so the nonce policy is irrelevant to
+    // them — but leaving them with no CSP at all would be a downgrade from the
+    // API-only process. Lock them down completely instead.
+    app.use(
+      ["/api/v1", "/health"],
+      helmet.contentSecurityPolicy({
+        useDefaults: false,
+        directives: {
+          "default-src": ["'none'"],
+          "frame-ancestors": ["'none'"],
+          "base-uri": ["'none'"],
+          "form-action": ["'none'"]
+        }
+      })
+    );
+  }
   app.use(requestTracingMiddleware);
   app.use(
     cors({
