@@ -39,7 +39,9 @@ function isAllowedCorsOrigin(origin: string) {
   return isConfiguredOrigin || isLocalDevOrigin;
 }
 
-export function createApp(options: { includeNotFoundHandler?: boolean } = {}) {
+export function createApp(
+  options: { includeNotFoundHandler?: boolean; servesWebApp?: boolean } = {}
+) {
   const app = express();
   ensureUploadDirectory();
 
@@ -52,7 +54,34 @@ export function createApp(options: { includeNotFoundHandler?: boolean } = {}) {
     app.set("trust proxy", trustedProxyHops);
   }
 
-  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+  // When this process also serves the Next.js app (scripts/render-server.ts),
+  // helmet's default `script-src 'self'` blocks the App Router's inline
+  // `self.__next_f.push(...)` bootstrap scripts. React then receives no RSC
+  // payload, cannot hydrate, and the page renders BLANK — server HTML is
+  // correct, the browser just discards it. That is not a theoretical risk: it
+  // took intellicash.co.ke down until 28 Jul 2026.
+  //
+  // API-only processes (src/server.ts) keep the strict default, since nothing
+  // there serves HTML.
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      contentSecurityPolicy: options.servesWebApp
+        ? {
+            useDefaults: true,
+            directives: {
+              // Next.js emits inline bootstrap scripts with no nonce of their
+              // own. Replace this with a nonce-based policy (a Next middleware
+              // issuing the nonce) to drop 'unsafe-inline' — see DEPLOY-VPS.md.
+              "script-src": ["'self'", "'unsafe-inline'"],
+              // XHR/fetch to this same origin, which is where /api/v1 lives.
+              "connect-src": ["'self'"],
+              "img-src": ["'self'", "data:", "blob:"]
+            }
+          }
+        : undefined
+    })
+  );
   app.use(requestTracingMiddleware);
   app.use(
     cors({

@@ -23,7 +23,9 @@ let server: ReturnType<typeof createServer> | null = null;
 async function start() {
   await nextApp.prepare();
 
-  const app = createApp({ includeNotFoundHandler: false });
+  // servesWebApp: this process serves Next.js HTML as well as the API, so the
+  // CSP must permit the App Router's inline bootstrap scripts.
+  const app = createApp({ includeNotFoundHandler: false, servesWebApp: true });
 
   app.all("*", (req, res) => {
     nextHandler(req, res);
