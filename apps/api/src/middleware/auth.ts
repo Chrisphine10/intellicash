@@ -14,16 +14,19 @@ export interface AuthenticatedUser {
   id: string;
   name: string;
   email: string;
+  phone: string | null;
   role: string;
   avatarUrl: string | null;
   languagePreference: string;
   partnerId: string | null;
   groupId: string | null;
   memberId: string | null;
+  villageAgentId: string | null;
   permissions: Permission[];
   partner?: { id: string; name: string } | null;
   group?: { id: string; name: string; code: string } | null;
   member?: { id: string; fullName: string; phone: string } | null;
+  villageAgent?: { id: string; name: string; phone: string } | null;
 }
 
 declare global {
@@ -101,7 +104,8 @@ export async function resolveUserFromRequest(req: Request) {
         include: {
           partner: { select: { id: true, name: true } },
           group: { select: { id: true, name: true, code: true } },
-          member: { select: { id: true, fullName: true, phone: true } }
+          member: { select: { id: true, fullName: true, phone: true } },
+          villageAgent: { select: { id: true, name: true, phone: true } }
         }
       }
     }
@@ -123,16 +127,19 @@ export async function resolveUserFromRequest(req: Request) {
     id: session.user.id,
     name: session.user.name,
     email: session.user.email,
+    phone: session.user.phone,
     role: session.user.role,
     avatarUrl: session.user.avatarUrl,
     languagePreference: session.user.languagePreference,
     partnerId: session.user.partnerId,
     groupId: session.user.groupId,
     memberId: session.user.memberId,
+    villageAgentId: session.user.villageAgentId,
     permissions,
     partner: session.user.partner,
     group: session.user.group,
-    member: session.user.member
+    member: session.user.member,
+    villageAgent: session.user.villageAgent
   };
 }
 
@@ -145,7 +152,8 @@ async function resolveUserFromApiKey(req: Request, token: string) {
         include: {
           partner: { select: { id: true, name: true } },
           group: { select: { id: true, name: true, code: true } },
-          member: { select: { id: true, fullName: true, phone: true } }
+          member: { select: { id: true, fullName: true, phone: true } },
+          villageAgent: { select: { id: true, name: true, phone: true } }
         }
       }
     }
@@ -176,16 +184,19 @@ async function resolveUserFromApiKey(req: Request, token: string) {
     id: apiKey.user.id,
     name: apiKey.user.name,
     email: apiKey.user.email,
+    phone: apiKey.user.phone,
     role: apiKey.user.role,
     avatarUrl: apiKey.user.avatarUrl,
     languagePreference: apiKey.user.languagePreference,
     partnerId: apiKey.user.partnerId,
     groupId: apiKey.user.groupId,
     memberId: apiKey.user.memberId,
+    villageAgentId: apiKey.user.villageAgentId,
     permissions: keyScopes,
     partner: apiKey.user.partner,
     group: apiKey.user.group,
-    member: apiKey.user.member
+    member: apiKey.user.member,
+    villageAgent: apiKey.user.villageAgent
   };
 }
 

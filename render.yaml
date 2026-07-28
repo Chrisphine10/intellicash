@@ -21,6 +21,10 @@ services:
         value: production
       - key: DATABASE_URL
         value: file:/var/data/intellicash.db
+      # Render terminates TLS one hop in front of the service; without this
+      # every request logs the proxy's address instead of the caller's.
+      - key: TRUST_PROXY_HOPS
+        value: 1
       - key: API_PUBLIC_URL
         value: https://intelli-cash-api.onrender.com
       - key: WEB_ORIGIN
@@ -124,8 +128,20 @@ services:
         value: 22.12.0
       - key: NODE_ENV
         value: production
+      # WARNING: /tmp is wiped on every restart, redeploy and free-tier
+      # spin-down, and this service runs its OWN API against this file rather
+      # than talking to intelli-cash-api. Anything a group enters here is lost.
+      # It is therefore only safe as a throwaway demo, which the flag below
+      # declares. For real groups, either mount a disk and give this service a
+      # durable DATABASE_URL, or point NEXT_PUBLIC_API_BASE_URL at
+      # https://intelli-cash-api.onrender.com/api/v1 so it stops keeping data
+      # of its own.
       - key: DATABASE_URL
         value: file:/tmp/intellicash.db
+      - key: ALLOW_EPHEMERAL_DATABASE
+        value: true
+      - key: TRUST_PROXY_HOPS
+        value: 1
       - key: API_PUBLIC_URL
         value: https://intelli-cash.onrender.com
       - key: WEB_ORIGIN

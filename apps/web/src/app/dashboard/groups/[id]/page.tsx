@@ -241,6 +241,9 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
           </Link>
           {!isMember ? (
             <>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/join-requests`}>
+                Requests To Join
+              </Link>
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/members`}>
                 <UsersRound size={16} />
                 Members

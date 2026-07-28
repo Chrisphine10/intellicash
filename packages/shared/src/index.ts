@@ -4,6 +4,8 @@ export const roles = [
   "GROUP_ACCOUNT",
   "MEMBER",
   "LENDER",
+  /** Village Agent / Community-Based Trainer: supports a caseload of groups. */
+  "VILLAGE_AGENT",
   "READ_ONLY"
 ] as const;
 
@@ -14,58 +16,77 @@ export const demoPassword = "IntellicashDemo#2026";
 export const languagePreferences = [
   "ENGLISH",
   "KISWAHILI",
-  "KIEMBU",
-  "GIKUYU"
+  "GIKUYU",
+  "LUO",
+  "KIEMBU"
 ] as const;
 export type LanguagePreference = (typeof languagePreferences)[number];
 
 export const languagePreferenceLabels: Record<LanguagePreference, string> = {
   ENGLISH: "English",
   KISWAHILI: "Kiswahili (Swahili)",
-  KIEMBU: "Kiembu (Embu)",
-  GIKUYU: "Gikuyu (Kikuyu)"
+  GIKUYU: "Gikuyu (Kikuyu)",
+  LUO: "Dholuo (Luo)",
+  KIEMBU: "Kiembu (Embu)"
 };
 
 export const demoAccounts = [
   {
     name: "IWL Platform Admin",
     email: "admin@intellicash.co.ke",
+    phone: "+254700000001",
     role: "IWL_ADMIN",
     scope: "Full platform access"
   },
   {
     name: "Partner Portfolio Officer",
     email: "partner@intellicash.co.ke",
+    phone: "+254700000002",
     role: "PARTNER_OFFICER",
     scope: "Programme and partner workspace"
   },
   {
     name: "Lender Credit Analyst",
     email: "lender@intellicash.co.ke",
+    phone: "+254700000003",
     role: "LENDER",
     scope: "Credit, portfolio, and audit review"
   },
   {
     name: "Tujijenge Group Account",
     email: "group@intellicash.co.ke",
+    phone: "+254700000005",
     role: "GROUP_ACCOUNT",
     scope: "Group operations and meetings"
   },
   {
     name: "Mary Njeri",
     email: "member@intellicash.co.ke",
+    phone: "+254700000006",
     role: "MEMBER",
     scope: "Member dashboard scope"
   },
   {
+    // Grace is the agent the seed assigns groups to; without a login of her
+    // own the whole agent experience — caseload, visits, agent report — could
+    // not be reached at all.
+    name: "Grace Wanjiku",
+    email: "agent@intellicash.co.ke",
+    phone: "+254700000007",
+    role: "VILLAGE_AGENT",
+    scope: "Field caseload and group support"
+  },
+  {
     name: "Read Only Auditor",
     email: "readonly@intellicash.co.ke",
+    phone: "+254700000004",
     role: "READ_ONLY",
     scope: "Read-only oversight"
   }
 ] as const satisfies ReadonlyArray<{
   name: string;
   email: string;
+  phone: string;
   role: Role;
   scope: string;
 }>;
@@ -155,6 +176,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "meetings:read",
     "meeting-keys:write",
     "ledger:read",
+    // A member casts their own ballot in group polls — reading and writing a
+    // vote is theirs to do. It does NOT let them move money.
+    "votes:read",
+    "votes:write",
     "store:read",
     "store:write",
     "analytics:read"
@@ -169,6 +194,26 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read",
     "store:write",
     "votes:read",
+    "analytics:read"
+  ],
+  /**
+   * A Village Agent / CBT supports and monitors their caseload of groups, and
+   * distributes Intelli-Store products to them. Deliberately **read-only over
+   * money**: no `ledger:write`, no `meetings:write`, no `meeting-keys:write` —
+   * a group's own elected officials move its funds and hold its keys. The
+   * agent onboards members and handles store distribution.
+   */
+  VILLAGE_AGENT: [
+    "programmes:read",
+    "village-agents:read",
+    "groups:read",
+    "members:read",
+    "members:write",
+    "meetings:read",
+    "ledger:read",
+    "votes:read",
+    "store:read",
+    "store:write",
     "analytics:read"
   ],
   READ_ONLY: [
@@ -313,6 +358,8 @@ export type IntelliAuditReportStandard = (typeof intelliAuditReportStandards)[nu
 
 export const auditEventTypes = [
   "AUTH_LOGIN",
+  "AUTH_REGISTERED",
+  "MEMBER_ACCOUNT_CREATED",
   "AUTH_LOGOUT",
   "USER_CREATED",
   "USER_UPDATED",
@@ -363,6 +410,20 @@ export const auditEventTypes = [
   "LEDGER_ENTRY_APPENDED",
   "VOTE_RECORDED",
   "CREDIT_SCORE_COMPUTED",
+  "GROUP_JOIN_REQUESTED",
+  "GROUP_JOIN_APPROVED",
+  "GROUP_JOIN_REJECTED",
+  "GROUP_PAYMENT_INITIATED",
+  "GROUP_PAYMENT_COMPLETED",
+  "GROUP_PAYMENT_FAILED",
+  "POLL_CREATED",
+  "POLL_VOTE_CAST",
+  "POLL_CLOSED",
+  "EXTERNAL_LOAN_PRODUCT_CREATED",
+  "EXTERNAL_LOAN_PRODUCT_UPDATED",
+  "EXTERNAL_LOAN_APPLICATION_CREATED",
+  "EXTERNAL_LOAN_APPLICATION_DECIDED",
+  "EXTERNAL_LOAN_DISBURSED",
   "INTEGRATION_HEALTH_CHECKED",
   "INTEGRATION_CREDENTIALS_UPDATED",
   "WEBHOOK_SUBSCRIBED",

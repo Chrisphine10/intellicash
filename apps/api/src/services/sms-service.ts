@@ -59,11 +59,16 @@ function envEnabled(value: string | undefined) {
 }
 
 export function smsNetworkCallsEnabled() {
+  // The test suite must never reach a live provider, whatever .env says: the
+  // seed data holds real-looking numbers, and a working credential would mean
+  // the suite texts them and bills the account on every run.
+  if (process.env.NODE_ENV === "test") return false;
+
   if (process.env.ENABLE_SMS_NETWORK_CALLS) {
     return envEnabled(process.env.ENABLE_SMS_NETWORK_CALLS);
   }
 
-  return process.env.NODE_ENV !== "test";
+  return true;
 }
 
 export function normalizeSmsPhone(phone: string) {

@@ -4,7 +4,7 @@ import React from "react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Pencil, Plus, UsersRound, X } from "@/lib/theme-icons";
+import { ArrowRight, Pencil, Plus, Rocket, UsersRound, X } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
@@ -194,10 +194,16 @@ export default function GroupsPage() {
         <div className="page-heading-actions">
           <span className="pill">{groups.length} groups</span>
           {canCreateGroups ? (
-            <button className="button" onClick={openCreateGroup} type="button">
-              <Plus size={16} />
-              Create group
-            </button>
+            <>
+              <Link className="button secondary" href="/dashboard/groups/setup">
+                <Rocket size={16} />
+                Quick Setup
+              </Link>
+              <button className="button" onClick={openCreateGroup} type="button">
+                <Plus size={16} />
+                Create group
+              </button>
+            </>
           ) : null}
         </div>
       </section>

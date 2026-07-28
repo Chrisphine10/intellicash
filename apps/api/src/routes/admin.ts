@@ -21,6 +21,7 @@ import {
   serializeMemberPinDelivery
 } from "../services/member-pin-service";
 import { ApiHttpError, ok } from "../lib/http";
+import { linkMembership, MemberAlreadyLinkedError } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -46,7 +47,7 @@ const accountProfiles: Record<
   Role,
   {
     accountType: string;
-    requiredBinding: "GROUP" | "MEMBER" | "NONE" | "PARTNER" | "LENDER";
+    requiredBinding: "GROUP" | "MEMBER" | "NONE" | "PARTNER" | "LENDER" | "VILLAGE_AGENT";
     dashboard: string;
     dataScope: string;
   }
@@ -81,6 +82,13 @@ const accountProfiles: Record<
     dashboard: "Lender portfolio dashboard",
     dataScope: "Programmes, groups, credit-readiness, ledger visibility, and store requests linked for financing"
   },
+  VILLAGE_AGENT: {
+    accountType: "Village agent / CBT",
+    requiredBinding: "VILLAGE_AGENT",
+    dashboard: "Agent caseload dashboard",
+    dataScope:
+      "Only the groups assigned to this agent — their members, meetings, ledger, scores, and store distribution"
+  },
   READ_ONLY: {
     accountType: "Read only",
     requiredBinding: "NONE",
@@ -104,7 +112,25 @@ async function accessControlPayload() {
   };
 }
 
+/**
+ * An admin binding an account to a member who already has one is a mistake
+ * worth naming, not a 500 — the alternative would be silently detaching the
+ * existing account from that person's savings.
+ */
+function asBindingError(error: unknown) {
+  if (error instanceof MemberAlreadyLinkedError) {
+    return new ApiHttpError(
+      409,
+      "MEMBER_ALREADY_LINKED",
+      "That member already has a sign-in account. Remove it before binding another."
+    );
+  }
+  return error;
+}
+
 async function normalizeUserBinding(input: {
+  /** Excluded from the "already claimed" check when editing an account. */
+  currentUserId?: string;
   role: Role;
   partnerId?: string | null;
   groupId?: string | null;
@@ -171,6 +197,21 @@ async function normalizeUserBinding(input: {
 
   if (input.groupId && input.groupId !== member.groupId) {
     throw new ApiHttpError(400, "MEMBER_GROUP_MISMATCH", "Selected member does not belong to the selected group.");
+  }
+
+  // Refuse here rather than letting the unique constraint on User.memberId
+  // surface as a 500 from the insert. One roster entry is one person, so
+  // handing it to a second login would detach the first from their savings.
+  const heldBy = await prisma.user.findFirst({
+    where: { memberId: member.id, ...(input.currentUserId ? { NOT: { id: input.currentUserId } } : {}) },
+    select: { id: true, email: true }
+  });
+  if (heldBy) {
+    throw new ApiHttpError(
+      409,
+      "MEMBER_ALREADY_LINKED",
+      `That member already signs in as ${heldBy.email}. Remove that account before binding another.`
+    );
   }
 
   return { partnerId: null, groupId: member.groupId, memberId: member.id };
@@ -294,6 +335,13 @@ router.post("/users", requireAuth("users:write"), async (req, res, next) => {
         select: userSelect
       });
 
+      // Record the membership too. `User.memberId` alone is the shape that
+      // used to leave an account showing no groups at all until something
+      // repaired it, and it is the source of truth nothing else can see.
+      if (binding.memberId && binding.groupId) {
+        await linkMembership(createdUser.id, binding.memberId, binding.groupId, tx);
+      }
+
       const delivery =
         userInput.role === "MEMBER" && binding.memberId
           ? await queueMemberAccountPin(tx, binding.memberId, req.user?.id)
@@ -325,7 +373,7 @@ router.post("/users", requireAuth("users:write"), async (req, res, next) => {
 
     ok(res.status(201), user);
   } catch (error) {
-    next(error);
+    next(asBindingError(error));
   }
 });
 
@@ -362,6 +410,7 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
     const role = (body.role ?? existing.role) as Role;
     const status = body.status ?? existing.status;
     const binding = await normalizeUserBinding({
+      currentUserId: existing.id,
       role,
       partnerId: body.partnerId === undefined ? existing.partnerId : body.partnerId,
       groupId: body.groupId === undefined ? existing.groupId : body.groupId,
@@ -399,6 +448,28 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
         },
         select: userSelect
       });
+
+      // Re-binding normally only changes which membership is IN VIEW, and must
+      // NOT delete the others: a person can save with several VSLAs, and
+      // `User.memberId` names the group they are looking at, not the only one
+      // they belong to. Removing rows here took a real group away from someone,
+      // and with it sight of the savings held in it.
+      //
+      // The one exception is re-binding within the SAME group, which means an
+      // admin correcting an account pointed at the wrong person. Nobody holds
+      // two places on one roster, so the mistaken row goes.
+      if (binding.memberId && binding.groupId) {
+        await tx.userMembership.deleteMany({
+          where: {
+            userId: existing.id,
+            groupId: binding.groupId,
+            memberId: { not: binding.memberId }
+          }
+        });
+      }
+      if (binding.memberId && binding.groupId) {
+        await linkMembership(existing.id, binding.memberId, binding.groupId, tx);
+      }
 
       const delivery =
         shouldQueueMemberPin && binding.memberId
@@ -438,7 +509,7 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
 
     ok(res, user);
   } catch (error) {
-    next(error);
+    next(asBindingError(error));
   }
 });
 

@@ -16,6 +16,11 @@ import {
 } from "@intellicash/shared";
 import { assertMeetingStepOrder } from "../domain/meeting-workflow";
 import { signLedgerEntry } from "../domain/ledger";
+import {
+  computeAndStoreCreditRating,
+  computeCreditRating,
+  latestCreditRating
+} from "../services/credit-rating-service";
 import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
@@ -27,6 +32,7 @@ import {
   sendQueuedMemberPinDelivery,
   type MemberPinDeliveryPublic
 } from "../services/member-pin-service";
+import { buildMemberOverview, buildMemberPassbook } from "../services/member-passbook-service";
 import {
   assertGroupAccess,
   ledgerScopeForUser,
@@ -36,6 +42,7 @@ import {
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, sha256 } from "../lib/crypto";
 import { canViewMemberContact, maskPhone } from "../lib/privacy";
+import { reconcileMembership } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -143,6 +150,7 @@ const meetingLedgerEntryTypes = [
   "LOAN_REPAYMENT",
   "INTERNAL_LOAN_DISBURSEMENT",
   "SOCIAL_CONTRIBUTION",
+  "FINE_COLLECTION",
   "SHARE_OUT_PAYOUT"
 ] as const;
 
@@ -229,6 +237,7 @@ const meetingLedgerRules: Record<
     label: "Loan disbursement"
   },
   SOCIAL_CONTRIBUTION: { fundType: "SOCIAL", direction: "CREDIT", label: "Social fund contribution" },
+  FINE_COLLECTION: { fundType: "SOCIAL", direction: "CREDIT", label: "Fine collection" },
   SHARE_OUT_PAYOUT: { fundType: "INTERNAL_LOAN", direction: "DEBIT", label: "Share-out payout" }
 };
 
@@ -316,6 +325,10 @@ function serializeMember<
 
 function meetingInclude(user?: AuthenticatedUser) {
   const memberDetailScope = user?.role === "MEMBER" ? { memberId: user.memberId ?? "__no_access__" } : undefined;
+  // What the sitting committed the group to. A member sees only their own,
+  // matching how attendance, key submissions and the ledger already scope.
+  const commitmentScope =
+    user?.role === "MEMBER" ? { requesterUserId: user.id ?? "__no_access__" } : undefined;
 
   return {
     group: {
@@ -349,6 +362,35 @@ function meetingInclude(user?: AuthenticatedUser) {
         verifiedAt: true,
         member: { select: nestedMemberSelect },
         capturedByUser: { select: { id: true, name: true, role: true } }
+      }
+    },
+    externalLoanApplications: {
+      where: commitmentScope,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        amountCents: true,
+        purpose: true,
+        status: true,
+        creditBand: true,
+        createdAt: true,
+        product: { select: { id: true, name: true, category: true } },
+        requester: { select: { id: true, name: true } }
+      }
+    },
+    storeCreditRequests: {
+      where: commitmentScope,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        quantity: true,
+        requestedAmountCents: true,
+        depositCents: true,
+        status: true,
+        creditBand: true,
+        createdAt: true,
+        product: { select: { id: true, name: true } },
+        requester: { select: { id: true, name: true } }
       }
     }
   } satisfies Prisma.MeetingInclude;
@@ -1076,6 +1118,189 @@ router.post("/groups/:id/members/:memberId/otp", requireAuth("meeting-keys:write
   }
 });
 
+/**
+ * Standalone credential check for the mobile 3-key unlock: when the phone is
+ * online it verifies a member's one-time code (or saved PIN) against the
+ * server before counting the key — no backend meeting required, so the
+ * offline-first local meeting flow can still use it.
+ */
+const verifyCredentialSchema = z.object({
+  secret: z.string().trim().regex(/^\d{4,8}$/, "Enter the code you received."),
+  credentialType: z.enum(["DEFAULT_PIN", "CURRENT_OTP"]).optional()
+});
+
+router.post(
+  "/groups/:id/members/:memberId/verify-credential",
+  requireAuth("meeting-keys:write"),
+  async (req, res, next) => {
+    try {
+      const body = verifyCredentialSchema.parse(req.body);
+      await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+      const member = await prisma.member.findFirst({
+        where: memberScopeForUser(req.user, {
+          id: routeParam(req.params.memberId, "memberId"),
+          groupId: routeParam(req.params.id, "id")
+        }),
+        select: { id: true, pinHash: true, currentOtpHash: true, currentOtpExpiresAt: true }
+      });
+      if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+
+      const allowDefaultPin = !body.credentialType || body.credentialType === "DEFAULT_PIN";
+      const allowCurrentOtp = !body.credentialType || body.credentialType === "CURRENT_OTP";
+
+      let credentialType: "DEFAULT_PIN" | "CURRENT_OTP" | null = null;
+      if (allowDefaultPin && member.pinHash && (await bcrypt.compare(body.secret, member.pinHash))) {
+        credentialType = "DEFAULT_PIN";
+      } else if (
+        allowCurrentOtp &&
+        member.currentOtpHash &&
+        member.currentOtpExpiresAt &&
+        member.currentOtpExpiresAt > new Date() &&
+        (await bcrypt.compare(body.secret, member.currentOtpHash))
+      ) {
+        credentialType = "CURRENT_OTP";
+      }
+
+      if (!credentialType) {
+        throw new ApiHttpError(400, "INVALID_MEMBER_CREDENTIAL", "That code is wrong or has expired.");
+      }
+
+      ok(res, { valid: true, credentialType });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * A group creates a sign-in account for one of its members (optional —
+ * switched on from the app's settings). One account per member.
+ */
+const memberAccountSchema = z.object({
+  password: z.string().min(6).max(100),
+  email: z.string().trim().email().optional()
+});
+
+router.post(
+  "/groups/:id/members/:memberId/account",
+  requireAuth("members:write"),
+  async (req, res, next) => {
+    try {
+      const body = memberAccountSchema.parse(req.body);
+      const groupId = routeParam(req.params.id, "id");
+      await assertGroupAccess(req.user, groupId);
+      const member = await prisma.member.findFirst({
+        where: memberScopeForUser(req.user, { id: routeParam(req.params.memberId, "memberId"), groupId }),
+        select: { id: true, fullName: true, phone: true }
+      });
+      if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+
+      const email = body.email ?? `${member.phone.replace(/[^0-9]/g, "")}@accounts.intellicash.app`;
+      const conflict = await prisma.user.findFirst({
+        where: { OR: [{ memberId: member.id }, { email }, { phone: member.phone }] },
+        select: { id: true, memberId: true }
+      });
+      if (conflict) {
+        throw new ApiHttpError(
+          409,
+          "ACCOUNT_EXISTS",
+          conflict.memberId === member.id
+            ? `${member.fullName} already has a sign-in account.`
+            : "An account with this phone or email already exists."
+        );
+      }
+
+      const user = await prisma.user.create({
+        data: {
+          name: member.fullName,
+          email,
+          phone: member.phone,
+          passwordHash: await bcrypt.hash(body.password, 12),
+          role: "MEMBER",
+          groupId,
+          memberId: member.id
+        },
+        select: { id: true, name: true, email: true, phone: true, role: true, groupId: true, memberId: true }
+      });
+
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "USER",
+        entityId: user.id,
+        type: "MEMBER_ACCOUNT_CREATED",
+        payload: { memberId: member.id, groupId, createdBy: req.user?.id }
+      });
+
+      ok(res.status(201), user);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * The signed-in member's own passbook — savings, loans, attendance and their
+ * recent transactions, totalled by the server.
+ *
+ * Self-scoped by design: there is no id in the path, so a member can only
+ * ever fetch themselves. Group officials and admins use
+ * `GET /reports/member/:memberId` (scope-checked) to view someone else.
+ */
+router.get("/members/me", requireAuth("members:read"), async (req, res, next) => {
+  try {
+    // The group they were viewing may have removed them since this session
+    // began. Repoint at a group they still belong to before concluding the
+    // account has no member at all.
+    let memberId = req.user?.memberId;
+    if (!memberId && req.user?.id) {
+      await reconcileMembership(req.user.id);
+      const refreshed = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { memberId: true }
+      });
+      memberId = refreshed?.memberId ?? undefined;
+    }
+    if (!memberId) {
+      throw new ApiHttpError(
+        400,
+        "NOT_A_MEMBER_ACCOUNT",
+        "This account is not linked to a group member."
+      );
+    }
+    const passbook = await buildMemberPassbook(memberId);
+    if (!passbook) {
+      throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member record not found.");
+    }
+    ok(res, passbook);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Everything this person has saved, across every group they belong to.
+ *
+ * Self-scoped like `/members/me` — there is no id in the path, so it can only
+ * ever return the caller's own figures.
+ */
+router.get("/members/me/overview", requireAuth("members:read"), async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (req.user?.role !== "MEMBER") {
+      throw new ApiHttpError(
+        400,
+        "NOT_A_MEMBER_ACCOUNT",
+        "This account is not linked to a group member."
+      );
+    }
+    await reconcileMembership(userId);
+    ok(res, await buildMemberOverview(userId));
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/members/me/pin", requireAuth("meeting-keys:write"), async (req, res, next) => {
   try {
     pinRequestSchema.parse(req.body);
@@ -1767,6 +1992,39 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
     next(error);
   }
 });
+
+/**
+ * The group's current credit rating under the rating contract. Returns the
+ * latest stored rating, or computes a fresh one when the group has never been
+ * scored (so a new group always gets an honest UNRATED answer rather than a
+ * 404).
+ */
+router.get("/groups/:id/credit-score", requireAuth("groups:read"), async (req, res, next) => {
+  try {
+    const groupId = routeParam(req.params.id, "id");
+    await assertGroupAccess(req.user, groupId);
+    const stored = await latestCreditRating(groupId);
+    ok(res, stored ?? (await computeCreditRating(groupId)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Recomputes the rating from current data and stores it (audit-logged). */
+router.post(
+  "/groups/:id/credit-score/recompute",
+  requireAuth("groups:write"),
+  async (req, res, next) => {
+    try {
+      const groupId = routeParam(req.params.id, "id");
+      await assertGroupAccess(req.user, groupId);
+      const rating = await computeAndStoreCreditRating(groupId, req.user?.id);
+      ok(res.status(201), rating);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 router.get("/groups/:id/votes", requireAuth("votes:read"), async (req, res, next) => {
   try {

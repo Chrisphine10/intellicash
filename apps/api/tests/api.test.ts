@@ -67,11 +67,60 @@ describe("Intellicash API", () => {
       expect(login.body.data).toEqual(
         expect.objectContaining({
           email: account.email,
+          role: account.role,
+          phone: account.phone
+        })
+      );
+      expect(Array.isArray(login.body.data.permissions)).toBe(true);
+    }
+  });
+
+  it("authenticates users with phone number as primary identifier", async () => {
+    for (const account of demoAccounts) {
+      const login = await request.agent(app)
+        .post("/api/v1/auth/login")
+        .send({
+          phone: account.phone,
+          password: demoPassword
+        })
+        .expect(200);
+
+      expect(login.body.data).toEqual(
+        expect.objectContaining({
+          email: account.email,
+          phone: account.phone,
           role: account.role
         })
       );
       expect(Array.isArray(login.body.data.permissions)).toBe(true);
     }
+  });
+
+  it("rejects login with wrong phone number", async () => {
+    await request.agent(app)
+      .post("/api/v1/auth/login")
+      .send({
+        phone: "+254999999999",
+        password: demoPassword
+      })
+      .expect(401);
+  });
+
+  it("rejects login with neither email nor phone", async () => {
+    const res = await request.agent(app)
+      .post("/api/v1/auth/login")
+      .send({
+        password: demoPassword
+      })
+      .expect(400);
+
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("includes phone in authenticated user response", async () => {
+    const adminAgent = await authenticatedAgent();
+    const me = await adminAgent.get("/api/v1/auth/me").expect(200);
+    expect(me.body.data.phone).toBe("+254700000001");
   });
 
   it("serves and marks scoped in-app notifications", async () => {
@@ -2665,13 +2714,16 @@ describe("Intellicash API", () => {
     const memberGroupMeetings = await memberAgent.get(`/api/v1/groups/${groupId}/meetings`).expect(200);
     expect(memberGroupMeetings.body.data.length).toBeGreaterThan(0);
     assertOwnMeetingDetails(memberGroupMeetings.body.data);
-    await memberAgent.get(`/api/v1/groups/${groupId}/votes`).expect(403);
+    // Members carry votes:read so they can see the polls they are asked to
+    // vote in — their own group's only.
+    await memberAgent.get(`/api/v1/groups/${groupId}/votes`).expect(200);
 
     const otherGroup = partnerGroups.body.data.find((group: { id: string }) => group.id !== groupId);
     if (!otherGroup) {
       throw new Error("Expected seed data to include another group outside the member account.");
     }
     await memberAgent.get(`/api/v1/groups/${otherGroup.id}/meetings`).expect(404);
+    await memberAgent.get(`/api/v1/groups/${otherGroup.id}/votes`).expect(404);
 
     await memberAgent.get("/api/v1/users").expect(403);
   }, 15000);

@@ -78,7 +78,32 @@ export function groupScopeForUser(user?: AuthenticatedUser): Prisma.GroupWhereIn
     return user.memberId ? { members: { some: { id: user.memberId } } } : impossibleGroupScope();
   }
 
+  // A village agent / CBT sees exactly their assigned caseload.
+  if (user.role === "VILLAGE_AGENT") {
+    return user.villageAgentId
+      ? { villageAgentId: user.villageAgentId }
+      : impossibleGroupScope();
+  }
+
+  // Fall-through is platform-wide (IWL_ADMIN / READ_ONLY). Any new role MUST
+  // get an explicit branch above, or it silently inherits full read access.
   return {};
+}
+
+/**
+ * Which group a group-side account speaks for, as a Group filter.
+ *
+ * GROUP_ACCOUNT is bound to its group directly. A MEMBER is bound through the
+ * membership currently in view — never through `User.groupId`, which outlives
+ * removal from the roster and would otherwise leak the former group.
+ * Null means the account speaks for no group at all.
+ */
+function memberGroupWhere(user: AuthenticatedUser): Prisma.GroupWhereInput | null {
+  if (user.role === "GROUP_ACCOUNT") return user.groupId ? { id: user.groupId } : null;
+  if (user.role === "MEMBER") {
+    return user.memberId ? { members: { some: { id: user.memberId } } } : null;
+  }
+  return null;
 }
 
 export function scopeGroupWhere(
@@ -109,11 +134,22 @@ export function programmeScopeForUser(user?: AuthenticatedUser): Prisma.Programm
   }
 
   if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") {
-    return user.groupId
+    // A MEMBER must resolve through the membership itself. `User.groupId`
+    // survives being taken off a roster (the Member row cascades, the pointer
+    // does not), so trusting it here would keep a removed member reading their
+    // former group's programmes.
+    const groupWhere = memberGroupWhere(user);
+    return groupWhere ? { OR: [{ groups: { some: groupWhere } }, { groupLinks: { some: { group: groupWhere } } }] } : { id: "__no_access__" };
+  }
+
+  // Programmes the agent's own caseload belongs to.
+  if (user.role === "VILLAGE_AGENT") {
+    return user.villageAgentId
       ? {
           OR: [
-            { groups: { some: { id: user.groupId } } },
-            { groupLinks: { some: { groupId: user.groupId } } }
+            { villageAgents: { some: { id: user.villageAgentId } } },
+            { groups: { some: { villageAgentId: user.villageAgentId } } },
+            { groupLinks: { some: { group: { villageAgentId: user.villageAgentId } } } }
           ]
         }
       : { id: "__no_access__" };
@@ -142,14 +178,15 @@ export function partnerScopeForUser(user?: AuthenticatedUser): Prisma.PartnerWhe
   }
 
   if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") {
-    return user.groupId
+    const groupWhere = memberGroupWhere(user);
+    return groupWhere
       ? {
           programmeLinks: {
             some: {
               programme: {
                 OR: [
-                  { groups: { some: { id: user.groupId } } },
-                  { groupLinks: { some: { groupId: user.groupId } } }
+                  { groups: { some: groupWhere } },
+                  { groupLinks: { some: { group: groupWhere } } }
                 ]
               }
             }
@@ -158,11 +195,21 @@ export function partnerScopeForUser(user?: AuthenticatedUser): Prisma.PartnerWhe
       : { id: "__no_access__" };
   }
 
+  // An agent has no partner-level visibility.
+  if (user.role === "VILLAGE_AGENT") {
+    return { id: "__no_access__" };
+  }
+
   return {};
 }
 
 export function villageAgentScopeForUser(user?: AuthenticatedUser): Prisma.VillageAgentWhereInput {
   if (!user) return { id: "__no_access__" };
+
+  // An agent may only ever see their own agent profile.
+  if (user.role === "VILLAGE_AGENT") {
+    return user.villageAgentId ? { id: user.villageAgentId } : { id: "__no_access__" };
+  }
 
   if (user.role === "PARTNER_OFFICER") {
     return user.partnerId
@@ -209,6 +256,13 @@ export function memberScopeForUser(
     );
   }
 
+  if (user.role === "VILLAGE_AGENT") {
+    return andWhere(
+      where,
+      user.villageAgentId ? { group: groupScopeForUser(user) } : { id: "__no_access__" }
+    );
+  }
+
   return where ?? {};
 }
 
@@ -234,6 +288,13 @@ export function ledgerScopeForUser(
     return andWhere(
       where,
       user.partnerId ? { group: groupScopeForUser(user) } : { id: "__no_access__" }
+    );
+  }
+
+  if (user.role === "VILLAGE_AGENT") {
+    return andWhere(
+      where,
+      user.villageAgentId ? { group: groupScopeForUser(user) } : { id: "__no_access__" }
     );
   }
 

@@ -18,6 +18,7 @@ import {
   verifyPaystackSignature,
   walletAvailable
 } from "../services/payment-service";
+import { completeGroupPayment, failGroupPayment } from "../services/group-payment-service";
 import { holdFunds } from "../services/wallet-service";
 
 const router = Router();
@@ -477,13 +478,19 @@ router.post("/payments/mpesa/stk-callback", async (req, res, next) => {
       );
 
       if (callback?.ResultCode === 0) {
-        await completeIncomingTransaction(reference, {
+        const success = {
           ...metadata,
           providerTransactionId:
             typeof metadata.MpesaReceiptNumber === "string" ? metadata.MpesaReceiptNumber : undefined
-        });
+        };
+        // The reference belongs to either a partner wallet transaction or a
+        // group payment; the one that doesn't own it is a no-op.
+        await completeIncomingTransaction(reference, success);
+        await completeGroupPayment(reference, success);
       } else {
-        await failIncomingTransaction(reference, callback?.ResultDesc ?? "M-Pesa payment failed.", payload);
+        const reason = callback?.ResultDesc ?? "M-Pesa payment failed.";
+        await failIncomingTransaction(reference, reason, payload);
+        await failGroupPayment(reference, reason, payload);
       }
 
       await prisma.paymentWebhookEvent.update({
@@ -600,11 +607,17 @@ router.post("/payments/paystack/webhook", async (req, res, next) => {
 
     if (!webhook.duplicate) {
       if (payload.event === "charge.success") {
-        await completeIncomingTransaction(reference, {
+        const success = {
           providerTransactionId: payload.data?.id ? String(payload.data.id) : undefined,
           status: payload.data?.status,
           gatewayResponse: payload.data?.gateway_response
-        });
+        };
+        await completeIncomingTransaction(reference, success);
+        await completeGroupPayment(reference, success);
+      } else if (payload.event === "charge.failed") {
+        const reason = payload.data?.gateway_response ?? "Paystack payment failed.";
+        await failIncomingTransaction(reference, reason, payload);
+        await failGroupPayment(reference, reason, payload);
       } else if (payload.event === "transfer.success") {
         await completeWithdrawal(reference, {
           providerTransactionId: payload.data?.id ? String(payload.data.id) : undefined,

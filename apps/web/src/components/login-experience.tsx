@@ -3,7 +3,7 @@
 import type { FormEvent } from "react";
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn } from "@/lib/theme-icons";
+import { LogIn, Smartphone } from "@/lib/theme-icons";
 import { demoAccounts, demoPassword } from "@intellicash/shared";
 import type { Role } from "@intellicash/shared";
 import { apiFetch, humanizeEnum } from "../lib/api";
@@ -30,20 +30,20 @@ export function LoginExperience({
     [demoRoles]
   );
   const initialAccount = visibleDemoAccounts[0] ?? demoAccounts[0];
-  const [email, setEmail] = useState<string>(initialAccount.email);
+  const [phone, setPhone] = useState<string>(initialAccount.phone);
   const [password, setPassword] = useState<string>(demoPassword);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeDemoEmail, setActiveDemoEmail] = useState<string | null>(null);
+  const [activeDemoPhone, setActiveDemoPhone] = useState<string | null>(null);
 
-  async function signIn(nextEmail: string = email, nextPassword: string = password) {
+  async function signIn(nextPhone: string = phone, nextPassword: string = password) {
     setError(null);
     setLoading(true);
 
     try {
-      const signedInUser = await apiFetch<{ role: Role; groupId?: string | null }>("/auth/login", {
+      const signedInUser = await apiFetch<{ role: Role; groupId?: string | null; phone: string }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email: nextEmail, password: nextPassword })
+        body: JSON.stringify({ phone: nextPhone, password: nextPassword })
       });
       if (signedInUser.role === "GROUP_ACCOUNT" && signedInUser.groupId) {
         void refreshOfflinePinCache(signedInUser.groupId).catch(() => undefined);
@@ -56,17 +56,25 @@ export function LoginExperience({
     }
   }
 
+  function isPhone(value: string): boolean {
+    return /^[\d\+\-\(\)\s]{7,20}$/.test(value);
+  }
+
+  function isEmail(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await signIn();
   }
 
   async function signInAsDemo(account: (typeof demoAccounts)[number]) {
-    setEmail(account.email);
+    setPhone(account.phone);
     setPassword(demoPassword);
-    setActiveDemoEmail(account.email);
-    await signIn(account.email, demoPassword);
-    setActiveDemoEmail(null);
+    setActiveDemoPhone(account.phone);
+    await signIn(account.phone, demoPassword);
+    setActiveDemoPhone(null);
   }
 
   return (
@@ -88,13 +96,14 @@ export function LoginExperience({
         <form className="login-form" onSubmit={onSubmit}>
           <h2>{formTitle}</h2>
           <label>
-            Email
+            <Smartphone size={16} /> Phone Number
             <input
-              autoComplete="email"
-              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="tel"
+              onChange={(event) => setPhone(event.target.value)}
               required
-              type="email"
-              value={email}
+              type="tel"
+              placeholder="+254700000001"
+              value={phone}
             />
           </label>
           <label>
@@ -124,7 +133,7 @@ export function LoginExperience({
                 <button
                   className="demo-account-button"
                   disabled={loading}
-                  key={account.email}
+                  key={account.phone}
                   onClick={() => void signInAsDemo(account)}
                   type="button"
                 >
@@ -132,7 +141,7 @@ export function LoginExperience({
                     <strong>{humanizeEnum(account.role)}</strong>
                     <small>{account.scope}</small>
                   </span>
-                  <em>{activeDemoEmail === account.email ? "Signing in" : "Open"}</em>
+                  <em>{activeDemoPhone === account.phone ? "Signing in" : "Open"}</em>
                 </button>
               ))}
             </div>

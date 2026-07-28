@@ -8,23 +8,34 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         String
-  status       String   @default("ACTIVE")
-  avatarUrl    String?
-  languagePreference String @default("ENGLISH")
-  partnerId    String?
-  groupId      String?
-  memberId     String?  @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  phone              String?  @unique
+  passwordHash       String
+  role               String
+  status             String   @default("ACTIVE")
+  avatarUrl          String?
+  languagePreference String   @default("ENGLISH")
+  partnerId          String?
+  groupId            String?
+  /**
+   * The membership currently in view. A person can belong to several groups
+   * (see UserMembership); this is the one all scoping resolves against, so
+   * switching groups means repointing this. Null for group/agent logins.
+   */
+  memberId           String?  @unique
+  /**
+   * Binding for a VILLAGE_AGENT login: the agent this account acts as.
+   */
+  villageAgentId     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   partner             Partner?               @relation(fields: [partnerId], references: [id])
   group               Group?                 @relation(fields: [groupId], references: [id])
   member              Member?                @relation(fields: [memberId], references: [id])
+  villageAgent        VillageAgent?          @relation(fields: [villageAgentId], references: [id])
   sessions            Session[]
   apiKeys             ApiKey[]
   notifications       Notification[]
@@ -32,6 +43,9 @@ model User {
   capturedMeetingKeys MeetingKeySubmission[] @relation("MeetingKeyCapturedBy")
   storeCreditRequests StoreCreditRequest[]   @relation("StoreCreditRequester")
   offlineDevices      OfflineDevice[]
+  externalLoanApplications ExternalLoanApplication[] @relation("ExternalLoanRequester")
+  groupJoinRequests   GroupJoinRequest[]
+  memberships         UserMembership[]
 }
 
 model Notification {
@@ -106,6 +120,7 @@ model Partner {
   walletTransactions          PartnerWalletTransaction[]
   webhookSubscriptions        WebhookSubscription[]
   storeFinancedCreditRequests StoreCreditRequest[]       @relation("StoreCreditFinancier")
+  externalLoanProducts        ExternalLoanProduct[]
 }
 
 model Programme {
@@ -158,40 +173,40 @@ model ProgrammeAsset {
 }
 
 model PartnerSignupRequest {
-  id                   String    @id @default(cuid())
-  organizationName     String
-  organizationType     String
-  requestedRole        String    @default("PARTNER_OFFICER")
-  requestedPartnerType String    @default("NGO")
-  contactName          String
-  contactEmail         String
-  contactPhone         String?
-  county               String?
-  groupSubCounty       String?
-  groupLocation        String?
-  groupMeetingDay      String?
-  groupObjective       String?
-  estimatedMembers     Int?
-  championRole         String?
-  assignedVillageAgentId String?
-  fieldVisitStatus     String    @default("NOT_REQUIRED")
-  fieldVisitNotes      String?
-  fieldVisitScheduledAt DateTime?
-  fieldVisitedAt       DateTime?
+  id                         String    @id @default(cuid())
+  organizationName           String
+  organizationType           String
+  requestedRole              String    @default("PARTNER_OFFICER")
+  requestedPartnerType       String    @default("NGO")
+  contactName                String
+  contactEmail               String
+  contactPhone               String?
+  county                     String?
+  groupSubCounty             String?
+  groupLocation              String?
+  groupMeetingDay            String?
+  groupObjective             String?
+  estimatedMembers           Int?
+  championRole               String?
+  assignedVillageAgentId     String?
+  fieldVisitStatus           String    @default("NOT_REQUIRED")
+  fieldVisitNotes            String?
+  fieldVisitScheduledAt      DateTime?
+  fieldVisitedAt             DateTime?
   fieldVisitReviewedByUserId String?
-  valueProposition     String?
-  status               String    @default("PENDING")
-  reviewNotes          String?
-  reviewedByUserId     String?
-  reviewedAt           DateTime?
-  createdPartnerId     String?
-  createdGroupId       String?
-  createdMemberId      String?
-  createdUserId        String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  valueProposition           String?
+  status                     String    @default("PENDING")
+  reviewNotes                String?
+  reviewedByUserId           String?
+  reviewedAt                 DateTime?
+  createdPartnerId           String?
+  createdGroupId             String?
+  createdMemberId            String?
+  createdUserId              String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
-  createdPartner Partner? @relation(fields: [createdPartnerId], references: [id], onDelete: SetNull)
+  createdPartner       Partner?      @relation(fields: [createdPartnerId], references: [id], onDelete: SetNull)
   assignedVillageAgent VillageAgent? @relation("SignupFieldAgent", fields: [assignedVillageAgentId], references: [id], onDelete: SetNull)
 }
 
@@ -302,8 +317,12 @@ model VillageAgent {
 
   programme                Programme?                   @relation(fields: [programmeId], references: [id])
   groups                   Group[]
+  /**
+   * Login accounts that act as this agent (VILLAGE_AGENT role).
+   */
+  userAccounts             User[]
   bookingRequests          AgentBookingRequest[]
-  signupRequests           PartnerSignupRequest[]      @relation("SignupFieldAgent")
+  signupRequests           PartnerSignupRequest[]       @relation("SignupFieldAgent")
   storeCreditDistributions StoreCreditRequest[]         @relation("StoreCreditDistributor")
   storeProductProgrammes   StoreProductProgrammeAgent[]
 }
@@ -392,6 +411,22 @@ model StoreCreditRequest {
   phoneNumber          String
   county               String?
   groupName            String?
+  /**
+   * The buying group, when the purchase is made by a VSLA group. Drives
+   * credit-rating-based pricing.
+   */
+  groupId              String?
+  /**
+   * The meeting where the group agreed this purchase, when it was bought in
+   * one. Lets the minute book account for money committed during a sitting,
+   * the same way external loan applications do.
+   */
+  meetingId            String?
+  /**
+   * The group's credit band at the moment of purchase. Frozen here so the
+   * agreed price is never rewritten by a later score change.
+   */
+  creditBand           String?
   quantity             Int       @default(1)
   requestedAmountCents Int
   depositCents         Int       @default(0)
@@ -410,6 +445,8 @@ model StoreCreditRequest {
 
   product           StoreProduct             @relation(fields: [productId], references: [id], onDelete: Cascade)
   programme         Programme                @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  group             Group?                   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  meeting           Meeting?                 @relation(fields: [meetingId], references: [id], onDelete: SetNull)
   requester         User?                    @relation("StoreCreditRequester", fields: [requesterUserId], references: [id], onDelete: SetNull)
   distributionAgent VillageAgent?            @relation("StoreCreditDistributor", fields: [distributionAgentId], references: [id], onDelete: SetNull)
   financierPartner  Partner?                 @relation("StoreCreditFinancier", fields: [financierPartnerId], references: [id], onDelete: SetNull)
@@ -477,44 +514,50 @@ model AgentBookingRequest {
 }
 
 model Group {
-  id                  String   @id @default(cuid())
-  programmeId         String?
-  villageAgentId      String?
-  name                String
-  code                String   @unique
-  phase               String
-  county              String
-  subCounty           String?
-  location            String?
-  composition         String?
-  objective           String?
-  contactPersonName   String?
-  contactPhone        String?
-  onboardingFeedback  String?
-  sourceSystem        String?
-  sourceReference     String?
-  meetingDay          String?
-  gpsLatitude         Float?
-  gpsLongitude        Float?
-  gpsRadiusMeters     Int      @default(50)
-  shareValueCents     Int      @default(50000)
-  maxSharesPerMemberPerMeeting Int @default(10)
-  constitutionVersion String   @default("IWLSGS-1.0")
-  cycleNumber         Int      @default(1)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                           String   @id @default(cuid())
+  programmeId                  String?
+  villageAgentId               String?
+  name                         String
+  code                         String   @unique
+  phase                        String
+  county                       String
+  subCounty                    String?
+  location                     String?
+  composition                  String?
+  objective                    String?
+  contactPersonName            String?
+  contactPhone                 String?
+  onboardingFeedback           String?
+  sourceSystem                 String?
+  sourceReference              String?
+  meetingDay                   String?
+  gpsLatitude                  Float?
+  gpsLongitude                 Float?
+  gpsRadiusMeters              Int      @default(50)
+  shareValueCents              Int      @default(50000)
+  maxSharesPerMemberPerMeeting Int      @default(10)
+  constitutionVersion          String   @default("IWLSGS-1.0")
+  cycleNumber                  Int      @default(1)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
-  programme      Programme?       @relation(fields: [programmeId], references: [id])
-  programmeLinks ProgrammeGroup[]
-  villageAgent   VillageAgent?    @relation(fields: [villageAgentId], references: [id])
-  userAccounts   User[]
-  members        Member[]
-  meetings       Meeting[]
-  fundAccounts   FundAccount[]
-  ledgerEntries  LedgerEntry[]
-  votes          Vote[]
-  creditScores   CreditScore[]
-  offlineDevices OfflineDevice[]
+  programme           Programme?           @relation(fields: [programmeId], references: [id])
+  programmeLinks      ProgrammeGroup[]
+  villageAgent        VillageAgent?        @relation(fields: [villageAgentId], references: [id])
+  userAccounts        User[]
+  members             Member[]
+  meetings            Meeting[]
+  fundAccounts        FundAccount[]
+  ledgerEntries       LedgerEntry[]
+  votes               Vote[]
+  creditScores        CreditScore[]
+  offlineDevices      OfflineDevice[]
+  storeCreditRequests StoreCreditRequest[]
+  externalLoanApplications ExternalLoanApplication[]
+  groupPayments       GroupPayment[]
+  polls               Poll[]
+  joinRequests        GroupJoinRequest[]
+  memberships         UserMembership[]
 }
 
 model Member {
@@ -538,10 +581,14 @@ model Member {
 
   group          Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   userAccounts   User[]
+  membershipLinks UserMembership[]
   attendance     Attendance[]
   ledgerEntries  LedgerEntry[]
   keySubmissions MeetingKeySubmission[]
   pinDeliveries  MemberPinDelivery[]
+  groupPayments  GroupPayment[]
+  pollCandidacies PollOption[]
+  pollVotes      PollVote[]
 }
 
 model Meeting {
@@ -565,6 +612,10 @@ model Meeting {
   keySubmissions MeetingKeySubmission[]
   ledgerEntries  LedgerEntry[]
   votes          Vote[]
+  externalLoanApplications ExternalLoanApplication[]
+  storeCreditRequests StoreCreditRequest[]
+  groupPayments  GroupPayment[]
+  polls          Poll[]
 }
 
 model MeetingKeySubmission {
@@ -1131,4 +1182,236 @@ model FtmaPartnerLinkage {
   createdAt        DateTime @default(now())
 
   @@unique([rowNumber, institutionName])
+}
+
+/**
+ * An external credit offer ("credit venture") published by a lending Partner
+ * and surfaced to groups through Intelli-Stores alongside physical credit
+ * products. Groups apply for it like they buy a product on credit.
+ */
+model ExternalLoanProduct {
+  id                 String   @id @default(cuid())
+  partnerId          String
+  name               String
+  slug               String   @unique
+  category           String   @default("WORKING_CAPITAL")
+  description        String
+  minAmountCents     Int
+  maxAmountCents     Int
+  interestRateBps    Int
+  interestPeriod     String   @default("PER_YEAR")
+  termMonths         Int
+  repaymentFrequency String   @default("MONTHLY")
+  /**
+   * Lowest credit band the lender accepts (A is best). Null = any rated or
+   * unrated group may apply; the lender still decides on the application.
+   */
+  minCreditBand      String?
+  requirements       String?
+  status             String   @default("ACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  partner      Partner                   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  applications ExternalLoanApplication[]
+}
+
+/**
+ * A group's application for an external loan product. `creditBand` freezes
+ * the group's rating at application time; `meetingId` links the application
+ * to the meeting it was raised in, when applied mid-meeting.
+ */
+model ExternalLoanApplication {
+  id              String    @id @default(cuid())
+  productId       String
+  groupId         String
+  meetingId       String?
+  requesterUserId String?
+  amountCents     Int
+  purpose         String
+  creditBand      String?
+  status          String    @default("PENDING")
+  reviewNotes     String?
+  decidedAt       DateTime?
+  disbursedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  product   ExternalLoanProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group     Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  meeting   Meeting?            @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  requester User?               @relation("ExternalLoanRequester", fields: [requesterUserId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, status])
+  @@index([productId, status])
+}
+
+
+/**
+ * A member's payment into the group made through a payment gateway —
+ * M-Pesa STK push (Daraja) or Paystack checkout. "Classic" M-Pesa, where a
+ * member pays manually and reads out the confirmation code, never creates
+ * one of these: it is recorded straight onto the ledger entry instead.
+ */
+model GroupPayment {
+  id                    String    @id @default(cuid())
+  groupId               String
+  memberId              String?
+  meetingId             String?
+  /// SHARE_PURCHASE | SOCIAL_FUND | LOAN_REPAYMENT | FINE | OTHER
+  purpose               String    @default("SHARE_PURCHASE")
+  /// MPESA_DARAJA | PAYSTACK
+  provider              String
+  amountCents           Int
+  currency              String    @default("KES")
+  phoneNumber           String?
+  customerEmail         String?
+  /// PENDING | COMPLETED | FAILED | CANCELLED
+  status                String    @default("PENDING")
+  internalReference     String    @unique
+  providerReference     String?
+  providerTransactionId String?
+  checkoutUrl           String?
+  failureReason         String?
+  metadataJson          String?
+  /// Lets the phone retry a request without charging twice.
+  clientRequestId       String?   @unique
+  createdAt             DateTime  @default(now())
+  completedAt           DateTime?
+  updatedAt             DateTime  @updatedAt
+
+  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member  Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, status])
+  @@index([providerReference])
+}
+
+/**
+ * A vote the group runs: electing an official (ROLE_ELECTION) or deciding a
+ * motion (DECISION). Members cast one vote each; closing the poll freezes
+ * the tally and writes the outcome into the group's minute book.
+ */
+model Poll {
+  id              String    @id @default(cuid())
+  groupId         String
+  meetingId       String?
+  /// ROLE_ELECTION | DECISION
+  type            String    @default("DECISION")
+  title           String
+  description     String?
+  /// The office being filled, when type is ROLE_ELECTION.
+  targetRole      String?
+  /// OPEN | CLOSED
+  status          String    @default("OPEN")
+  /// A secret ballot hides who voted for what; the tally is still public.
+  secretBallot    Boolean   @default(false)
+  createdByUserId String?
+  closesAt        DateTime?
+  closedAt        DateTime?
+  resultSummary   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  group   Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  meeting Meeting?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  options PollOption[]
+  votes   PollVote[]
+
+  @@index([groupId, status])
+}
+
+model PollOption {
+  id       String  @id @default(cuid())
+  pollId   String
+  label    String
+  /// The candidate, when this option is a member standing for office.
+  memberId String?
+  position Int     @default(0)
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  member Member?    @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  votes  PollVote[]
+
+  @@index([pollId])
+}
+
+model PollVote {
+  id       String   @id @default(cuid())
+  pollId   String
+  optionId String
+  memberId String
+  castAt   DateTime @default(now())
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  member Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  /// One member, one vote.
+  @@unique([pollId, memberId])
+  @@index([optionId])
+}
+
+
+/**
+ * Someone with a member account asking to be added to a group.
+ *
+ * A group's code is printed on its materials, so it is NOT a secret and
+ * cannot be the only gate: the request grants NOTHING until an official
+ * approves it. Until then the requester's account stays unlinked and sees
+ * none of the group's money.
+ *
+ * On approval the group is matched to an existing Member row by phone
+ * (groups usually enter their members during setup, before those people
+ * install the app); only if there is no match is a new Member created.
+ */
+model GroupJoinRequest {
+  id              String    @id @default(cuid())
+  groupId         String
+  /// The account asking to join.
+  userId          String
+  requestedName   String
+  phone           String
+  /// PENDING | APPROVED | REJECTED | CANCELLED
+  status          String    @default("PENDING")
+  /// Member row this was matched or linked to once approved.
+  memberId        String?
+  reviewNotes     String?
+  decidedByUserId String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// One live request per person per group.
+  @@unique([groupId, userId])
+  @@index([groupId, status])
+}
+
+
+/**
+ * One person's place in one group. The source of truth for "which groups am
+ * I in" -- people commonly belong to several VSLAs at once, so a single
+ * pointer on User could never express it.
+ *
+ * User.memberId still holds whichever of these is currently in view, and all
+ * permission scoping resolves against that. Switching groups repoints it.
+ */
+model UserMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  /// A Member row is one person in one group, so it links to exactly one account.
+  memberId  String   @unique
+  groupId   String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
 }

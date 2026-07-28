@@ -381,6 +381,7 @@ export async function seedDatabase() {
     data: {
       name: demoAccount("IWL_ADMIN").name,
       email: demoAccount("IWL_ADMIN").email,
+      phone: "+254700000001",
       passwordHash,
       role: "IWL_ADMIN",
       avatarUrl: avatarUrl(demoAccount("IWL_ADMIN").name),
@@ -394,6 +395,7 @@ export async function seedDatabase() {
       {
         name: demoAccount("PARTNER_OFFICER").name,
         email: demoAccount("PARTNER_OFFICER").email,
+        phone: "+254700000002",
         passwordHash,
         role: "PARTNER_OFFICER",
         partnerId: partner.id,
@@ -404,6 +406,7 @@ export async function seedDatabase() {
       {
         name: demoAccount("LENDER").name,
         email: demoAccount("LENDER").email,
+        phone: "+254700000003",
         passwordHash,
         role: "LENDER",
         partnerId: lenderPartner.id,
@@ -414,6 +417,7 @@ export async function seedDatabase() {
       {
         name: demoAccount("READ_ONLY").name,
         email: demoAccount("READ_ONLY").email,
+        phone: "+254700000004",
         passwordHash,
         role: "READ_ONLY",
         avatarUrl: avatarUrl(demoAccount("READ_ONLY").name),
@@ -436,6 +440,23 @@ export async function seedDatabase() {
       feedback: "Book Grace for onboarding, poultry enterprise coaching, and digital records training.",
       digitalLiteracyScore: 91,
       caseloadLimit: 20
+    }
+  });
+
+  // Grace's own login. Created here rather than with the other demo users
+  // because it has to point at the VillageAgent record above; without it the
+  // agent role exists on paper but nobody can sign in to use it.
+  await prisma.user.create({
+    data: {
+      name: demoAccount("VILLAGE_AGENT").name,
+      email: demoAccount("VILLAGE_AGENT").email,
+      phone: demoAccount("VILLAGE_AGENT").phone,
+      passwordHash,
+      role: "VILLAGE_AGENT",
+      villageAgentId: va.id,
+      avatarUrl: avatarUrl(demoAccount("VILLAGE_AGENT").name),
+      languagePreference: "ENGLISH",
+      status: "ACTIVE"
     }
   });
 
@@ -556,6 +577,7 @@ export async function seedDatabase() {
       {
         name: demoAccount("GROUP_ACCOUNT").name,
         email: demoAccount("GROUP_ACCOUNT").email,
+        phone: "+254700000005",
         passwordHash,
         role: "GROUP_ACCOUNT",
         groupId: group.id,
@@ -566,6 +588,7 @@ export async function seedDatabase() {
       {
         name: demoAccount("MEMBER").name,
         email: demoAccount("MEMBER").email,
+        phone: "+254700000006",
         passwordHash,
         role: "MEMBER",
         groupId: group.id,
@@ -575,6 +598,22 @@ export async function seedDatabase() {
         status: "ACTIVE"
       }
     ]
+  });
+
+  // The membership row, not just the pointer. `User.memberId` on its own is
+  // the shape that leaves an account showing no groups until something
+  // repairs it, and seeding it that way meant the demo data never exercised
+  // the table the app actually reads.
+  const seededMemberAccount = await prisma.user.findUniqueOrThrow({
+    where: { email: demoAccount("MEMBER").email },
+    select: { id: true }
+  });
+  await prisma.userMembership.create({
+    data: {
+      userId: seededMemberAccount.id,
+      memberId: members[0]!.id,
+      groupId: group.id
+    }
   });
 
   const secondGroupMembers = await Promise.all(

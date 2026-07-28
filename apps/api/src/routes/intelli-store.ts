@@ -7,8 +7,17 @@ import { requireAuth } from "../middleware/auth";
 import {
   partnerScopeForUser,
   programmeScopeForUser,
+  scopeGroupWhere,
   villageAgentScopeForUser
 } from "../services/account-scope";
+import {
+  creditTermsForBand,
+  type CreditBand
+} from "../domain/credit-rating-contract";
+import {
+  computeCreditRating,
+  latestCreditRating
+} from "../services/credit-rating-service";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { createPaymentReference } from "../services/payment-service";
@@ -116,6 +125,10 @@ const creditRequestCreateSchema = z.object({
   phoneNumber: z.string().min(7),
   county: z.string().optional(),
   groupName: z.string().optional(),
+  /** The buying VSLA group — prices the purchase against its credit band. */
+  groupId: z.string().optional(),
+  /** The meeting this was agreed in, when bought during a sitting. */
+  meetingId: z.string().min(1).optional(),
   quantity: z.number().int().min(1).max(100).default(1),
   depositCents: z.number().int().min(0).optional(),
   notes: z.string().optional()
@@ -649,7 +662,17 @@ async function generateInstallmentSchedule(tx: Prisma.TransactionClient, request
   if (!request || !request.financierPartnerId) return null;
 
   const terms = request.product.programmeLinks.find((link) => link.programmeId === request.programmeId);
-  const installmentCount = terms?.installmentCount ?? 6;
+
+  // Credit-rating pricing: the band frozen onto the request at purchase time
+  // caps the term length and scales the programme's base interest. Requests
+  // with no band (individual buyers) keep the programme terms unchanged.
+  const creditTerms = request.creditBand
+    ? creditTermsForBand(request.creditBand as CreditBand)
+    : null;
+  const installmentCount = Math.min(
+    terms?.installmentCount ?? 6,
+    creditTerms?.maxInstallments ?? Number.MAX_SAFE_INTEGER
+  );
   const principalCents =
     request.financedAmountCents > 0
       ? request.financedAmountCents
@@ -657,7 +680,11 @@ async function generateInstallmentSchedule(tx: Prisma.TransactionClient, request
 
   if (principalCents <= 0 || installmentCount <= 0) return null;
 
-  const interestCents = Math.floor((principalCents * (terms?.flatInterestRateBps ?? 0)) / 10_000);
+  const baseInterestBps = terms?.flatInterestRateBps ?? 0;
+  const effectiveInterestBps = creditTerms
+    ? Math.round((baseInterestBps * creditTerms.interestMultiplierBps) / 10_000)
+    : baseInterestBps;
+  const interestCents = Math.floor((principalCents * effectiveInterestBps) / 10_000);
   const principalParts = splitCents(principalCents, installmentCount);
   const interestParts = splitCents(interestCents, installmentCount);
   const firstDueDate = new Date(request.financedAt ?? new Date());
@@ -930,7 +957,71 @@ async function createCreditRequestFromPayload({
   }
 
   const requestedAmountCents = product.priceCents * body.quantity;
-  const depositCents = body.depositCents ?? product.depositCents * body.quantity;
+
+  // ---- Credit-rating-based pricing -------------------------------------
+  // A purchase made by a VSLA group is priced against that group's credit
+  // band: the band sets the deposit floor, and is frozen onto the request so
+  // the agreed price survives any later score change. Individual/public
+  // buyers keep the product's flat deposit.
+  const buyingGroupId =
+    !publicOnly
+      ? body.groupId ??
+        (user?.role === "MEMBER" || user?.role === "GROUP_ACCOUNT"
+          ? user?.groupId ?? undefined
+          : undefined)
+      : undefined;
+
+  let creditBand: string | null = null;
+  let bandDepositCents: number | null = null;
+  if (buyingGroupId) {
+    // Only price against a group this caller may actually act for.
+    const group = await prisma.group.findFirst({
+      where: scopeGroupWhere(user, { id: buyingGroupId }),
+      select: { id: true, name: true }
+    });
+    if (!group) {
+      throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
+    }
+    const rating = (await latestCreditRating(group.id)) ?? (await computeCreditRating(group.id));
+    if (!rating.terms.creditEligible) {
+      throw new ApiHttpError(
+        400,
+        "GROUP_NOT_CREDIT_ELIGIBLE",
+        `${group.name} is not eligible to buy on credit at its current rating.`
+      );
+    }
+    creditBand = rating.band;
+    bandDepositCents = Math.ceil((requestedAmountCents * rating.terms.depositRateBps) / 10_000);
+
+    // Checked against the group we just proved this caller may act for, so a
+    // purchase can never be minuted into another group's sitting.
+    if (body.meetingId) {
+      const meeting = await prisma.meeting.findFirst({
+        where: { id: body.meetingId, groupId: group.id },
+        select: { id: true }
+      });
+      if (!meeting) {
+        throw new ApiHttpError(404, "MEETING_NOT_FOUND", "Meeting does not exist in this group.");
+      }
+    }
+  }
+
+  // A sitting belongs to a group; without one there is no minute book to
+  // record the purchase in.
+  if (body.meetingId && !buyingGroupId) {
+    throw new ApiHttpError(
+      400,
+      "MEETING_WITHOUT_GROUP",
+      "Only a group purchase can be tied to a meeting."
+    );
+  }
+
+  // The band sets the deposit floor; a buyer may always choose to pay more.
+  const depositCents =
+    bandDepositCents !== null
+      ? Math.max(body.depositCents ?? bandDepositCents, bandDepositCents)
+      : body.depositCents ?? product.depositCents * body.quantity;
+
   const customerFields =
     !publicOnly && user?.role === "MEMBER"
       ? {
@@ -983,6 +1074,9 @@ async function createCreditRequestFromPayload({
       phoneNumber: customerFields.phoneNumber,
       county: body.county,
       groupName: customerFields.groupName,
+      groupId: buyingGroupId,
+      meetingId: buyingGroupId ? body.meetingId : undefined,
+      creditBand,
       quantity: body.quantity,
       requestedAmountCents,
       depositCents,

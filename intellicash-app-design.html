@@ -1,0 +1,773 @@
+<title>Intelli-Cash App Design</title>
+<style>
+/* ---------- page tokens ---------- */
+:root{
+  --ground:#F4F6F3; --card:#FFFFFF; --ink:#17201A; --muted:#5A685E;
+  --accent:#0E9B54; --hair:#E0E7E0; --codebg:#ECF1EC;
+  --sans:"Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --disp:"Segoe UI Variable Display","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:"Cascadia Code",Consolas,"SF Mono","Roboto Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --ground:#0D110E; --card:#151B16; --ink:#E8EFE9; --muted:#93A398;
+         --accent:#3DDC7E; --hair:#232B24; --codebg:#101711; }
+}
+:root[data-theme="dark"]{ --ground:#0D110E; --card:#151B16; --ink:#E8EFE9; --muted:#93A398;
+  --accent:#3DDC7E; --hair:#232B24; --codebg:#101711; }
+:root[data-theme="light"]{ --ground:#F4F6F3; --card:#FFFFFF; --ink:#17201A; --muted:#5A685E;
+  --accent:#0E9B54; --hair:#E0E7E0; --codebg:#ECF1EC; }
+
+/* ---------- app (mockup) tokens &#8212; the app is dark by design ---------- */
+:root{
+  --abg:#0E1113; --asurf:#1B2126; --asurf2:#232A30; --aline:#2C343B;
+  --agreen:#3DDC7E; --agreen-t:rgba(61,220,126,.13); --onprim:#08301B;
+  --aink:#F2F5F6; --aink2:#8C99A2;
+  --arep:#8AB4F8; --arep-t:rgba(138,180,248,.13);
+  --adef:#F28B82; --adef-t:rgba(242,139,130,.13);
+  --aamb:#FDD663; --aamb-t:rgba(253,214,99,.13);
+}
+
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);
+  margin:0;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px}
+
+/* ---------- page typography ---------- */
+.brandbar{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  padding:26px 0 18px;border-bottom:1px solid var(--hair);font-size:12px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+header.cover{padding:64px 0 24px}
+h1{font-family:var(--disp);font-size:clamp(2.4rem,5vw,3.6rem);font-weight:800;
+  letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance;line-height:1.05}
+h1 .tick{color:var(--accent)}
+.tagline{font-size:1.15rem;color:var(--muted);max-width:60ch;margin:0 0 22px}
+.pillrow{display:flex;flex-wrap:wrap;gap:8px}
+.pill{border:1px solid var(--hair);background:var(--card);border-radius:999px;
+  padding:5px 14px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.pill b{color:var(--accent);font-weight:700}
+
+section{margin-top:84px}
+.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+  color:var(--accent);margin:0 0 8px}
+h2{font-family:var(--disp);font-size:clamp(1.5rem,2.6vw,2rem);font-weight:800;
+  letter-spacing:-.015em;margin:0 0 10px;text-wrap:balance}
+.lede{color:var(--muted);max-width:65ch;margin:0 0 30px}
+h3.group{font-size:1.05rem;font-weight:700;margin:44px 0 4px}
+p.groupnote{color:var(--muted);max-width:65ch;margin:0 0 22px;font-size:.95rem}
+
+/* ---------- token swatches ---------- */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.sw{background:var(--card);border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.sw .chip-c{height:64px;border-bottom:1px solid var(--hair)}
+.sw .meta{padding:10px 12px}
+.sw .meta b{display:block;font-size:13px}
+.sw .meta code{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.sw .meta small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+
+/* ---------- type scale table ---------- */
+.typerows{background:var(--card);border:1px solid var(--hair);border-radius:16px;overflow:hidden}
+.trow{display:flex;align-items:baseline;gap:20px;padding:14px 18px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.trow:last-child{border-bottom:none}
+.trow .spec{font-family:var(--mono);font-size:11.5px;color:var(--muted);min-width:150px}
+.trow .sample{font-family:Roboto,"Segoe UI",sans-serif}
+
+/* ---------- component board (dark panel) ---------- */
+.board{background:var(--abg);border-radius:20px;padding:28px;display:flex;flex-wrap:wrap;
+  gap:28px;align-items:flex-start;border:1px solid var(--hair)}
+.board .cell{display:flex;flex-direction:column;gap:10px;min-width:200px;flex:1}
+.board .cellname{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--aink2);font-weight:700}
+
+/* ---------- IA map ---------- */
+.iamap{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.tab{background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:16px}
+.tab .tname{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px}
+.tab .tname svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab ul{margin:0;padding:0;list-style:none;font-size:13px;color:var(--muted)}
+.tab li{padding:5px 0;border-top:1px dashed var(--hair)}
+
+/* ---------- rules ---------- */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rule{background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:18px}
+.rule b{display:block;font-size:14px;margin-bottom:6px}
+.rule p{margin:0;font-size:13px;color:var(--muted)}
+.rule code{font-family:var(--mono);font-size:12px;background:var(--codebg);
+  padding:1px 6px;border-radius:6px;color:var(--ink)}
+
+/* ---------- gallery & phone frame ---------- */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:36px 28px;justify-items:center}
+figure.shot{margin:0;display:flex;flex-direction:column;gap:14px;width:320px}
+figcaption b{display:block;font-size:14px}
+figcaption span{font-size:12.5px;color:var(--muted)}
+.phone{width:320px;background:#04060a;border-radius:34px;padding:9px;
+  border:1px solid rgba(120,140,130,.25);box-shadow:0 24px 48px -20px rgba(5,20,10,.45)}
+.scr{background:var(--abg);border-radius:26px;height:664px;overflow:hidden;
+  display:flex;flex-direction:column;color:var(--aink);
+  font-family:Roboto,"Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.4}
+.scr *{font-variant-numeric:tabular-nums}
+.body{flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column}
+
+/* app chrome */
+.sb{display:flex;justify-content:space-between;align-items:center;padding:10px 18px 2px;
+  font-size:11px;font-weight:600;color:var(--aink)}
+.sb .sicons{display:flex;gap:5px;align-items:center}
+.sb svg{width:13px;height:13px;stroke:var(--aink);fill:none;stroke-width:1.6;stroke-linecap:round}
+.ab{display:flex;justify-content:space-between;align-items:center;padding:10px 16px 6px;
+  font-size:15px;font-weight:600}
+.st{font-size:22px;font-weight:500;margin:10px 0 14px}
+.sub{font-size:12px;color:var(--aink2);margin:-10px 0 14px}
+.lbl{font-size:10px;letter-spacing:.15em;color:var(--aink2);font-weight:700;
+  text-transform:uppercase;margin:12px 0 8px}
+
+/* app components */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--asurf);border-radius:16px;padding:14px;display:flex;
+  flex-direction:column;gap:9px}
+.stat b{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.stat span{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--aink2)}
+.stat span svg{width:14px;height:14px;stroke:var(--agreen);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.fld{position:relative;border:1px solid var(--aline);border-radius:12px;
+  padding:13px 14px 11px;margin-bottom:14px;font-size:15px}
+.fld label{position:absolute;top:-7px;left:12px;background:var(--abg);padding:0 5px;
+  font-size:10.5px;color:var(--aink2)}
+.fld .caret{position:absolute;right:12px;top:12px;color:var(--aink2)}
+.fld.focus{border-color:var(--agreen)}
+.fld.focus label{color:var(--agreen)}
+.fld .ph{color:var(--aink2)}
+
+.bp{background:var(--agreen);color:var(--onprim);border-radius:999px;padding:14px;
+  font-weight:700;font-size:14px;text-align:center;display:flex;gap:8px;
+  justify-content:center;align-items:center}
+.bp svg{width:16px;height:16px;stroke:var(--onprim);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.bo{border:1px solid var(--aline);color:var(--agreen);border-radius:999px;padding:13px;
+  font-weight:600;font-size:14px;text-align:center}
+.bo.danger{color:var(--adef);border-color:rgba(242,139,130,.35)}
+.btnrow{display:flex;gap:12px;margin-top:auto;padding-bottom:16px}
+.btnrow>*{flex:1}
+
+.ch{font-size:10.5px;padding:4px 11px;border-radius:999px;font-weight:700;
+  display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.ch svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ch.act{color:var(--agreen);background:var(--agreen-t)}
+.ch.rep{color:var(--arep);background:var(--arep-t)}
+.ch.def{color:var(--adef);background:var(--adef-t)}
+.ch.amb{color:var(--aamb);background:var(--aamb-t)}
+.ch.ntr{color:#C3CCD3;background:var(--asurf2)}
+
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--asurf);
+  border-radius:14px;margin-bottom:8px}
+.row .grow{flex:1;min-width:0}
+.row .nm{font-size:13.5px;font-weight:600}
+.row .ds{font-size:11px;color:var(--aink2)}
+.row .amt{font-size:13.5px;font-weight:700;text-align:right}
+.av{width:34px;height:34px;border-radius:50%;background:#2A3238;color:#B9C3CB;
+  display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none}
+.tick{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;
+  border:1.6px solid var(--aline)}
+.tick.on{background:var(--agreen);border-color:var(--agreen)}
+.tick.on svg{width:14px;height:14px;stroke:var(--onprim);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+
+.card{background:var(--asurf);border-radius:16px;padding:15px;margin-bottom:14px}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3.5px 0;color:var(--aink)}
+.kv .k{color:var(--aink2)}
+.kv.big{font-weight:700}
+
+.seg{display:flex;background:var(--asurf);border-radius:999px;padding:3px;margin-bottom:12px}
+.seg div{flex:1;text-align:center;font-size:12.5px;padding:8px;border-radius:999px;color:var(--aink2);font-weight:600}
+.seg .on{background:var(--asurf2);color:var(--aink)}
+.search{display:flex;align-items:center;gap:10px;background:var(--asurf);border-radius:999px;
+  padding:11px 16px;font-size:13px;color:var(--aink2);margin-bottom:12px}
+.search svg{width:16px;height:16px;stroke:var(--aink2);fill:none;stroke-width:1.8;stroke-linecap:round}
+
+.radio{display:flex;justify-content:space-between;align-items:center;padding:12px 4px;font-size:14px}
+.rdot{width:20px;height:20px;border-radius:50%;border:2px solid var(--aink2);display:grid;place-items:center}
+.rdot.on{border-color:var(--agreen)}
+.rdot.on i{width:10px;height:10px;border-radius:50%;background:var(--agreen);display:block}
+
+.stepper{display:flex;justify-content:space-between;margin:6px 0 18px}
+.step{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10px;color:var(--aink2);flex:1}
+.snum{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  background:var(--asurf2);font-size:11px;font-weight:700}
+.step.done .snum,.step.on .snum{background:var(--agreen);color:var(--onprim)}
+.step.on{color:var(--agreen);font-weight:700}
+.step.done .snum svg{width:12px;height:12px;stroke:var(--onprim);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+
+.nb{display:flex;border-top:1px solid #1E252A;background:#101519;padding:8px 4px 12px;margin-top:auto}
+.nb a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:9.5px;color:#7E8A93;text-decoration:none}
+.nb a svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nb a.on{color:var(--agreen)}
+
+.fab{position:absolute;right:14px;bottom:74px;width:52px;height:52px;border-radius:18px;
+  background:var(--agreen);display:grid;place-items:center;box-shadow:0 8px 20px -6px rgba(61,220,126,.5)}
+.fab svg{width:22px;height:22px;stroke:var(--onprim);fill:none;stroke-width:2.4;stroke-linecap:round}
+.scrwrap{position:relative}
+
+.tile{background:var(--asurf);border-radius:16px;padding:13px 12px;display:flex;
+  flex-direction:column;gap:8px;font-size:12px;font-weight:600}
+.tile svg{width:19px;height:19px;stroke:var(--agreen);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pbar{height:6px;background:var(--asurf2);border-radius:99px;overflow:hidden;margin-top:8px}
+.pbar i{display:block;height:100%;width:78%;background:var(--agreen);border-radius:99px}
+
+.chart{background:var(--asurf);border-radius:16px;padding:14px 12px 8px}
+.chart svg{width:100%;height:auto;display:block}
+
+footer{margin-top:96px;border-top:1px solid var(--hair);padding-top:22px;
+  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  font-size:12.5px;color:var(--muted)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion: no-preference){
+  .phone{transition:transform .25s ease}
+  .phone:hover{transform:translateY(-4px)}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17M8 2.8v3.4M16 2.8v3.4"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-4.8 5.5-4.8s4.9 1.6 5.5 4.8"/><circle cx="16.8" cy="9" r="2.5"/><path d="M16.5 14.4c2.2.3 3.7 1.7 4.2 4.1"/></symbol>
+  <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.7"/><path d="M6 9.5v.01M18 14.5v.01"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5a4.3 4.3 0 0 1-.6-8.5 5.5 5.5 0 0 1 10.8 1.1 3.7 3.7 0 0 1-.4 7.4z"/><path d="M12 15.5v-4M10.2 13.2L12 11.4l1.8 1.8"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.7"/><path d="M15.2 15.2L20 20"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.7"/><path d="M14.6 9.4c-.7-.9-4.8-1-4.8 1 0 2.2 4.7 1.2 4.7 3.4 0 2-4.3 1.8-5-.2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16.2v.01"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20S5 15.5 5 10.6A3.8 3.8 0 0 1 12 8.4a3.8 3.8 0 0 1 7 2.2C19 15.5 12 20 12 20z"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 10.5a10 10 0 0 1 14 0M8 13.8a6 6 0 0 1 8 0M12 17.5v.01"/></symbol>
+  <symbol id="i-sig" viewBox="0 0 24 24"><path d="M5 18v-3M10 18v-6M15 18v-9M20 18V6"/></symbol>
+  <symbol id="i-bat" viewBox="0 0 24 24"><rect x="3" y="8" width="16" height="8" rx="2"/><path d="M21.5 11v2"/></symbol>
+</svg>
+
+<div class="wrap">
+
+<div class="brandbar">
+  <span>Intelli-Wealth Limited</span>
+  <span>App design specification &middot; v1.0 &middot; July 2026</span>
+</div>
+
+<header class="cover">
+  <h1>Intelli-Cash<span class="tick">.</span><br>Your VSLA in your pocket</h1>
+  <p class="tagline">A mobile-first platform that replaces the paper register and cash box of
+    Village Savings &amp; Loan Associations with a secure, transparent, real-time digital
+    ledger &#8212; run entirely from a group leader's smartphone.</p>
+  <div class="pillrow">
+    <span class="pill"><b>Android-first</b> &middot; Flutter</span>
+    <span class="pill"><b>Dark UI</b> by default</span>
+    <span class="pill"><b>Offline-ready</b> sync queue</span>
+    <span class="pill">Currency &middot; <b>KSh</b></span>
+    <span class="pill">Derived from the platform presentation deck</span>
+  </div>
+</header>
+
+<!-- ================= 01 FOUNDATIONS ================= -->
+<section>
+  <p class="eyebrow">01 &#8212; Foundations</p>
+  <h2>One dark surface, one green voice</h2>
+  <p class="lede">The whole app lives on a near-black ground with soft charcoal cards.
+    A single vivid green carries every action: primary buttons, the active tab, focused
+    inputs, and healthy money. Status colors are reserved for loan states and never reused
+    for decoration.</p>
+
+  <h3 class="group">Color tokens</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip-c" style="background:#0E1113"></div><div class="meta"><b>Background</b><code>#0E1113</code><small>Screen ground</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#1B2126"></div><div class="meta"><b>Surface</b><code>#1B2126</code><small>Cards, rows, lists</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#232A30"></div><div class="meta"><b>Surface raised</b><code>#232A30</code><small>Segments, avatars</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#2C343B"></div><div class="meta"><b>Outline</b><code>#2C343B</code><small>Field borders, hairlines</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#3DDC7E"></div><div class="meta"><b>Primary green</b><code>#3DDC7E</code><small>Actions, active nav, focus</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#08301B"></div><div class="meta"><b>On primary</b><code>#08301B</code><small>Text on green buttons</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#F2F5F6"></div><div class="meta"><b>Text primary</b><code>#F2F5F6</code><small>Values, headings</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#8C99A2"></div><div class="meta"><b>Text secondary</b><code>#8C99A2</code><small>Labels, captions</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#8AB4F8"></div><div class="meta"><b>Status &middot; repaid</b><code>#8AB4F8</code><small>Settled loans</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#F28B82"></div><div class="meta"><b>Status &middot; defaulted</b><code>#F28B82</code><small>Overdue loans, destructive</small></div></div>
+    <div class="sw"><div class="chip-c" style="background:#FDD663"></div><div class="meta"><b>Status &middot; pending</b><code>#FDD663</code><small>Unsynced transactions</small></div></div>
+  </div>
+
+  <h3 class="group">Type scale</h3>
+  <p class="groupnote">Roboto (the Flutter/Material default) at five sizes. Numbers always
+    set tabular so ledger columns align.</p>
+  <div class="typerows">
+    <div class="trow"><span class="spec">Screen title &middot; 22/500</span><span class="sample" style="font-size:22px;font-weight:500">Disburse Loan</span></div>
+    <div class="trow"><span class="spec">Stat value &middot; 19/700 tnum</span><span class="sample" style="font-size:19px;font-weight:700;font-variant-numeric:tabular-nums">KSh 52,300.00</span></div>
+    <div class="trow"><span class="spec">App bar &middot; 15/600</span><span class="sample" style="font-size:15px;font-weight:600">Meetings</span></div>
+    <div class="trow"><span class="spec">Body &middot; 14/400</span><span class="sample" style="font-size:14px">Members can borrow up to 2&times; their total savings.</span></div>
+    <div class="trow"><span class="spec">Section label &middot; 10/700 caps</span><span class="sample" style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase">Savings trend</span></div>
+  </div>
+
+  <h3 class="group">Core components</h3>
+  <p class="groupnote">Every control is built from the same vocabulary: pill buttons,
+    outlined fields with floating labels, tinted status chips, and a five-tab bottom bar.</p>
+  <div class="board">
+    <div class="cell">
+      <span class="cellname">Buttons</span>
+      <div class="bp"><svg><use href="#i-check"/></svg>Record Purchase</div>
+      <div class="bo">Back</div>
+      <div class="bo danger">Close &amp; Lock Meeting</div>
+    </div>
+    <div class="cell">
+      <span class="cellname">Text field / focused</span>
+      <div class="fld" style="color:var(--aink)"><label>Select Member</label>Achieng Odhiambo<span class="caret">&#9662;</span></div>
+      <div class="fld focus" style="color:var(--aink);margin-bottom:0"><label>Principal Amount (KSh)</label>5,000</div>
+    </div>
+    <div class="cell">
+      <span class="cellname">Status chips</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <span class="ch act">active</span>
+        <span class="ch rep">repaid</span>
+        <span class="ch def">defaulted</span>
+        <span class="ch amb"><svg><use href="#i-cloud"/></svg>2 pending</span>
+        <span class="ch ntr"><svg><use href="#i-lock"/></svg>closed</span>
+      </div>
+      <span class="cellname" style="margin-top:14px">Segmented control</span>
+      <div class="seg" style="margin:0"><div>Active</div><div class="on">All</div></div>
+    </div>
+    <div class="cell">
+      <span class="cellname">Setup stepper</span>
+      <div class="stepper" style="margin:0">
+        <div class="step done"><span class="snum"><svg><use href="#i-check"/></svg></span>Basics</div>
+        <div class="step done"><span class="snum"><svg><use href="#i-check"/></svg></span>Savings</div>
+        <div class="step on"><span class="snum">3</span>Loans</div>
+        <div class="step"><span class="snum">4</span>Schedule</div>
+      </div>
+      <span class="cellname" style="margin-top:14px">Stat card</span>
+      <div class="stat" style="max-width:150px"><b>KSh 52,300</b><span><svg><use href="#i-coin"/></svg>Total Savings</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 IA ================= -->
+<section>
+  <p class="eyebrow">02 &#8212; Information architecture</p>
+  <h2>Five tabs, no dead ends</h2>
+  <p class="lede">Everything a group leader does hangs off a persistent bottom bar.
+    Money movement happens inside a meeting; configuration lives under More so it can't
+    be touched by accident mid-session.</p>
+  <div class="iamap">
+    <div class="tab"><div class="tname"><svg><use href="#i-grid"/></svg>Dashboard</div>
+      <ul><li>Overview stats &times;6</li><li>Savings trend chart</li><li>Sync status</li></ul></div>
+    <div class="tab"><div class="tname"><svg><use href="#i-cal"/></svg>Meetings</div>
+      <ul><li>Meetings list</li><li>Start meeting</li><li>1-tap attendance</li><li>Meeting actions hub</li><li>Close &amp; lock</li></ul></div>
+    <div class="tab"><div class="tname"><svg><use href="#i-people"/></svg>Members</div>
+      <ul><li>Member directory</li><li>Savings &amp; loan profile</li><li>Add member</li></ul></div>
+    <div class="tab"><div class="tname"><svg><use href="#i-cash"/></svg>Loans</div>
+      <ul><li>Portfolio (Active / All)</li><li>Disburse loan</li><li>Record repayment</li></ul></div>
+    <div class="tab"><div class="tname"><svg><use href="#i-dots"/></svg>More</div>
+      <ul><li>Group settings wizard</li><li>Cycle management</li><li>Sync &amp; backup</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 03 SCREENS ================= -->
+<section>
+  <p class="eyebrow">03 &#8212; Screens</p>
+  <h2>The eleven screens that run a group</h2>
+  <p class="lede">High-fidelity mockups for every flow in the deck, populated with a
+    realistic mid-cycle group: Umoja Women Group, cycle 2, 18 members, meeting weekly
+    on Sundays.</p>
+
+  <h3 class="group">Dashboard</h3>
+  <p class="groupnote">At a glance: Total Savings, Active Loans, Members, Meetings, Fines
+    and Social Fund &#8212; all live, with a savings trend chart for performance monitoring.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:30</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Dashboard <span class="ch act"><svg><use href="#i-check"/></svg>synced</span></div>
+      <div class="body">
+        <div class="st" style="margin-bottom:2px">Hello, Chrisphine</div>
+        <div class="sub" style="margin-top:0">Umoja Women Group &middot; Cycle 2</div>
+        <div class="lbl">Overview</div>
+        <div class="grid2">
+          <div class="stat"><b>KSh 52,300</b><span><svg><use href="#i-coin"/></svg>Total Savings</span></div>
+          <div class="stat"><b>4</b><span><svg><use href="#i-cash"/></svg>Active Loans</span></div>
+          <div class="stat"><b>18</b><span><svg><use href="#i-people"/></svg>Members</span></div>
+          <div class="stat"><b>14</b><span><svg><use href="#i-cal"/></svg>Meetings</span></div>
+        </div>
+        <div class="lbl">Savings trend</div>
+        <div class="chart">
+          <svg viewBox="0 0 272 126" role="img" aria-label="Cumulative savings across 14 meetings, rising to KSh 52,300">
+            <defs><linearGradient id="gfill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#3DDC7E" stop-opacity=".30"/>
+              <stop offset="1" stop-color="#3DDC7E" stop-opacity="0"/>
+            </linearGradient></defs>
+            <g stroke="#252D33" stroke-width="1">
+              <line x1="12" y1="30" x2="260" y2="30"/><line x1="12" y1="60" x2="260" y2="60"/><line x1="12" y1="90" x2="260" y2="90"/>
+            </g>
+            <path d="M12,96 L31,90 L50,84 L69,79 L88,72 L107,67 L126,63 L145,56 L164,50 L183,43 L202,37 L221,31 L240,25 L259,20 L259,108 L12,108 Z" fill="url(#gfill)"/>
+            <polyline points="12,96 31,90 50,84 69,79 88,72 107,67 126,63 145,56 164,50 183,43 202,37 221,31 240,25 259,20" fill="none" stroke="#3DDC7E" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="259" cy="20" r="5.5" fill="#3DDC7E" opacity=".25"/>
+            <circle cx="259" cy="20" r="3" fill="#3DDC7E"/>
+            <text x="256" y="12" font-size="9" fill="#F2F5F6" text-anchor="end" font-weight="600">KSh 52,300</text>
+            <g font-size="8.5" fill="#8C99A2">
+              <text x="31" y="122" text-anchor="middle">#2</text><text x="107" y="122" text-anchor="middle">#6</text>
+              <text x="183" y="122" text-anchor="middle">#10</text><text x="259" y="122" text-anchor="middle">#14</text>
+            </g>
+          </svg>
+        </div>
+        <div class="grid2" style="margin-top:10px">
+          <div class="stat"><b>KSh 1,850</b><span><svg><use href="#i-alert"/></svg>Fines Collected</span></div>
+          <div class="stat"><b>KSh 12,600</b><span><svg><use href="#i-heart"/></svg>Social Fund</span></div>
+        </div>
+      </div>
+      <nav class="nb">
+        <a class="on"><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Live dashboard</b><span>Six real-time stats plus the savings growth
+      curve &#8212; the group's financial health in one screen.</span></figcaption>
+  </figure>
+  </div>
+
+  <h3 class="group">Group setup &amp; configuration</h3>
+  <p class="groupnote">A 4-step wizard &#8212; Basics, Savings, Loans, Schedule &#8212; captures the
+    group constitution once: KSh 100 shares (max 10 per meeting), KSh 50 social fund,
+    5% reducing-balance interest, 2&times; savings loan ceiling, weekly Sunday meetings.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:31</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">More</div>
+      <div class="body">
+        <div style="text-align:center;margin:6px 0 10px">
+          <svg style="width:30px;height:30px;stroke:var(--agreen);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><use href="#i-people"/></svg>
+          <div style="font-size:19px;font-weight:500">Group Settings</div>
+        </div>
+        <div class="stepper">
+          <div class="step done"><span class="snum"><svg><use href="#i-check"/></svg></span>Basics</div>
+          <div class="step on"><span class="snum">2</span>Savings</div>
+          <div class="step"><span class="snum">3</span>Loans</div>
+          <div class="step"><span class="snum">4</span>Schedule</div>
+        </div>
+        <div class="lbl" style="margin-top:2px">Savings Configuration</div>
+        <div class="radio"><span>Fixed shares</span><span class="rdot on"><i></i></span></div>
+        <div class="radio" style="margin-bottom:8px"><span>Flexible amounts</span><span class="rdot"></span></div>
+        <div class="fld"><label>Share Value (KSh)</label>100</div>
+        <div class="fld"><label>Max Shares per Meeting</label>10</div>
+        <div class="fld"><label>Social Fund per Meeting (KSh)</label>50</div>
+        <div class="sub" style="margin:0">Members buy 1&ndash;10 shares of KSh 100 at every meeting &mdash; up to KSh 1,000 per session.</div>
+        <div class="btnrow"><div class="bo">Back</div><div class="bp">Next</div></div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a class="on"><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Wizard &middot; step 2 &#8212; Savings</b><span>Fixed or flexible shares,
+      share value, per-meeting cap and social fund contribution.</span></figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:31</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">More</div>
+      <div class="body">
+        <div style="text-align:center;margin:6px 0 10px">
+          <svg style="width:30px;height:30px;stroke:var(--agreen);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><use href="#i-people"/></svg>
+          <div style="font-size:19px;font-weight:500">Group Settings</div>
+        </div>
+        <div class="stepper">
+          <div class="step done"><span class="snum"><svg><use href="#i-check"/></svg></span>Basics</div>
+          <div class="step done"><span class="snum"><svg><use href="#i-check"/></svg></span>Savings</div>
+          <div class="step on"><span class="snum">3</span>Loans</div>
+          <div class="step"><span class="snum">4</span>Schedule</div>
+        </div>
+        <div class="lbl" style="margin-top:2px">Loan Configuration</div>
+        <div class="fld"><label>Interest Rate (%)</label>5</div>
+        <div class="sub" style="margin-bottom:2px">Interest Type</div>
+        <div class="radio"><span>Flat (simple interest)</span><span class="rdot"></span></div>
+        <div class="radio" style="margin-bottom:8px"><span>Reducing balance</span><span class="rdot on"><i></i></span></div>
+        <div class="fld"><label>Max Loan Multiplier (&times; savings)</label>2</div>
+        <div class="sub" style="margin:0">Members can borrow up to 2&times; their total savings.</div>
+        <div class="btnrow"><div class="bo">Back</div><div class="bp">Next</div></div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a class="on"><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Wizard &middot; step 3 &#8212; Loans</b><span>Interest rate, flat vs reducing
+      balance, and the loan-to-savings multiplier.</span></figcaption>
+  </figure>
+  </div>
+
+  <h3 class="group">Meeting management</h3>
+  <p class="groupnote">Every meeting is auto-numbered and digitally documented: 1-tap
+    attendance, all money movements recorded in-session, then closed to lock the record
+    into an immutable audit trail.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:31</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Meetings <span class="ch amb"><svg><use href="#i-cloud"/></svg>2 pending</span></div>
+      <div class="body">
+        <div class="st">Meetings</div>
+        <div class="bp" style="margin-bottom:16px"><svg><use href="#i-plus"/></svg>Start Meeting</div>
+        <div class="row"><div class="grow"><div class="nm">Meeting #14</div><div class="ds">Sun, 12 Jul 2026 &middot; Opening KSh 48,200</div></div><span class="ch act">in progress</span></div>
+        <div class="row"><div class="grow"><div class="nm">Meeting #13</div><div class="ds">Sun, 5 Jul 2026 &middot; Collected KSh 2,150</div></div><span class="ch ntr"><svg><use href="#i-lock"/></svg>closed</span></div>
+        <div class="row"><div class="grow"><div class="nm">Meeting #12</div><div class="ds">Sun, 28 Jun 2026 &middot; Collected KSh 1,900</div></div><span class="ch ntr"><svg><use href="#i-lock"/></svg>closed</span></div>
+        <div class="row"><div class="grow"><div class="nm">Meeting #11</div><div class="ds">Sun, 21 Jun 2026 &middot; Collected KSh 2,400</div></div><span class="ch ntr"><svg><use href="#i-lock"/></svg>closed</span></div>
+        <div class="row"><div class="grow"><div class="nm">Meeting #10</div><div class="ds">Sun, 14 Jun 2026 &middot; Collected KSh 1,750</div></div><span class="ch ntr"><svg><use href="#i-lock"/></svg>closed</span></div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a class="on"><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Meetings list</b><span>Auto-numbered sequence with date and opening
+      balance; closed meetings wear a lock.</span></figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:31</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Meetings</div>
+      <div class="body">
+        <div class="st" style="margin-bottom:2px">Attendance</div>
+        <div class="sub" style="margin-top:0">Meeting #14 &middot; Sun, 12 Jul 2026</div>
+        <div class="card" style="padding:13px 15px">
+          <div class="kv big" style="padding:0"><span>14 of 18 present</span><span style="color:var(--agreen)">78%</span></div>
+          <div class="pbar"><i></i></div>
+        </div>
+        <div class="row"><span class="av">AO</span><div class="grow"><div class="nm">Achieng Odhiambo</div></div><span class="tick on"><svg><use href="#i-check"/></svg></span></div>
+        <div class="row"><span class="av">WK</span><div class="grow"><div class="nm">Wanjiku Kamau</div></div><span class="tick on"><svg><use href="#i-check"/></svg></span></div>
+        <div class="row"><span class="av">BM</span><div class="grow"><div class="nm">Baraka Mwangi</div></div><span class="tick on"><svg><use href="#i-check"/></svg></span></div>
+        <div class="row"><span class="av">NW</span><div class="grow"><div class="nm">Neema Wafula</div></div><span class="tick"></span></div>
+        <div class="row"><span class="av">KL</span><div class="grow"><div class="nm">Kiprop Langat</div></div><span class="tick on"><svg><use href="#i-check"/></svg></span></div>
+        <div class="btnrow"><div class="bp">Continue to Meeting</div></div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a class="on"><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>1-tap attendance</b><span>Tap a circle to mark a member present;
+      the counter and bar update live.</span></figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:32</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Meetings</div>
+      <div class="body">
+        <div class="st" style="margin-bottom:2px">Meeting #14 <span class="ch act" style="vertical-align:3px">in progress</span></div>
+        <div class="sub" style="margin-top:0">Opening KSh 48,200 &middot; 14 present</div>
+        <div class="lbl" style="margin:8px 0 6px">Record</div>
+        <div class="grid2" style="gap:8px">
+          <div class="tile"><svg><use href="#i-coin"/></svg>Buy Shares</div>
+          <div class="tile"><svg><use href="#i-heart"/></svg>Social Fund</div>
+          <div class="tile"><svg><use href="#i-alert"/></svg>Record Fine</div>
+          <div class="tile"><svg><use href="#i-cash"/></svg>Disburse Loan</div>
+          <div class="tile"><svg><use href="#i-check"/></svg>Repayment</div>
+          <div class="tile"><svg><use href="#i-cal"/></svg>Shares Ledger</div>
+        </div>
+        <div class="lbl" style="margin:8px 0 6px">This meeting</div>
+        <div class="card" style="margin-bottom:8px;padding:12px 15px">
+          <div class="kv"><span class="k">Shares collected</span><span>KSh 1,800</span></div>
+          <div class="kv"><span class="k">Social fund</span><span>KSh 700</span></div>
+          <div class="kv"><span class="k">Fines</span><span>KSh 150</span></div>
+        </div>
+        <div class="bo danger">Close &amp; Lock Meeting</div>
+        <div class="sub" style="text-align:center;margin:6px 0 8px">Closing locks all records permanently.</div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a class="on"><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Meeting actions hub</b><span>Every money movement happens here; closing
+      the meeting seals the audit trail.</span></figcaption>
+  </figure>
+  </div>
+
+  <h3 class="group">Savings &amp; share management</h3>
+  <p class="groupnote">Disciplined savings, transaction by transaction: fixed KSh 100
+    shares recorded instantly to the meeting ledger, with the social fund tracked
+    separately.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:31</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Meetings <span class="ch amb"><svg><use href="#i-cloud"/></svg>2 pending</span></div>
+      <div class="body">
+        <div class="st">Buy Shares</div>
+        <div class="fld focus"><label>Select Member</label>Achieng Odhiambo<span class="caret">&#9662;</span></div>
+        <div class="fld"><label>Shares (1&ndash;10)</label>3</div>
+        <div class="card">
+          <div style="font-size:12.5px;color:var(--aink2)">3 share(s) &times; KSh 100.00</div>
+          <div style="font-size:15px;font-weight:700;color:var(--agreen);margin-top:4px">Total: KSh 300.00</div>
+        </div>
+        <div class="bp"><svg><use href="#i-check"/></svg>Record Purchase</div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a class="on"><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Buy shares</b><span>Pick a member, pick a count &#8212; the total computes
+      itself before you commit.</span></figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:32</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Meetings</div>
+      <div class="body">
+        <div class="st" style="margin-bottom:2px">Shares Ledger</div>
+        <div class="sub" style="margin-top:0">Meeting #14 &middot; Sun, 12 Jul 2026</div>
+        <div class="card" style="padding:13px 15px">
+          <div class="kv big" style="padding:0"><span>18 shares collected</span><span style="color:var(--agreen)">KSh 1,800</span></div>
+        </div>
+        <div class="row"><span class="av">WK</span><div class="grow"><div class="nm">Wanjiku Kamau</div><div class="ds">5 shares</div></div><span class="amt">KSh 500</span></div>
+        <div class="row"><span class="av">KL</span><div class="grow"><div class="nm">Kiprop Langat</div><div class="ds">4 shares</div></div><span class="amt">KSh 400</span></div>
+        <div class="row"><span class="av">AK</span><div class="grow"><div class="nm">Auma Okoth</div><div class="ds">4 shares</div></div><span class="amt">KSh 400</span></div>
+        <div class="row"><span class="av">AO</span><div class="grow"><div class="nm">Achieng Odhiambo</div><div class="ds">3 shares</div></div><span class="amt">KSh 300</span></div>
+        <div class="row"><span class="av">BM</span><div class="grow"><div class="nm">Baraka Mwangi</div><div class="ds">2 shares</div></div><span class="amt">KSh 200</span></div>
+        <div class="card" style="margin-top:4px;padding:12px 15px">
+          <div class="kv" style="padding:0"><span class="k">Social fund (14 &times; KSh 50)</span><span>KSh 700</span></div>
+        </div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a class="on"><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Shares ledger</b><span>Every purchase lands instantly with member,
+      count and value; social fund tallied apart.</span></figcaption>
+  </figure>
+  </div>
+
+  <h3 class="group">Loan management</h3>
+  <p class="groupnote">Smart lending, full visibility: eligibility auto-computed from
+    savings before disbursement, due dates enforced, and every loan tagged Active,
+    Repaid or Defaulted.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:32</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Loans</div>
+      <div class="body">
+        <div class="st">Disburse Loan</div>
+        <div class="fld"><label>Select Member</label>Achieng Odhiambo<span class="caret">&#9662;</span></div>
+        <div class="card">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Loan Eligibility</div>
+          <div class="kv"><span class="k">Total Savings</span><span>KSh 3,300.00</span></div>
+          <div class="kv"><span class="k">Active Loan Balance</span><span>KSh 0.00</span></div>
+          <div class="kv"><span class="k">Max Loan (2&times;)</span><span>KSh 6,600.00</span></div>
+          <div class="kv big"><span class="k" style="color:var(--aink)">Available Amount</span><span style="color:var(--agreen)">KSh 6,600.00</span></div>
+        </div>
+        <div class="fld focus"><label>Principal Amount (KSh)</label>5,000</div>
+        <div class="fld"><label>Due Date</label>2026-10-12</div>
+        <div class="sub" style="margin:-6px 0 14px">Default term &middot; 3 months &middot; 5% reducing balance</div>
+        <div class="bp"><svg><use href="#i-cash"/></svg>Disburse Loan</div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a class="on"><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Disburse loan</b><span>Eligibility is computed before the form can
+      submit &#8212; no manual math, no over-lending.</span></figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone"><div class="scr">
+      <div class="sb"><span>1:32</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Loans</div>
+      <div class="body">
+        <div class="st">Loan Portfolio</div>
+        <div class="seg"><div>Active</div><div class="on">All</div></div>
+        <div class="search"><svg><use href="#i-search"/></svg>Search by member name</div>
+        <div class="row"><div class="grow"><div class="nm">Achieng Odhiambo</div><div class="ds">Principal: KSh 5,000.00</div></div><div style="text-align:right"><div class="amt">KSh 4,180.00</div><span class="ch act">active</span></div></div>
+        <div class="row"><div class="grow"><div class="nm">Auma Okoth</div><div class="ds">Principal: KSh 800.00</div></div><div style="text-align:right"><div class="amt">KSh 320.00</div><span class="ch act">active</span></div></div>
+        <div class="row"><div class="grow"><div class="nm">Baraka Mwangi</div><div class="ds">Principal: KSh 2,000.00</div></div><div style="text-align:right"><div class="amt">KSh 0.00</div><span class="ch rep">repaid</span></div></div>
+        <div class="row"><div class="grow"><div class="nm">Wanjiku Kamau</div><div class="ds">Principal: KSh 3,000.00</div></div><div style="text-align:right"><div class="amt">KSh 0.00</div><span class="ch rep">repaid</span></div></div>
+        <div class="row"><div class="grow"><div class="nm">Kiprop Langat</div><div class="ds">Principal: KSh 1,500.00</div></div><div style="text-align:right"><div class="amt">KSh 1,720.00</div><span class="ch def">defaulted</span></div></div>
+      </div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a><svg><use href="#i-people"/></svg>Members</a><a class="on"><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Loan portfolio</b><span>Filter Active/All, search by member; every loan
+      wears its status &#8212; active, repaid or defaulted.</span></figcaption>
+  </figure>
+  </div>
+
+  <h3 class="group">Member management</h3>
+  <p class="groupnote">Register and manage group members, each with an individual savings
+    and loan profile feeding the eligibility engine.</p>
+  <div class="gallery">
+
+  <figure class="shot">
+    <div class="phone"><div class="scr scrwrap" style="position:relative">
+      <div class="sb"><span>1:33</span><span class="sicons"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
+      <div class="ab">Members</div>
+      <div class="body">
+        <div class="st" style="margin-bottom:2px">Members</div>
+        <div class="sub" style="margin-top:0">18 active &middot; Umoja Women Group</div>
+        <div class="search"><svg><use href="#i-search"/></svg>Search members</div>
+        <div class="row"><span class="av">AO</span><div class="grow"><div class="nm">Achieng Odhiambo</div><div class="ds">Savings KSh 3,300 &middot; Loan KSh 4,180</div></div><span class="ch act">active</span></div>
+        <div class="row"><span class="av">WK</span><div class="grow"><div class="nm">Wanjiku Kamau</div><div class="ds">Savings KSh 4,100 &middot; No active loan</div></div></div>
+        <div class="row"><span class="av">BM</span><div class="grow"><div class="nm">Baraka Mwangi</div><div class="ds">Savings KSh 2,800 &middot; No active loan</div></div></div>
+        <div class="row"><span class="av">KL</span><div class="grow"><div class="nm">Kiprop Langat</div><div class="ds">Savings KSh 2,150 &middot; Loan KSh 1,720</div></div><span class="ch def">defaulted</span></div>
+        <div class="row"><span class="av">AK</span><div class="grow"><div class="nm">Auma Okoth</div><div class="ds">Savings KSh 3,900 &middot; Loan KSh 320</div></div><span class="ch act">active</span></div>
+      </div>
+      <div class="fab"><svg><use href="#i-plus"/></svg></div>
+      <nav class="nb">
+        <a><svg><use href="#i-grid"/></svg>Dashboard</a><a><svg><use href="#i-cal"/></svg>Meetings</a>
+        <a class="on"><svg><use href="#i-people"/></svg>Members</a><a><svg><use href="#i-cash"/></svg>Loans</a><a><svg><use href="#i-dots"/></svg>More</a>
+      </nav>
+    </div></div>
+    <figcaption><b>Member directory</b><span>Each member carries their savings balance and
+      live loan position; add members from the FAB.</span></figcaption>
+  </figure>
+  </div>
+</section>
+
+<!-- ================= 04 RULES ================= -->
+<section>
+  <p class="eyebrow">04 &#8212; Rules the UI enforces</p>
+  <h2>The constitution, encoded</h2>
+  <p class="lede">The design isn't just screens &#8212; it hard-codes the group's bylaws so the
+    app, not memory or arithmetic, is the source of truth.</p>
+  <div class="rules">
+    <div class="rule"><b>Loan eligibility</b>
+      <p><code>available = 2 &times; savings &minus; active balance</code> &#8212; computed and shown
+      before the principal field accepts input. Over-lending is impossible.</p></div>
+    <div class="rule"><b>Immutable meetings</b>
+      <p>Closing a meeting locks every record in it. Closed meetings are read-only forever &#8212;
+      the audit trail can't be edited or falsified.</p></div>
+    <div class="rule"><b>Fixed savings discipline</b>
+      <p><code>KSh 100 / share &middot; max 10 / meeting</code> plus a <code>KSh 50</code> social
+      fund contribution, tracked separately from savings.</p></div>
+    <div class="rule"><b>Offline-first sync</b>
+      <p>Transactions queue locally and upload when connectivity returns. The amber
+      cloud chip shows exactly how many records are pending.</p></div>
+    <div class="rule"><b>Interest &amp; term</b>
+      <p><code>5% reducing balance</code>, default term 3 months. Due dates are fixed at
+      disbursement to enforce repayment discipline.</p></div>
+    <div class="rule"><b>Loan lifecycle</b>
+      <p>Every loan is always in exactly one state &#8212; <span class="ch act">active</span>
+      <span class="ch rep">repaid</span> <span class="ch def">defaulted</span> &#8212; visible
+      everywhere the loan appears.</p></div>
+  </div>
+</section>
+
+<footer>
+  <span><b>Intelli-Cash</b> &middot; Empowering VSLAs, one meeting at a time.</span>
+  <span>Intelli-Wealth Limited &middot; Ramco Courts, South C, Nairobi &middot;
+    <a href="https://intelliwealth.org">intelliwealth.org</a></span>
+</footer>
+
+</div>

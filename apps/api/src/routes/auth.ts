@@ -12,14 +12,53 @@ import {
 } from "../middleware/auth";
 import { permissionsForRoleFromStore } from "../services/role-permission-service";
 import { ApiHttpError, ok } from "../lib/http";
+import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
+import { loginRateLimit, registerRateLimit } from "../middleware/rate-limit";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
   password: z.string().min(1)
+}).refine((data) => data.email || data.phone, {
+  message: "Either email or phone is required."
 });
+
+/**
+ * Self-service account creation from the mobile app. Everyone starts with an
+ * account: a group (its record book), a member, or a village agent. Email is
+ * optional for field users — a stable placeholder is derived from the phone
+ * so the unique-email constraint holds.
+ */
+const registerSchema = z.object({
+  accountType: z.enum(["GROUP", "MEMBER", "AGENT"]),
+  name: z.string().trim().min(2).max(120),
+  phone: z
+    .string()
+    .trim()
+    .min(9)
+    .max(24)
+    // Checked on the digits alone — the value is canonicalised before it is
+    // stored or compared, so punctuation is not the user's problem.
+    .refine(looksLikePhone, "Enter a valid phone number."),
+  email: z.string().trim().email().optional(),
+  password: z.string().min(6).max(100),
+  county: z.string().trim().max(60).optional()
+});
+
+const registerRoleByType = {
+  GROUP: "GROUP_ACCOUNT",
+  MEMBER: "MEMBER",
+  AGENT: "VILLAGE_AGENT"
+} as const;
+
+function placeholderEmail(phone: string) {
+  // Built from the canonical form, so the same line always yields the same
+  // address however the person typed it.
+  return `${normalisePhone(phone)}@accounts.intellicash.app`;
+}
 
 const profileUpdateSchema = z
   .object({
@@ -51,6 +90,7 @@ async function serializeUser(userId: string) {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone,
     role: user.role,
     status: user.status,
     permissions,
@@ -66,18 +106,32 @@ async function serializeUser(userId: string) {
   };
 }
 
-router.post("/login", async (req, res, next) => {
+router.post("/login", loginRateLimit, async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
-    const user = await prisma.user.findUnique({ where: { email: body.email } });
+    const user = body.email
+      ? await prisma.user.findUnique({ where: { email: body.email } })
+      : body.phone && phoneTail(body.phone).length >= 9
+        ? // Someone who signed up as 0712… must still get in typing +254712….
+          // Guarded on a full-length tail: `contains: ""` would otherwise
+          // hydrate every user row, password hashes included, for anyone who
+          // posts a junk number.
+          await prisma.user
+            .findMany({
+              where: { phone: { contains: phoneTail(body.phone) } }
+            })
+            .then((candidates) =>
+              candidates.find((candidate) => samePhone(candidate.phone, body.phone)) ?? null
+            )
+        : null;
 
     if (!user || user.status !== "ACTIVE") {
-      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
+      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid credentials.");
     }
 
     const valid = await bcrypt.compare(body.password, user.passwordHash);
     if (!valid) {
-      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
+      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid credentials.");
     }
 
     const session = await createSession(user.id);
@@ -89,20 +143,110 @@ router.post("/login", async (req, res, next) => {
       entityType: "USER",
       entityId: user.id,
       type: "AUTH_LOGIN",
-      payload: { email: user.email, role: user.role }
+      payload: { email: user.email, phone: user.phone, role: user.role }
     });
 
     ok(res, {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
       permissions,
       avatarUrl: user.avatarUrl,
       languagePreference: user.languagePreference,
       partnerId: user.partnerId,
       groupId: user.groupId,
-      memberId: user.memberId
+      memberId: user.memberId,
+      villageAgentId: user.villageAgentId
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/register", registerRateLimit, async (req, res, next) => {
+  try {
+    const body = registerSchema.parse(req.body);
+    const email = body.email ?? placeholderEmail(body.phone);
+    const role = registerRoleByType[body.accountType];
+    const phone = normalisePhone(body.phone);
+
+    // Existing rows hold whichever format was entered at the time, so filter
+    // on the nine digits that never change, then compare canonical forms. A
+    // plain `phone: body.phone` match lets one person register twice by
+    // writing their number a different way.
+    const sameLine = await prisma.user.findMany({
+      where: { phone: { contains: phoneTail(body.phone) } },
+      select: { id: true, phone: true }
+    });
+    const existing =
+      sameLine.find((candidate) => samePhone(candidate.phone, body.phone)) ??
+      (await prisma.user.findFirst({ where: { email }, select: { id: true, phone: true } }));
+    if (existing) {
+      throw new ApiHttpError(
+        409,
+        "ACCOUNT_EXISTS",
+        "An account with this phone or email already exists. Try signing in instead."
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 12);
+
+    const user = await prisma.$transaction(async (tx) => {
+      // A village agent login must be bound to an agent profile — create one
+      // alongside the account (a programme can adopt it later).
+      const villageAgent =
+        body.accountType === "AGENT"
+          ? await tx.villageAgent.create({
+              data: {
+                name: body.name,
+                phone,
+                email: body.email,
+                county: body.county,
+                sourceSystem: "MOBILE_SELF_SIGNUP"
+              },
+              select: { id: true }
+            })
+          : null;
+
+      return tx.user.create({
+        data: {
+          name: body.name,
+          email,
+          phone,
+          passwordHash,
+          role,
+          villageAgentId: villageAgent?.id
+        }
+      });
+    });
+
+    const session = await createSession(user.id);
+    const permissions = await permissionsForRoleFromStore(user.role);
+    res.setHeader("Set-Cookie", serializeSessionCookie(session));
+
+    await appendAuditEvent({
+      actorUserId: user.id,
+      entityType: "USER",
+      entityId: user.id,
+      type: "AUTH_REGISTERED",
+      payload: { accountType: body.accountType, email: user.email, phone: user.phone, role: user.role }
+    });
+
+    ok(res.status(201), {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      permissions,
+      avatarUrl: user.avatarUrl,
+      languagePreference: user.languagePreference,
+      partnerId: user.partnerId,
+      groupId: user.groupId,
+      memberId: user.memberId,
+      villageAgentId: user.villageAgentId
     });
   } catch (error) {
     next(error);

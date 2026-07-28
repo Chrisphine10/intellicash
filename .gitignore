@@ -16,3 +16,12 @@ apps/api/prisma/dev.db-journal
 apps/api/prisma/test.db
 apps/api/prisma/test.db-journal
 apps/api/uploads/
+
+# Android
+apps/android/.gradle/
+apps/android/app/build/
+apps/android/build/
+apps/android/local.properties
+*.apk
+*.aab
+.archive-free-dashboard-template/

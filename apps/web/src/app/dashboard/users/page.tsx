@@ -99,8 +99,17 @@ const accountProfiles: Record<
     accountType: "Member account",
     binding: "Member required",
     dashboard: "Member dashboard",
-    scope: "One member",
+    // A person may save with several VSLAs; the account is scoped to whichever
+    // membership they currently have in view.
+    scope: "Own records, per group",
     intent: "For an individual VSLA member with personal visibility."
+  },
+  VILLAGE_AGENT: {
+    accountType: "Village agent account",
+    binding: "Agent required",
+    dashboard: "Caseload dashboard",
+    scope: "Assigned groups",
+    intent: "For field agents supporting the groups on their caseload."
   },
   LENDER: {
     accountType: "Lender account",

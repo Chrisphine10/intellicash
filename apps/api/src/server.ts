@@ -1,6 +1,11 @@
 import { env } from "./config/env";
 import { createApp } from "./app";
 import { prisma } from "./lib/prisma";
+import { assertDurableDatabase } from "./lib/storage-safety";
+
+// Before accepting a single savings entry, make sure the database will still
+// be here after the next deploy.
+assertDurableDatabase();
 
 const app = createApp();
 

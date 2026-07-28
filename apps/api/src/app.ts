@@ -8,6 +8,9 @@ import { adminRouter } from "./routes/admin";
 import { apiKeysRouter } from "./routes/api-keys";
 import { auditRouter } from "./routes/audit";
 import { authRouter } from "./routes/auth";
+import { externalLoansRouter } from "./routes/external-loans";
+import { groupPaymentsRouter } from "./routes/group-payments";
+import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
 import { integrationsRouter } from "./routes/integrations";
 import { intelliStoreRouter } from "./routes/intelli-store";
@@ -15,6 +18,7 @@ import { intelliAuditRouter } from "./routes/intelliaudit";
 import { notificationsRouter } from "./routes/notifications";
 import { partnerPortalRouter } from "./routes/partner-portal";
 import { paymentsRouter } from "./routes/payments";
+import { pollsRouter } from "./routes/polls";
 import { reportsRouter } from "./routes/reports";
 import { smsBroadcastsRouter } from "./routes/sms-broadcasts";
 import { uploadsRouter } from "./routes/uploads";
@@ -38,6 +42,15 @@ function isAllowedCorsOrigin(origin: string) {
 export function createApp(options: { includeNotFoundHandler?: boolean } = {}) {
   const app = express();
   ensureUploadDirectory();
+
+  // Behind a hosting proxy, `req.ip` is the proxy unless Express is told how
+  // many hops to trust — which makes request logs and audit trails record the
+  // wrong client. It stays OFF unless declared: switching it on when there is
+  // no proxy in front lets any caller spoof their address with a header.
+  const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? "0");
+  if (Number.isInteger(trustedProxyHops) && trustedProxyHops > 0) {
+    app.set("trust proxy", trustedProxyHops);
+  }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(requestTracingMiddleware);
@@ -74,8 +87,12 @@ export function createApp(options: { includeNotFoundHandler?: boolean } = {}) {
   app.use("/api/v1", integrationsRouter);
   app.use("/api/v1", notificationsRouter);
   app.use("/api/v1", intelliStoreRouter);
+  app.use("/api/v1", externalLoansRouter);
+  app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);
+  app.use("/api/v1", pollsRouter);
+  app.use("/api/v1", groupJoinRouter);
   app.use("/api/v1", smsBroadcastsRouter);
   app.use("/api/v1", webhooksRouter);
 

@@ -7978,3 +7978,171 @@ html[data-theme="dark"] .pwa-splash-screen {
   margin: 0;
 }
 
+/* Group Setup Wizard */
+.group-wizard {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  padding: 20px;
+}
+
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wizard-step.active {
+  border-color: color-mix(in srgb, var(--green), var(--line) 25%);
+  background: var(--surface-tint);
+  color: var(--green-dark);
+}
+
+.wizard-step.done {
+  border-color: var(--line-soft);
+  background: var(--surface-tint);
+  color: var(--green-dark);
+}
+
+.wizard-step-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.wizard-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wizard-body {
+  display: grid;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.wizard-form {
+  display: grid;
+  gap: 12px;
+}
+
+.wizard-form h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.wizard-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.wizard-form input,
+.wizard-form select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.wizard-form input:focus,
+.wizard-form select:focus {
+  border-color: rgba(0, 138, 58, 0.46);
+  box-shadow: var(--focus-ring);
+  outline: 0;
+}
+
+.wizard-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+}
+
+/* Savings Trend Chart */
+.savings-trend-chart {
+  min-height: 180px;
+}
+
+.savings-trend-chart h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.savings-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+}
+
+.savings-chart-bar-group {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+  min-width: 0;
+}
+
+.savings-chart-bar {
+  width: 100%;
+  max-width: 48px;
+  min-height: 4px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--green), color-mix(in srgb, var(--green), var(--surface-raised) 40%));
+  transition: height 0.3s ease;
+}
+
+.savings-chart-label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+

@@ -15,6 +15,7 @@ import {
 } from "@/lib/theme-icons";
 import type { PortfolioSummary } from "@intellicash/shared";
 import { apiFetch, formatKes, humanizeEnum } from "../../lib/api";
+import { SavingsTrendChart } from "../../components/savings-trend-chart";
 import { StatCard } from "../../components/dashboard/stat-card";
 import { getNavigationItemsForRole } from "../../lib/navigation";
 import type {
@@ -583,6 +584,15 @@ function MemberDashboard({
         <StatCard icon={<ShoppingBag size={20} />} label="Store credit" note={`${activeStoreRequests.length} active`} value={formatKes(outstandingCreditCents)} />
         <StatCard icon={<ShieldCheck size={20} />} label="Passbook" note="Meetings with records" value={passbookRows.length.toString()} />
       </section>
+
+      {cycleHistory.previous.length > 0 && (
+        <SavingsTrendChart
+          data={[...cycleHistory.previous, cycleHistory.current].map((h) => ({
+            label: `Cycle ${h.cycleNumber}`,
+            savingsCents: h.sharePurchaseCents
+          }))}
+        />
+      )}
 
       <section className="dashboard-data-grid">
         <DashboardDataCard actionHref="/dashboard/meetings" count={nextMeetings.length} title="Meetings">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -1965,6 +1966,16 @@ export default function ReportsPage() {
           <span className="pill">Updated {reportUpdatedAt()}</span>
         </div>
       </section>
+
+      <div className="dashboard-module-grid">
+        <Link className="dashboard-module-link" href="/dashboard/reports/insights">
+          <BarChart3 size={18} />
+          <span>
+            <strong>Detailed Reports</strong>
+            <em>Per group, member and agent</em>
+          </span>
+        </Link>
+      </div>
 
       <section className="stat-grid">
         <StatCard

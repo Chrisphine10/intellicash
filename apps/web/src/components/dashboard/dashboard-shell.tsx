@@ -99,8 +99,9 @@ const routeTitles = [
 const languagePreferenceShortLabels: Record<LanguagePreference, string> = {
   ENGLISH: "EN",
   KISWAHILI: "SW",
-  KIEMBU: "EM",
-  GIKUYU: "KI"
+  GIKUYU: "KI",
+  LUO: "DH",
+  KIEMBU: "EM"
 };
 
 function normalizeLanguagePreference(value?: string | null): LanguagePreference {

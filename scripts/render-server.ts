@@ -3,6 +3,11 @@ import { resolve } from "node:path";
 import next from "next";
 import { createApp } from "../apps/api/src/app";
 import { prisma } from "../apps/api/src/lib/prisma";
+import { assertDurableDatabase } from "../apps/api/src/lib/storage-safety";
+
+// This process serves the API as well as the web app, so the same rule
+// applies: do not take a group's money into storage that gets wiped.
+assertDurableDatabase();
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3000);
 const webDir = resolve(process.cwd(), "apps/web");

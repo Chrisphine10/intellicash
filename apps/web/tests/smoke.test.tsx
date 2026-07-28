@@ -584,7 +584,7 @@ describe("web smoke helpers", () => {
     fireEvent.click(screen.getByRole("button", { name: /Partner Officer/ }));
 
     await waitFor(() => expect(routerPushMock).toHaveBeenCalledWith("/dashboard"));
-    expect(requestBody).toEqual({ email: account.email, password: demoPassword });
+    expect(requestBody).toEqual({ phone: account.phone, password: demoPassword });
 
     vi.unstubAllGlobals();
   });
