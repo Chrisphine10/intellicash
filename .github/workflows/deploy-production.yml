@@ -48,9 +48,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -73,6 +73,31 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      # Without this, missing secrets expand to "" and the failure surfaces as
+      # `ssh-keyscan -H ""`, which says nothing about the actual cause.
+      - name: Check deploy secrets are configured
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          MISSING=
+          [ -n "$DEPLOY_HOST" ]    || MISSING="$MISSING DEPLOY_HOST"
+          [ -n "$DEPLOY_USER" ]    || MISSING="$MISSING DEPLOY_USER"
+          [ -n "$DEPLOY_SSH_KEY" ] || MISSING="$MISSING DEPLOY_SSH_KEY"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing repository secret(s):$MISSING"
+            echo "Set them under Settings > Secrets and variables > Actions, or:"
+            for s in $MISSING; do
+              case "$s" in
+                DEPLOY_SSH_KEY) echo "  gh secret set $s -R ${{ github.repository }} < ~/.ssh/id_ed25519_hodi_deploy" ;;
+                *)              echo "  gh secret set $s -R ${{ github.repository }}" ;;
+              esac
+            done
+            exit 1
+          fi
+          echo 'All three deploy secrets are present.'
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -87,6 +112,7 @@ jobs:
           done
 
       - name: Pre-deploy backup and record rollback point
+        id: backup
         run: |
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
@@ -164,8 +190,11 @@ jobs:
             exit 1
           fi
 
+      # Only if a rollback point actually exists. A failure before the backup
+      # step (missing secrets, unreachable host) means nothing on the server
+      # changed, so "rolling back" would just be a second confusing error.
       - name: Roll back on failure
-        if: failure()
+        if: failure() && steps.backup.outcome == 'success'
         run: |
           echo '::warning::Deploy failed — rolling back'
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
