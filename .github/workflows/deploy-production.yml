@@ -58,6 +58,14 @@ jobs:
       - run: npm ci --include=dev
       - run: npm run db:generate -w @intellicash/api
       - run: npm run typecheck
+
+      # The api suite needs apps/api/prisma/dev.db to exist and be seeded;
+      # nothing creates it, so a clean checkout fails without this.
+      - name: Prepare test database
+        run: |
+          npm run db:push -w @intellicash/api
+          npm run db:seed -w @intellicash/api
+
       - run: npm run test
 
       - name: Build web

@@ -46,6 +46,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The api suite runs against apps/api/prisma/dev.db and each test file
+      # reseeds it, but nothing creates it. A developer machine already has one
+      # from `npm run dev`, so this only ever fails on a clean checkout — which
+      # is exactly what CI is.
+      - name: Prepare test database
+        run: |
+          npm run db:push -w @intellicash/api
+          npm run db:seed -w @intellicash/api
+
       - name: Test
         run: npm run test
 
