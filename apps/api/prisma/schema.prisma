@@ -32,20 +32,20 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  partner             Partner?               @relation(fields: [partnerId], references: [id])
-  group               Group?                 @relation(fields: [groupId], references: [id])
-  member              Member?                @relation(fields: [memberId], references: [id])
-  villageAgent        VillageAgent?          @relation(fields: [villageAgentId], references: [id])
-  sessions            Session[]
-  apiKeys             ApiKey[]
-  notifications       Notification[]
-  auditEvents         AuditEvent[]
-  capturedMeetingKeys MeetingKeySubmission[] @relation("MeetingKeyCapturedBy")
-  storeCreditRequests StoreCreditRequest[]   @relation("StoreCreditRequester")
-  offlineDevices      OfflineDevice[]
+  partner                  Partner?                  @relation(fields: [partnerId], references: [id])
+  group                    Group?                    @relation(fields: [groupId], references: [id])
+  member                   Member?                   @relation(fields: [memberId], references: [id])
+  villageAgent             VillageAgent?             @relation(fields: [villageAgentId], references: [id])
+  sessions                 Session[]
+  apiKeys                  ApiKey[]
+  notifications            Notification[]
+  auditEvents              AuditEvent[]
+  capturedMeetingKeys      MeetingKeySubmission[]    @relation("MeetingKeyCapturedBy")
+  storeCreditRequests      StoreCreditRequest[]      @relation("StoreCreditRequester")
+  offlineDevices           OfflineDevice[]
   externalLoanApplications ExternalLoanApplication[] @relation("ExternalLoanRequester")
-  groupJoinRequests   GroupJoinRequest[]
-  memberships         UserMembership[]
+  groupJoinRequests        GroupJoinRequest[]
+  memberships              UserMembership[]
 }
 
 model Notification {
@@ -541,23 +541,24 @@ model Group {
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
 
-  programme           Programme?           @relation(fields: [programmeId], references: [id])
-  programmeLinks      ProgrammeGroup[]
-  villageAgent        VillageAgent?        @relation(fields: [villageAgentId], references: [id])
-  userAccounts        User[]
-  members             Member[]
-  meetings            Meeting[]
-  fundAccounts        FundAccount[]
-  ledgerEntries       LedgerEntry[]
-  votes               Vote[]
-  creditScores        CreditScore[]
-  offlineDevices      OfflineDevice[]
-  storeCreditRequests StoreCreditRequest[]
+  programme                Programme?                @relation(fields: [programmeId], references: [id])
+  programmeLinks           ProgrammeGroup[]
+  villageAgent             VillageAgent?             @relation(fields: [villageAgentId], references: [id])
+  userAccounts             User[]
+  members                  Member[]
+  meetings                 Meeting[]
+  fundAccounts             FundAccount[]
+  ledgerEntries            LedgerEntry[]
+  votes                    Vote[]
+  creditScores             CreditScore[]
+  offlineDevices           OfflineDevice[]
+  storeCreditRequests      StoreCreditRequest[]
   externalLoanApplications ExternalLoanApplication[]
-  groupPayments       GroupPayment[]
-  polls               Poll[]
-  joinRequests        GroupJoinRequest[]
-  memberships         UserMembership[]
+  groupPayments            GroupPayment[]
+  integrationConfigs       GroupIntegrationConfig[]
+  polls                    Poll[]
+  joinRequests             GroupJoinRequest[]
+  memberships              UserMembership[]
 }
 
 model Member {
@@ -579,16 +580,16 @@ model Member {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  group          Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userAccounts   User[]
+  group           Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userAccounts    User[]
   membershipLinks UserMembership[]
-  attendance     Attendance[]
-  ledgerEntries  LedgerEntry[]
-  keySubmissions MeetingKeySubmission[]
-  pinDeliveries  MemberPinDelivery[]
-  groupPayments  GroupPayment[]
+  attendance      Attendance[]
+  ledgerEntries   LedgerEntry[]
+  keySubmissions  MeetingKeySubmission[]
+  pinDeliveries   MemberPinDelivery[]
+  groupPayments   GroupPayment[]
   pollCandidacies PollOption[]
-  pollVotes      PollVote[]
+  pollVotes       PollVote[]
 }
 
 model Meeting {
@@ -606,16 +607,16 @@ model Meeting {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  group          Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  steps          MeetingStepRecord[]
-  attendance     Attendance[]
-  keySubmissions MeetingKeySubmission[]
-  ledgerEntries  LedgerEntry[]
-  votes          Vote[]
+  group                    Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  steps                    MeetingStepRecord[]
+  attendance               Attendance[]
+  keySubmissions           MeetingKeySubmission[]
+  ledgerEntries            LedgerEntry[]
+  votes                    Vote[]
   externalLoanApplications ExternalLoanApplication[]
-  storeCreditRequests StoreCreditRequest[]
-  groupPayments  GroupPayment[]
-  polls          Poll[]
+  storeCreditRequests      StoreCreditRequest[]
+  groupPayments            GroupPayment[]
+  polls                    Poll[]
 }
 
 model MeetingKeySubmission {
@@ -826,6 +827,37 @@ model AuditEvent {
   createdAt   DateTime @default(now())
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+/// Per-group payment provider credentials.
+///
+/// A group that has its own M-Pesa till or Paystack account keeps it here, so
+/// members' money settles into THEIR account rather than the platform's.
+/// Resolution order is group config -> platform IntegrationConfig -> process
+/// env, so a group without a row simply uses the platform default.
+///
+/// credentialsJson is AES-256-GCM encrypted with the same key as
+/// IntegrationConfig (derived from SESSION_SECRET). Rotating SESSION_SECRET
+/// makes every stored credential undecryptable - re-enter them if you do.
+model GroupIntegrationConfig {
+  id                   String    @id @default(cuid())
+  groupId              String
+  /// "MPESA_DARAJA" | "PAYSTACK". MPESA_CLASSIC needs no credentials: the
+  /// member types the transaction code in by hand.
+  provider             String
+  credentialsJson      String?
+  enabled              Boolean   @default(true)
+  mode                 String    @default("SANDBOX")
+  credentialsUpdatedAt DateTime?
+  /// Who last changed it - money routing must be attributable.
+  updatedByUserId      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, provider])
+  @@index([groupId])
 }
 
 model IntegrationConfig {
@@ -1246,7 +1278,6 @@ model ExternalLoanApplication {
   @@index([productId, status])
 }
 
-
 /**
  * A member's payment into the group made through a payment gateway —
  * M-Pesa STK push (Daraja) or Paystack checkout. "Classic" M-Pesa, where a
@@ -1353,15 +1384,12 @@ model PollVote {
   @@index([optionId])
 }
 
-
 /**
  * Someone with a member account asking to be added to a group.
- *
  * A group's code is printed on its materials, so it is NOT a secret and
  * cannot be the only gate: the request grants NOTHING until an official
  * approves it. Until then the requester's account stays unlinked and sees
  * none of the group's money.
- *
  * On approval the group is matched to an existing Member row by phone
  * (groups usually enter their members during setup, before those people
  * install the app); only if there is no match is a new Member created.
@@ -1391,12 +1419,10 @@ model GroupJoinRequest {
   @@index([groupId, status])
 }
 
-
 /**
  * One person's place in one group. The source of truth for "which groups am
  * I in" -- people commonly belong to several VSLAs at once, so a single
  * pointer on User could never express it.
- *
  * User.memberId still holds whichever of these is currently in view, and all
  * permission scoping resolves against that. Switching groups repoints it.
  */

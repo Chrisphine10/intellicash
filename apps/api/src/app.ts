@@ -10,6 +10,7 @@ import { auditRouter } from "./routes/audit";
 import { authRouter } from "./routes/auth";
 import { externalLoansRouter } from "./routes/external-loans";
 import { groupPaymentsRouter } from "./routes/group-payments";
+import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
 import { integrationsRouter } from "./routes/integrations";
@@ -128,6 +129,7 @@ export function createApp(
   app.use("/api/v1", intelliStoreRouter);
   app.use("/api/v1", externalLoansRouter);
   app.use("/api/v1", groupPaymentsRouter);
+  app.use("/api/v1", groupPaymentProvidersRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", pollsRouter);

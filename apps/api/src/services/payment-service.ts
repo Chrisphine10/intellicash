@@ -9,6 +9,12 @@ export type PaymentTransactionType = "DEPOSIT" | "WITHDRAWAL" | "INVESTMENT" | "
 
 interface IncomingPaymentInput {
   provider: Exclude<PaymentProvider, "INTERNAL">;
+  /**
+   * When set, this group's own gateway credentials are preferred over the
+   * platform's, so the money lands in the group's account.
+   */
+  groupId?: string | null;
+
   amountCents: number;
   internalReference: string;
   customerEmail?: string | null;
@@ -20,6 +26,12 @@ interface IncomingPaymentInput {
 
 interface PayoutInput {
   provider: Exclude<PaymentProvider, "INTERNAL">;
+  /**
+   * When set, this group's own gateway credentials are preferred over the
+   * platform's, so the money lands in the group's account.
+   */
+  groupId?: string | null;
+
   amountCents: number;
   internalReference: string;
   phoneNumber?: string | null;
@@ -86,9 +98,36 @@ function combineCredentials(
   return credentials;
 }
 
-async function credentialsFor(provider: Exclude<PaymentProvider, "INTERNAL">) {
-  const config = await prisma.integrationConfig.findUnique({ where: { provider } });
-  return combineCredentials(provider, decryptCredentials(config?.credentialsJson));
+/**
+ * Resolve gateway credentials for a payment.
+ *
+ * Order: the GROUP's own configuration, then the platform's, then process env.
+ * A group that has published its own till keeps members' money in its own
+ * account; a group with no configuration silently uses the platform default,
+ * so adding this changed nothing for existing groups.
+ *
+ * Only keys the group actually set override the platform - a group may supply
+ * a shortcode and passkey while still using the platform's callback URLs.
+ */
+export async function credentialsFor(
+  provider: Exclude<PaymentProvider, "INTERNAL">,
+  groupId?: string | null
+) {
+  const platformConfig = await prisma.integrationConfig.findUnique({ where: { provider } });
+  const stored = decryptCredentials(platformConfig?.credentialsJson);
+
+  if (groupId) {
+    const groupConfig = await prisma.groupIntegrationConfig.findUnique({
+      where: { groupId_provider: { groupId, provider } }
+    });
+    // A disabled row means "deliberately not using our own" — fall back rather
+    // than failing, so switching off cannot strand a group mid-collection.
+    if (groupConfig?.enabled) {
+      Object.assign(stored, decryptCredentials(groupConfig.credentialsJson));
+    }
+  }
+
+  return combineCredentials(provider, stored);
 }
 
 function missingKeys(provider: Exclude<PaymentProvider, "INTERNAL">, credentials: Record<string, string>) {
@@ -151,7 +190,7 @@ export async function initiateIncomingPayment(input: IncomingPaymentInput): Prom
     };
   }
 
-  const credentials = await credentialsFor(input.provider);
+  const credentials = await credentialsFor(input.provider, input.groupId);
   assertNetworkCredentials(input.provider, credentials);
 
   if (input.provider === "PAYSTACK") {
@@ -247,7 +286,7 @@ export async function initiatePayout(input: PayoutInput): Promise<GatewayResult>
     };
   }
 
-  const credentials = await credentialsFor(input.provider);
+  const credentials = await credentialsFor(input.provider, input.groupId);
   assertNetworkCredentials(input.provider, credentials);
 
   if (input.provider === "PAYSTACK") {

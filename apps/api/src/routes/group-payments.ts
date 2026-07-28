@@ -169,6 +169,9 @@ router.post("/groups/:id/payments", requireAuth("ledger:write"), async (req, res
     try {
       gateway = await initiateIncomingPayment({
         provider: body.provider,
+        // Route through THIS group's own gateway credentials when it has
+        // configured them; otherwise the platform's are used unchanged.
+        groupId: group.id,
         amountCents: body.amountCents,
         internalReference,
         phoneNumber,
