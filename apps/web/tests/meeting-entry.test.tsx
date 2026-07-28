@@ -241,7 +241,10 @@ describe("meeting entry workflow", () => {
       );
     });
 
-    expect(await screen.findByText("Meeting Console")).toBeInTheDocument();
+    // The heading shows the meeting's own title; the static "Meeting Console"
+    // label this used to assert on no longer exists anywhere in src/.
+    expect(await screen.findByRole("heading", { name: "Weekly meeting" })).toBeInTheDocument();
+    expect(document.querySelector(".meeting-entry-console")).toBeInTheDocument();
     expect(screen.getAllByText("Unlock").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Attendance").length).toBeGreaterThan(0);
     expect(screen.getByText("Share purchase & transactions")).toBeInTheDocument();
@@ -253,11 +256,17 @@ describe("meeting entry workflow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Unlock/i }));
     expect(screen.getByRole("button", { name: /Start/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Online OTP").length).toBeGreaterThan(0);
+    // jsdom reports navigator.onLine === true, so the console is in ONLINE
+    // mode: credentials are OTPs, and both online-only buttons are enabled.
+    // "Online OTP" is no longer rendered as visible text — it survives only as
+    // the input's accessible name and the online hint below, so assert on
+    // those rather than on a label that no longer exists.
     expect(screen.getByLabelText("OTP 1")).toBeInTheDocument();
+    expect(screen.getByText("Use OTPs online. Offline PINs refresh after sync.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Default PIN 1")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Credential 1" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "OTPs" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh offline PINs" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh PINs" })).not.toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     fireEvent.click(screen.getByRole("button", { name: /Share purchase & transactions/i }));

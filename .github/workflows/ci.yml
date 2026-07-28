@@ -2,7 +2,11 @@ name: CI
 
 # Gate on the things that have actually broken this project before:
 # a type error, a failing test, or a web build that only fails on the server.
-# Deployment is a separate workflow and will not run if this one fails.
+#
+# This workflow covers pull requests. It does NOT gate production: two
+# workflows triggered by the same push run independently, so a green run here
+# proves nothing about a deploy. deploy-production.yml therefore repeats these
+# checks as a `verify` job that its deploy job depends on.
 
 on:
   push:

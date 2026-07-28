@@ -39,8 +39,36 @@ env:
   BRANCH: feat/production-readiness
 
 jobs:
+  # Runs in THIS workflow, not ci.yml: a separate workflow triggered by the
+  # same push gives no ordering guarantee, so it cannot gate a deploy.
+  # Nothing touches the server until this passes.
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --include=dev
+      - run: npm run db:generate -w @intellicash/api
+      - run: npm run typecheck
+      - run: npm run test
+
+      - name: Build web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: /api/v1
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build -w @intellicash/web
+
   deploy:
     name: Deploy
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
