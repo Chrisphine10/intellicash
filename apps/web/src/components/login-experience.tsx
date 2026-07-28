@@ -5,6 +5,15 @@ import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, Smartphone } from "@/lib/theme-icons";
 import { demoAccounts, demoPassword } from "@intellicash/shared";
+
+/**
+ * One-click demo sign-in, and the credentials it prefills, are a DEVELOPMENT
+ * convenience. Shipped to production they published a working password on the
+ * public login page - `IntellicashDemo#2026` was readable in the page source
+ * of intellicash.co.ke/login. Opt in explicitly; the default is off, so a
+ * production build never renders it.
+ */
+const DEMO_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true";
 import type { Role } from "@intellicash/shared";
 import { apiFetch, humanizeEnum } from "../lib/api";
 import { refreshOfflinePinCache } from "../lib/offline-pin-cache";
@@ -26,12 +35,18 @@ export function LoginExperience({
 }: LoginExperienceProps) {
   const router = useRouter();
   const visibleDemoAccounts = useMemo(
-    () => demoAccounts.filter((account) => !demoRoles || demoRoles.includes(account.role)),
+    () =>
+      DEMO_LOGIN_ENABLED
+        ? demoAccounts.filter((account) => !demoRoles || demoRoles.includes(account.role))
+        : [],
     [demoRoles]
   );
-  const initialAccount = visibleDemoAccounts[0] ?? demoAccounts[0];
-  const [phone, setPhone] = useState<string>(initialAccount.phone);
-  const [password, setPassword] = useState<string>(demoPassword);
+  // Empty unless demo login is explicitly enabled: a real sign-in page must
+  // not arrive with someone else's credentials already typed in.
+  const [phone, setPhone] = useState<string>(
+    DEMO_LOGIN_ENABLED ? (visibleDemoAccounts[0] ?? demoAccounts[0]).phone : ""
+  );
+  const [password, setPassword] = useState<string>(DEMO_LOGIN_ENABLED ? demoPassword : "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeDemoPhone, setActiveDemoPhone] = useState<string | null>(null);

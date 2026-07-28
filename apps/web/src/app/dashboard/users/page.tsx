@@ -56,7 +56,9 @@ interface AccessControlState {
 const defaultForm: UserFormState = {
   name: "",
   email: "",
-  password: "IntellicashDemo#2026",
+  // Never prefill a shared password: an admin who accepts the default
+  // creates an account whose password is published in the source tree.
+  password: "",
   role: "GROUP_ACCOUNT",
   avatarUrl: "",
   partnerId: "",

@@ -11,6 +11,19 @@ import type {
   PartnerWalletTransaction
 } from "../../../components/dashboard/types";
 
+
+/**
+ * A unique temporary password per approved partner. Uses the Web Crypto RNG,
+ * not Math.random, and a charset without look-alike characters so it can be
+ * read aloud over a phone call without ambiguity.
+ */
+function generateTemporaryPassword(length = 16): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (n) => alphabet[n % alphabet.length]).join("");
+}
+
 export default function PaymentsAdminPage() {
   const [requests, setRequests] = useState<PartnerSignupRequest[]>([]);
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -72,14 +85,21 @@ export default function PaymentsAdminPage() {
     setBusyId(request.id);
     setMessage(null);
     try {
+      // Every partner approved here used to receive the same password, which
+      // is published in the source tree. Issue a unique one instead and show
+      // it once so the reviewer can pass it on.
+      const temporaryPassword = generateTemporaryPassword();
       await apiFetch(`/partner-signup-requests/${request.id}/approve`, {
         method: "POST",
         body: JSON.stringify({
-          password: "IntellicashDemo#2026",
+          password: temporaryPassword,
           reviewNotes: "Approved from admin payments dashboard."
         })
       });
-      setMessage({ ok: true, text: `${request.organizationName} account created.` });
+      setMessage({
+        ok: true,
+        text: `${request.organizationName} account created. Temporary password: ${temporaryPassword} — share it securely; they must change it at first sign-in.`
+      });
       await loadPage();
     } catch (approveError) {
       setMessage({ ok: false, text: approveError instanceof Error ? approveError.message : "Approval failed" });

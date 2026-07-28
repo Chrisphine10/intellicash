@@ -545,8 +545,18 @@ describe("web smoke helpers", () => {
     expect(calls.some((call) => call.url.includes("/field-visit") && call.body.status === "APPROVED")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /Create account/i }));
-    expect(await screen.findByText("Kiritiri Smart Chama account created.")).toBeInTheDocument();
-    expect(calls.some((call) => call.url.includes("/approve") && call.body.password === "IntellicashDemo#2026")).toBe(true);
+    // The message now also carries a one-off temporary password (every partner
+    // used to be given the same published one), so match the prefix and assert
+    // the password is present and is NOT the old shared constant.
+    const created = await screen.findByText(/Kiritiri Smart Chama account created\./);
+    expect(created).toBeInTheDocument();
+    expect(created.textContent).toMatch(/Temporary password: [A-Za-z0-9]{16}/);
+    expect(created.textContent).not.toContain("IntellicashDemo");
+    // Each approval must send its OWN password, never the published constant.
+    const approve = calls.find((call) => call.url.includes("/approve"));
+    expect(approve).toBeDefined();
+    expect(approve!.body.password).not.toBe("IntellicashDemo#2026");
+    expect(approve!.body.password).toMatch(/^[A-Za-z0-9]{16}$/);
     vi.unstubAllGlobals();
   });
 
