@@ -22,9 +22,16 @@ This document records the layout and the manual procedure behind it.
   `ss -tlnp` before assuming any port is free.
 - Do not run `apt upgrade`.
 
+## Branch history
+
+`main` is the production branch. Until 28 Jul 2026 it held an unrelated
+**Laravel** application (1,279 PHP files, no common ancestor with this code);
+that is archived at the tag `archive/laravel-20260728` and the branch
+`archive/laravel`, and nothing was deleted.
+
 ## Layout
 
-- App: `/var/www/intellicash/app` (git checkout, branch `feat/production-readiness`)
+- App: `/var/www/intellicash/app` (git checkout, branch `main`)
 - Database: `/var/www/intellicash/data/intellicash.db` — outside any web root, `chmod 700` dir
 - Env: `app/apps/api/.env`, `chmod 600`, owned by `intellicash`, git-ignored
 - nginx: `/etc/nginx/sites-available/intellicash.co.ke`
@@ -79,7 +86,7 @@ says so, rather than inventing a guessable one.
 
 ## CI/CD (the normal way to deploy)
 
-Push to `feat/production-readiness` → `.github/workflows/deploy-production.yml`:
+Push to `main` → `.github/workflows/deploy-production.yml`:
 backup → refuse dirty tree → `git reset --hard` → `npm ci` → build web →
 `systemctl restart` → health check → **assert hodi and phinetech are still 200**
 → roll back the code on failure.
@@ -94,8 +101,8 @@ Two things the pipeline deliberately does **not** do:
 - **It does not restore the database on rollback.** A forward migration may not
   be reversible, and silently reverting a ledger is worse than an outage.
   Backups are in `/root/backups/`; restore by hand, deliberately.
-- **It does not deploy `main`.** `main` has diverged (31 commits not in the
-  production branch). Resolve that before repointing the workflow.
+- **It does not touch Render.** Those services are untouched and keep their
+  own separate database.
 
 Use `npm ci`, never `npm install`, on the server: `install` rewrites
 `package-lock.json`, and the dirty-tree guard then refuses the next deploy.
@@ -110,7 +117,7 @@ chown -R intellicash:intellicash /var/www/intellicash
 chmod 700 /var/www/intellicash/data
 
 # 2. code (node 22 is already installed system-wide)
-sudo -u intellicash git clone -b feat/production-readiness \
+sudo -u intellicash git clone -b main \
   https://github.com/Chrisphine10/intellicash.git /var/www/intellicash/app
 git config --global --add safe.directory /var/www/intellicash/app   # root runs git here
 
