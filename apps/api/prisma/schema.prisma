@@ -560,6 +560,7 @@ model Group {
   joinRequests             GroupJoinRequest[]
   memberships              UserMembership[]
   cycles                   Cycle[]
+  loans                    Loan[]
 }
 
 model Member {
@@ -591,6 +592,7 @@ model Member {
   groupPayments   GroupPayment[]
   pollCandidacies PollOption[]
   pollVotes       PollVote[]
+  loans           Loan[]
 }
 
 model Meeting {
@@ -765,9 +767,56 @@ model Cycle {
   group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   meetings      Meeting[]
   ledgerEntries LedgerEntry[]
+  loans         Loan[]
 
   @@unique([groupId, number])
   @@index([groupId, status])
+}
+
+/// An internal VSLA loan.
+///
+/// A RECONCILABLE PROJECTION over the ledger, not a second accounting record.
+/// `LedgerEntry` remains the source of truth: if the two ever disagree, the
+/// ledger wins and this table is rebuilt from it. That is why nothing here
+/// stores a balance.
+///
+/// outstanding = principal + accruedInterest - sum(repayments)
+/// accruedInterest = principal * interestRateBps/10000 * elapsedMonths
+///   (FLAT monthly on the ORIGINAL principal - it does not reduce as the
+///    member repays. Decided 30 Jul 2026.)
+///
+/// Both are computed on read in loan-service.ts. Storing either would create a
+/// number that can silently drift away from the ledger.
+model Loan {
+  id                  String   @id @default(cuid())
+  groupId             String
+  memberId            String
+  cycleId             String?
+  principalCents      Int
+  /// Basis points. 0 is legitimate: plenty of groups lend interest-free.
+  interestRateBps     Int      @default(0)
+  termMonths          Int      @default(1)
+  disbursedAt         DateTime
+  dueAt               DateTime
+  /// ACTIVE | REPAID | CARRIED_FORWARD | WRITTEN_OFF
+  status              String   @default("ACTIVE")
+  /// Set when a loan is carried into the next cycle at share-out, so the chain
+  /// across cycles stays traceable.
+  carriedFromLoanId   String?
+  /// The ledger row that created this loan. UNIQUE, which is what makes the
+  /// backfill idempotent - a second run cannot duplicate a loan.
+  disbursementEntryId String?  @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  group      Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member     Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cycle      Cycle?        @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  repayments LedgerEntry[] @relation("LoanRepayments")
+
+  @@index([groupId, status])
+  @@index([memberId])
+  @@index([cycleId])
 }
 
 model FundAccount {
@@ -790,6 +839,10 @@ model LedgerEntry {
   groupId           String
   /// Nullable for backward compatibility; backfilled to the group's cycle.
   cycleId           String?
+  /// Which loan a LOAN_REPAYMENT belongs to. Nullable: historical repayments
+  /// that cannot be attributed unambiguously still count toward the member's
+  /// outstanding total, so backfill never loses money it cannot place.
+  loanId            String?
   memberId          String?
   meetingId         String?
   fundAccountId     String?
@@ -805,6 +858,7 @@ model LedgerEntry {
 
   group       Group        @relation(fields: [groupId], references: [id], onDelete: Restrict)
   cycle       Cycle?       @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  loan        Loan?        @relation("LoanRepayments", fields: [loanId], references: [id], onDelete: SetNull)
   member      Member?      @relation(fields: [memberId], references: [id], onDelete: SetNull)
   meeting     Meeting?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
   fundAccount FundAccount? @relation(fields: [fundAccountId], references: [id], onDelete: SetNull)
