@@ -21,6 +21,7 @@ import {
   computeCreditRating,
   latestCreditRating
 } from "../services/credit-rating-service";
+import { canDisburse } from "../domain/loan-math";
 import {
   assertMeetingWritable,
   ensureActiveCycle
@@ -228,6 +229,11 @@ const voteCreateSchema = z.object({
 });
 
 const officialMemberRoles = new Set(["CHAIRPERSON", "SECRETARY", "TREASURER", "MONEY_COUNTER", "KEY_HOLDER"]);
+
+/** Money in messages a treasurer reads, not raw cents. */
+function formatKesFromCents(cents: number) {
+  return `KES ${(cents / 100).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
+}
 
 const meetingLedgerRules: Record<
   (typeof meetingLedgerEntryTypes)[number],
@@ -730,6 +736,36 @@ async function appendMeetingLedgerEntry(
 ) {
   const rule = meetingLedgerRules[entry.type];
   const fundAccount = await resolveFundAccount(tx, groupId, rule.fundType);
+
+  // Requirement #2: a loan may not exceed the money the group actually has to
+  // lend. appendLedgerEntry's overdraw guard would also catch this, but only
+  // as a generic "fund would go negative" once the disbursement is already
+  // being written. A treasurer needs to be told, in the moment, that the loan
+  // is too big and by how much.
+  if (entry.type === "INTERNAL_LOAN_DISBURSEMENT") {
+    const check = canDisburse({
+      requestedCents: entry.amountCents,
+      loanFundBalanceCents: fundAccount.balanceCents
+    });
+    if (!check.allowed) {
+      throw new ApiHttpError(
+        400,
+        "INSUFFICIENT_LOAN_FUND",
+        entry.amountCents <= 0
+          ? "A loan must be for more than zero."
+          : `This loan is larger than the loan fund. Available ${formatKesFromCents(
+              fundAccount.balanceCents
+            )}, requested ${formatKesFromCents(entry.amountCents)}, short by ${formatKesFromCents(
+              check.shortfallCents
+            )}.`,
+        {
+          requestedCents: entry.amountCents,
+          availableCents: fundAccount.balanceCents,
+          shortfallCents: check.shortfallCents
+        }
+      );
+    }
+  }
 
   return appendLedgerEntry(tx, {
     groupId,

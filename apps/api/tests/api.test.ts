@@ -1523,7 +1523,16 @@ describe("Intellicash API", () => {
       })
       .expect(200);
     expect(offlineSync.body.data.conflicts.map((conflict: { code: string }) => conflict.code)).toEqual(
-      expect.arrayContaining(["INVALID_MEMBER_CREDENTIAL", "DUPLICATE_CLIENT_REQUEST", "INSUFFICIENT_FUND_BALANCE"])
+      // An over-large loan now reports INSUFFICIENT_LOAN_FUND rather than the
+      // generic INSUFFICIENT_FUND_BALANCE: the loan-fund rule (#2) fires first
+      // and names the shortfall. Safe to change - no client switches on these
+      // codes, they surface the message. The generic guard remains the
+      // backstop for every other kind of over-debit.
+      expect.arrayContaining([
+        "INVALID_MEMBER_CREDENTIAL",
+        "DUPLICATE_CLIENT_REQUEST",
+        "INSUFFICIENT_LOAN_FUND"
+      ])
     );
 
     await groupAgent
