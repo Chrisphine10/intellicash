@@ -16,12 +16,13 @@
  */
 import { prisma } from "../src/lib/prisma";
 import { allocateFifo, loanBalance } from "../src/domain/loan-math";
+import { policyFor } from "../src/routes/group-policy";
 
 const COMMIT = process.argv.includes("--commit");
 const DISBURSEMENT = "INTERNAL_LOAN_DISBURSEMENT";
 const REPAYMENT = "LOAN_REPAYMENT";
 
-/** Default term when a group has no policy yet. Requirement #5 default. */
+/** Fallback only; the group's own policy is preferred. See policyFor(). */
 const DEFAULT_TERM_MONTHS = 1;
 
 function kes(cents: number) {
@@ -76,11 +77,16 @@ async function main() {
     }
 
     // ---- Create loans -----------------------------------------------------
+    // A group that has set its own loan term gets it applied to backfilled
+    // loans too, rather than every historical loan being stamped one month.
+    const groupPolicy = await policyFor(group.id);
+    const termMonths = groupPolicy.defaultLoanTermMonths || DEFAULT_TERM_MONTHS;
+
     const toCreate = disbursements.filter((e) => !alreadyMapped.has(e.id) && e.memberId);
     for (const entry of toCreate) {
       const disbursedAt = entry.createdAt;
       const dueAt = new Date(disbursedAt);
-      dueAt.setMonth(dueAt.getMonth() + DEFAULT_TERM_MONTHS);
+      dueAt.setMonth(dueAt.getMonth() + termMonths);
 
       if (COMMIT) {
         await prisma.loan.create({
@@ -92,7 +98,7 @@ async function main() {
             // 0 bps: the historical ledger records no rate, and inventing one
             // would overstate what members owe. Groups set it going forward.
             interestRateBps: 0,
-            termMonths: DEFAULT_TERM_MONTHS,
+            termMonths,
             disbursedAt,
             dueAt,
             status: "ACTIVE",

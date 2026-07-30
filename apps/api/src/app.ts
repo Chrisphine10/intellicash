@@ -11,6 +11,7 @@ import { authRouter } from "./routes/auth";
 import { cyclesRouter } from "./routes/cycles";
 import { externalLoansRouter } from "./routes/external-loans";
 import { groupPaymentsRouter } from "./routes/group-payments";
+import { groupPolicyRouter } from "./routes/group-policy";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
@@ -133,6 +134,7 @@ export function createApp(
   app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", groupPaymentProvidersRouter);
   app.use("/api/v1", cyclesRouter);
+  app.use("/api/v1", groupPolicyRouter);
   app.use("/api/v1", welfareExpensesRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);

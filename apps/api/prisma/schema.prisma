@@ -562,6 +562,7 @@ model Group {
   cycles                   Cycle[]
   loans                    Loan[]
   welfareExpenses          WelfareExpense[]
+  groupPolicies            GroupPolicy[]
 }
 
 model Member {
@@ -860,6 +861,40 @@ model WelfareExpense {
 
   @@index([groupId, createdAt])
   @@index([cycleId])
+}
+
+/// Per-group governance settings.
+///
+/// Deliberately SMALL. The original design had six fields; the 30 Jul
+/// decisions removed four of them:
+///
+///   - shareOutRequiresContributions/Welfare/Fines are gone. Fines and welfare
+///     NET OFF a member's payout rather than barring them from share-out, so
+///     there is no eligibility gate left to configure.
+///   - outstandingLoanHandling is gone. Loans always net off at share-out and
+///     are never carried forward, so the only value it could hold was DEDUCT.
+///
+/// Adding a knob nobody can turn is worse than no knob: it implies a choice
+/// exists. What remains is genuinely per-group.
+///
+/// Every column has a default reproducing today's behaviour, and the row is
+/// optional — a group without one behaves exactly as before.
+model GroupPolicy {
+  groupId String @id
+
+  /// #5. VSLA loans are typically one month. A group whose constitution says
+  /// otherwise sets its own; individual loans may still override this.
+  defaultLoanTermMonths Int @default(1)
+
+  /// #6. Which fund an expense is drawn from. SOCIAL is the welfare fund and
+  /// the near-universal answer, but constitutions differ.
+  expenseFundType String @default("SOCIAL")
+
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
 }
 
 model FundAccount {
