@@ -222,8 +222,11 @@ mobile, not a single change.
 
 ## 8. Open questions
 
-1. **Interest model.** Flat or reducing balance? VSLA practice is usually flat
-   per month on the original principal. Needed before #2 and #7 can be exact.
+1. ~~**Interest model.**~~ **DECIDED 30 Jul 2026: flat monthly interest on the
+   original principal.** So
+   `interest = principal x rateBps/10000 x elapsedMonths`, computed on the
+   principal throughout — it does NOT reduce as the member repays. Interest is
+   derived like outstanding is, never stored.
 2. **Google Maps billing.** Places Autocomplete is a paid API; a key with
    referrer restrictions and a quota cap is needed. Which account is billed?
 3. **Fines and welfare at share-out** — must an unpaid fine block share-out, or

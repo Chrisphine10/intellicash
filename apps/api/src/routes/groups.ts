@@ -21,6 +21,10 @@ import {
   computeCreditRating,
   latestCreditRating
 } from "../services/credit-rating-service";
+import {
+  assertMeetingWritable,
+  ensureActiveCycle
+} from "../services/cycle-service";
 import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
@@ -659,6 +663,13 @@ async function appendLedgerEntry(
 
   if (input.meetingId) await assertMeetingInGroup(tx, input.groupId, input.meetingId);
 
+  // Cycle scoping. A meeting from a closed cycle refuses new money outright;
+  // otherwise the entry is stamped with the group's active cycle so history
+  // stays attributable. Enforced here rather than per-route so a new caller
+  // cannot forget it.
+  if (input.meetingId) await assertMeetingWritable(tx, input.meetingId);
+  const activeCycle = await ensureActiveCycle(tx, input.groupId);
+
   const nextBalance =
     input.direction === "CREDIT"
       ? fundAccount.balanceCents + input.amountCents
@@ -670,6 +681,7 @@ async function appendLedgerEntry(
 
   const payload = {
     groupId: input.groupId,
+    cycleId: activeCycle.id,
     memberId: input.memberId ?? null,
     meetingId: input.meetingId ?? null,
     fundAccountId: input.fundAccountId,

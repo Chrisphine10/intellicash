@@ -8,6 +8,7 @@ import { adminRouter } from "./routes/admin";
 import { apiKeysRouter } from "./routes/api-keys";
 import { auditRouter } from "./routes/audit";
 import { authRouter } from "./routes/auth";
+import { cyclesRouter } from "./routes/cycles";
 import { externalLoansRouter } from "./routes/external-loans";
 import { groupPaymentsRouter } from "./routes/group-payments";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
@@ -130,6 +131,7 @@ export function createApp(
   app.use("/api/v1", externalLoansRouter);
   app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", groupPaymentProvidersRouter);
+  app.use("/api/v1", cyclesRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", pollsRouter);
