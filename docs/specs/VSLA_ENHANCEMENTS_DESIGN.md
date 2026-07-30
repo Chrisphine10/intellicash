@@ -220,17 +220,72 @@ mobile, not a single change.
 
 ---
 
-## 8. Open questions
+## 8. Decisions (all resolved 30 Jul 2026)
 
-1. ~~**Interest model.**~~ **DECIDED 30 Jul 2026: flat monthly interest on the
-   original principal.** So
-   `interest = principal x rateBps/10000 x elapsedMonths`, computed on the
-   principal throughout — it does NOT reduce as the member repays. Interest is
-   derived like outstanding is, never stored.
-2. **Google Maps billing.** Places Autocomplete is a paid API; a key with
-   referrer restrictions and a quota cap is needed. Which account is billed?
-3. **Fines and welfare at share-out** — must an unpaid fine block share-out, or
-   be netted off the payout like a loan? #8 says configurable; the *default*
-   needs deciding.
-4. **`CARRY_FORWARD` semantics** — does a carried loan keep accruing interest
-   across the cycle boundary, or freeze at the share-out date?
+1. **Interest** — FLAT MONTHLY ON THE ORIGINAL PRINCIPAL. Does not reduce as
+   the member repays. Implemented and tested in `domain/loan-math.ts`.
+
+2. **Fines and welfare at share-out — NET OFF THE PAYOUT, do not block.**
+   An unpaid fine or welfare obligation never bars a member from share-out; it
+   is deducted from what they receive. This makes the `shareOutRequires*`
+   flags in `GroupPolicy` unnecessary — there is no eligibility gate to
+   configure. What is configurable is the *deduction order*, not permission.
+   A member may end with a negative payout, which is a debt to the group and
+   already how the mobile share-out behaves.
+
+3. **Outstanding loans — NET OFF AT SHARE-OUT. NO CARRY FORWARD.**
+   `outstandingLoanHandling` collapses to DEDUCT. `CARRY_FORWARD` is dropped,
+   so nothing populates `Loan.carriedFromLoanId` — leave the column unused
+   rather than migrate it away, in case the policy changes; it costs nothing
+   and dropping a column is a table rebuild.
+   Consequence: a loan is never inherited by the next cycle. At share-out
+   every loan is settled against the payout and closed, and a shortfall
+   becomes a negative payout, not a new loan. This is simpler than the design
+   originally assumed and REMOVES the cross-cycle interest question entirely.
+
+---
+
+## 9. Welfare fund: expenses and share-out residue (NEW)
+
+Requested 30 Jul. Supersedes the narrower "#6 expenses from social fund".
+
+**The rule: welfare expenses are paid out of the welfare fund, and what
+remains at the end of the cycle is what gets shared.** The welfare fund is not
+a separate pot that survives the cycle — it is spent down during the cycle and
+distributed at share-out.
+
+### Backend module
+
+- **New ledger type `WELFARE_EXPENSE`**, routed by the existing
+  `meetingLedgerRules` to the SOCIAL fund as a **DEBIT**. Reuses the whole
+  existing path — signing, cycle stamping, and the overdraw guard, which
+  already refuses an expense larger than the fund holds.
+- **`WelfareExpense`** record alongside the ledger entry, carrying what a
+  ledger line cannot: category, payee, approving member, and supporting note.
+  Same relationship as `Loan` has to the ledger — a projection with context,
+  never a second source of truth for the amount.
+- **Endpoints** `GET/POST /groups/:id/welfare-expenses`, scoped and
+  cycle-stamped like every other write.
+- **Share-out** takes the welfare fund's CLOSING balance — contributions minus
+  expenses — and distributes it. The existing share-out already splits welfare
+  equally as an option; it must now read the post-expense balance rather than
+  gross contributions.
+
+### Ordering at share-out (the part to get right)
+
+For each member, in this order:
+
+1. Start with the pro-rata share of the savings/loan pool.
+2. Add their share of the REMAINING welfare fund.
+3. Deduct outstanding loan principal and interest.
+4. Deduct unpaid fines and welfare obligations.
+
+A negative result is a debt to the group, recorded and carried as such — not
+suppressed to zero, and not converted into a loan.
+
+### UI
+
+- Web and mobile need a **Welfare** section listing expenses with a running
+  balance, and an add-expense form. Mobile card order is already
+  social fund → shares → fines → loans, so welfare expenses belong under the
+  social fund card.
