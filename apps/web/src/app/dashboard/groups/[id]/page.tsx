@@ -3,7 +3,7 @@
 import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { Banknote, Activity, ArrowLeft, FileText, Pencil, UsersRound, Vote, X } from "@/lib/theme-icons";
+import { Activity, ArrowLeft, Banknote, FileText, HeartHandshake, Pencil, Settings, UsersRound, Vote, X } from "@/lib/theme-icons";
 import { apiFetch, formatKes, humanizeEnum } from "../../../../lib/api";
 import { DataTable } from "../../../../components/dashboard/data-table";
 import type { AgentRow, LedgerEntry, MeetingRow, Member, ProgrammeRow, User, VoteRow } from "../../../../components/dashboard/types";
@@ -259,6 +259,18 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/payment-providers`}>
                 <Banknote size={16} />
                 Payment Providers
+              </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/policy`}>
+                <Settings size={16} />
+                Policy
+              </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/welfare`}>
+                <HeartHandshake size={16} />
+                Welfare
+              </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/cycles`}>
+                <Activity size={16} />
+                Cycles
               </Link>
             </>
           ) : null}
