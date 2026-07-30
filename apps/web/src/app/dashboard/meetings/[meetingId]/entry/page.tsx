@@ -106,6 +106,20 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
     return { sharePurchase, socialFund, loanRepayment, loanDisbursement };
   }, [ledger]);
 
+  /**
+   * Requirement #2: a group cannot lend money it does not have.
+   *
+   * The API refuses an over-large loan with INSUFFICIENT_LOAN_FUND, but a
+   * treasurer should not have to submit to find out. This mirrors the server
+   * rule so the action is blocked BEFORE the attempt, with the same numbers.
+   */
+  const loanFundCents = useMemo(
+    () =>
+      (group?.fundAccounts ?? []).find((fund) => fund.type === "INTERNAL_LOAN")?.balanceCents ?? 0,
+    [group]
+  );
+
+
   async function refresh(groupId?: string) {
     const resolvedGroupId = groupId ?? group?.id;
     if (!resolvedGroupId) return;
@@ -214,6 +228,20 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
   const activeEntryMember = members.find((member) => member.id === activeEntryMemberId) ?? members[0] ?? null;
   const visibleEntryMembers = showAllFastEntry ? members : activeEntryMember ? [activeEntryMember] : [];
   const shareValueCents = group?.shareValueCents ?? meeting?.group.shareValueCents ?? 50000;
+
+  const draftDisbursementCents = useMemo(
+    () =>
+      typedEntriesFromAmounts(meetingId, members, amounts, shareValueCents)
+        .filter((entry) => entry.type === "INTERNAL_LOAN_DISBURSEMENT")
+        .reduce((sum, entry) => sum + entry.amountCents, 0),
+    [meetingId, members, amounts, shareValueCents]
+  );
+
+  // Measured against the CURRENT fund balance. Repayments typed into the same
+  // draft do not count as available: they are not posted yet, so lending
+  // against them would be lending money the group does not hold.
+  const loanShortfallCents = Math.max(0, draftDisbursementCents - loanFundCents);
+  const loanFundExceeded = loanShortfallCents > 0;
   const shareLimit = Math.max(
     1,
     Math.min(group?.maxSharesPerMemberPerMeeting ?? meeting?.group.maxSharesPerMemberPerMeeting ?? 10, 100)
@@ -480,6 +508,13 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
     if (!group || !deviceId) return;
     const entries = typedEntriesFromAmounts(meetingId, members, amounts, shareValueCents);
     if (entries.length === 0) return setMessage({ ok: false, text: "Enter at least one amount." });
+    if (loanFundExceeded) {
+      // Belt and braces: a disabled button is a courtesy, not a control.
+      return setMessage({
+        ok: false,
+        text: `Loans total ${formatKes(draftDisbursementCents)} but the loan fund holds ${formatKes(loanFundCents)} — short by ${formatKes(loanShortfallCents)}.`
+      });
+    }
     setSaving(true);
     try {
       if (isOffline) {
@@ -1034,7 +1069,14 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                     </div>
                   )}
                   <div className="meeting-entry-actions sticky">
-                    <button className="button" disabled={saving} onClick={saveLedgerEntries} type="button">
+                    {loanFundExceeded ? (
+                      <p className="dashboard-notice error">
+                        Loans entered total {formatKes(draftDisbursementCents)}, but the loan fund holds{" "}
+                        {formatKes(loanFundCents)} — short by {formatKes(loanShortfallCents)}. Reduce the loan,
+                        or collect repayments and save them first.
+                      </p>
+                    ) : null}
+                    <button className="button" disabled={saving || loanFundExceeded} onClick={saveLedgerEntries} type="button">
                       <CheckCircle2 size={16} />
                       Save entries
                     </button>
