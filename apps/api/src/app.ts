@@ -25,6 +25,7 @@ import { reportsRouter } from "./routes/reports";
 import { smsBroadcastsRouter } from "./routes/sms-broadcasts";
 import { uploadsRouter } from "./routes/uploads";
 import { webhooksRouter } from "./routes/webhooks";
+import { welfareExpensesRouter } from "./routes/welfare-expenses";
 import { ApiHttpError, fail, ok } from "./lib/http";
 import { ensureUploadDirectory, uploadRoot } from "./lib/uploads";
 import { requestTracingMiddleware } from "./middleware/request-tracing";
@@ -132,6 +133,7 @@ export function createApp(
   app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", groupPaymentProvidersRouter);
   app.use("/api/v1", cyclesRouter);
+  app.use("/api/v1", welfareExpensesRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", pollsRouter);

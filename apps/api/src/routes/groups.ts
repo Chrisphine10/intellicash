@@ -156,6 +156,7 @@ const meetingLedgerEntryTypes = [
   "INTERNAL_LOAN_DISBURSEMENT",
   "SOCIAL_CONTRIBUTION",
   "FINE_COLLECTION",
+  "WELFARE_EXPENSE",
   "SHARE_OUT_PAYOUT"
 ] as const;
 
@@ -248,6 +249,10 @@ const meetingLedgerRules: Record<
   },
   SOCIAL_CONTRIBUTION: { fundType: "SOCIAL", direction: "CREDIT", label: "Social fund contribution" },
   FINE_COLLECTION: { fundType: "SOCIAL", direction: "CREDIT", label: "Fine collection" },
+  // Welfare spending. DEBIT against SOCIAL, so appendLedgerEntry's existing
+  // overdraw guard refuses an expense larger than the welfare fund holds —
+  // a group cannot spend welfare money it does not have.
+  WELFARE_EXPENSE: { fundType: "SOCIAL", direction: "DEBIT", label: "Welfare expense" },
   SHARE_OUT_PAYOUT: { fundType: "INTERNAL_LOAN", direction: "DEBIT", label: "Share-out payout" }
 };
 
@@ -614,7 +619,9 @@ async function notifyMeetingActive(groupId: string, title: string) {
   );
 }
 
-async function resolveFundAccount(tx: Prisma.TransactionClient, groupId: string, fundType: FundType) {
+// Exported so the welfare module can reuse the SAME money path — signing,
+// cycle stamping and the overdraw guard — instead of writing its own.
+export async function resolveFundAccount(tx: Prisma.TransactionClient, groupId: string, fundType: FundType) {
   const fundAccount = await tx.fundAccount.findUnique({
     where: { groupId_type: { groupId, type: fundType } }
   });
@@ -626,7 +633,7 @@ async function resolveFundAccount(tx: Prisma.TransactionClient, groupId: string,
   return fundAccount;
 }
 
-async function appendLedgerEntry(
+export async function appendLedgerEntry(
   tx: Prisma.TransactionClient,
   input: {
     groupId: string;

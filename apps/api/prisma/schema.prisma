@@ -561,6 +561,7 @@ model Group {
   memberships              UserMembership[]
   cycles                   Cycle[]
   loans                    Loan[]
+  welfareExpenses          WelfareExpense[]
 }
 
 model Member {
@@ -593,6 +594,7 @@ model Member {
   pollCandidacies PollOption[]
   pollVotes       PollVote[]
   loans           Loan[]
+  welfareExpenses WelfareExpense[]
 }
 
 model Meeting {
@@ -764,10 +766,11 @@ model Cycle {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  meetings      Meeting[]
-  ledgerEntries LedgerEntry[]
-  loans         Loan[]
+  group           Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  meetings        Meeting[]
+  ledgerEntries   LedgerEntry[]
+  loans           Loan[]
+  welfareExpenses WelfareExpense[]
 
   @@unique([groupId, number])
   @@index([groupId, status])
@@ -819,6 +822,46 @@ model Loan {
   @@index([cycleId])
 }
 
+/// A welfare payment out of the group's social fund.
+///
+/// The AMOUNT lives in the ledger, not here — this is the context a ledger
+/// line cannot hold: what it was for, who received it, who approved it. Same
+/// relationship `Loan` has to the ledger. If the two ever disagree, the ledger
+/// wins.
+///
+/// Consequence for share-out: the welfare fund is spent DOWN during a cycle,
+/// and what remains at the end is what gets distributed. Share-out must read
+/// the fund's closing balance, never gross contributions.
+model WelfareExpense {
+  id               String   @id @default(cuid())
+  groupId          String
+  cycleId          String?
+  meetingId        String?
+  /// The ledger row that moved the money. UNIQUE, so an expense can never be
+  /// double-recorded against the same entry.
+  ledgerEntryId    String   @unique
+  /// MEDICAL | BEREAVEMENT | EDUCATION | EMERGENCY | OTHER — free text rather
+  /// than an enum: constitutions differ and a group must not be blocked from
+  /// recording a real payment because its category was not foreseen.
+  category         String
+  /// Who received it. A member where applicable, otherwise a written name —
+  /// welfare is often paid to a member's family or a hospital.
+  payeeMemberId    String?
+  payeeName        String?
+  note             String?
+  approvedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  cycle       Cycle?      @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  ledgerEntry LedgerEntry @relation(fields: [ledgerEntryId], references: [id], onDelete: Cascade)
+  payeeMember Member?     @relation(fields: [payeeMemberId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, createdAt])
+  @@index([cycleId])
+}
+
 model FundAccount {
   id           String   @id @default(cuid())
   groupId      String
@@ -856,12 +899,13 @@ model LedgerEntry {
   clientRequestId   String?  @unique
   createdAt         DateTime @default(now())
 
-  group       Group        @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  cycle       Cycle?       @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  loan        Loan?        @relation("LoanRepayments", fields: [loanId], references: [id], onDelete: SetNull)
-  member      Member?      @relation(fields: [memberId], references: [id], onDelete: SetNull)
-  meeting     Meeting?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  fundAccount FundAccount? @relation(fields: [fundAccountId], references: [id], onDelete: SetNull)
+  group          Group           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  cycle          Cycle?          @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  loan           Loan?           @relation("LoanRepayments", fields: [loanId], references: [id], onDelete: SetNull)
+  welfareExpense WelfareExpense?
+  member         Member?         @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  meeting        Meeting?        @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  fundAccount    FundAccount?    @relation(fields: [fundAccountId], references: [id], onDelete: SetNull)
 }
 
 model OfflineDevice {

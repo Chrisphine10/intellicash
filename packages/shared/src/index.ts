@@ -284,6 +284,9 @@ export const ledgerEntryTypes = [
   "FINE_COLLECTION",
   "SOCIAL_CONTRIBUTION",
   "SOCIAL_GRANT",
+  // Money spent OUT of the welfare fund during a cycle. What remains after
+  // these is what gets shared out.
+  "WELFARE_EXPENSE",
   "LOAN_REPAYMENT",
   "SHARE_PURCHASE",
   "INTERNAL_LOAN_DISBURSEMENT",
