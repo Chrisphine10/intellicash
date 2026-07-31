@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { loanBalance } from "../domain/loan-math";
 
 /**
  * One member's passbook, aggregated on the server.
@@ -34,7 +35,7 @@ export async function buildMemberPassbook(memberId: string) {
   });
   if (!member) return null;
 
-  const [byType, attendance, recent] = await Promise.all([
+  const [byType, attendance, recent, loans, welfareReceived, shareOuts] = await Promise.all([
     prisma.ledgerEntry.groupBy({
       by: ["type"],
       where: { memberId },
@@ -58,6 +59,25 @@ export async function buildMemberPassbook(memberId: string) {
         description: true,
         createdAt: true
       }
+    }),
+    // Loans as the projection sees them, with their repayments, so interest
+    // can be computed rather than ignored.
+    prisma.loan.findMany({
+      where: { memberId },
+      orderBy: { disbursedAt: "desc" },
+      include: { repayments: { select: { amountCents: true } } }
+    }),
+    // Welfare a member RECEIVED. Distinct from what they contributed — a
+    // passbook showing only contributions misses half the relationship.
+    prisma.ledgerEntry.findMany({
+      where: { memberId, type: "WELFARE_EXPENSE" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, amountCents: true, description: true, createdAt: true }
+    }),
+    prisma.ledgerEntry.findMany({
+      where: { memberId, type: "SHARE_OUT_PAYOUT" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, amountCents: true, description: true, createdAt: true }
     })
   ]);
 
@@ -69,6 +89,37 @@ export async function buildMemberPassbook(memberId: string) {
   const finesCents = totalFor(FINES);
   const loansReceivedCents = totalFor(LOAN_DISBURSEMENT);
   const loansRepaidCents = totalFor(LOAN_REPAYMENT);
+
+  // Per-loan balances, interest included. The previous figure was simply
+  // disbursed minus repaid, which IGNORES INTEREST and understates what a
+  // member owes — on a flat monthly loan that gap widens every month.
+  const asOf = new Date();
+  const loanDetail = loans.map((loan) => {
+    const repaid = loan.repayments.reduce((sum, r) => sum + r.amountCents, 0);
+    const balance = loanBalance({
+      principalCents: loan.principalCents,
+      interestRateBps: loan.interestRateBps,
+      termMonths: loan.termMonths,
+      disbursedAt: loan.disbursedAt,
+      repaidCents: repaid,
+      asOf
+    });
+    return {
+      id: loan.id,
+      status: loan.status,
+      disbursedAt: loan.disbursedAt.toISOString(),
+      dueAt: loan.dueAt.toISOString(),
+      termMonths: loan.termMonths,
+      interestRateBps: loan.interestRateBps,
+      ...balance,
+      overdue: loan.status === "ACTIVE" && loan.dueAt < asOf && balance.outstandingCents > 0
+    };
+  });
+  const loanInterestCents = loanDetail.reduce((s, l) => s + l.interestCents, 0);
+  const loanOutstandingWithInterestCents =
+      loanDetail.reduce((s, l) => s + l.outstandingCents, 0);
+  const welfareReceivedCents = welfareReceived.reduce((s, e) => s + e.amountCents, 0);
+  const shareOutReceivedCents = shareOuts.reduce((s, e) => s + e.amountCents, 0);
 
   const attendanceTotal = attendance.reduce((sum, row) => sum + row._count, 0);
   const attendancePresent =
@@ -86,8 +137,17 @@ export async function buildMemberPassbook(memberId: string) {
       loansReceivedCents,
       loansRepaidCents,
       // Never show a negative balance when someone overpays.
-      loanOutstandingCents: Math.max(0, loansReceivedCents - loansRepaidCents)
+      loanOutstandingCents: Math.max(0, loansReceivedCents - loansRepaidCents),
+      // The line above is the LEDGER difference and ignores interest. Kept
+      // for compatibility; prefer the interest-aware figure below.
+      loanInterestCents,
+      loanOutstandingWithInterestCents,
+      welfareReceivedCents,
+      shareOutReceivedCents
     },
+    loans: loanDetail,
+    welfareReceived: welfareReceived.map((e) => ({ id: e.id, amountCents: e.amountCents, description: e.description, createdAt: e.createdAt.toISOString() })),
+    shareOutHistory: shareOuts.map((e) => ({ id: e.id, amountCents: e.amountCents, description: e.description, createdAt: e.createdAt.toISOString() })),
     totals: byType.map((row) => ({
       type: row.type,
       totalCents: row._sum.amountCents ?? 0,
