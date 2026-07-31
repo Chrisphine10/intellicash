@@ -598,6 +598,10 @@ model Member {
   loans           Loan[]
   welfareExpenses WelfareExpense[]
   roleAssignments MemberRoleAssignment[]
+
+  // Every member query filters by group; without this it is a full scan, and
+  // #12 removes any cap on how many members a group may have.
+  @@index([groupId, status])
 }
 
 model Meeting {
@@ -628,6 +632,8 @@ model Meeting {
   storeCreditRequests      StoreCreditRequest[]
   groupPayments            GroupPayment[]
   polls                    Poll[]
+
+  @@index([groupId, scheduledAt])
 }
 
 model MeetingKeySubmission {
@@ -976,6 +982,12 @@ model LedgerEntry {
   member         Member?         @relation(fields: [memberId], references: [id], onDelete: SetNull)
   meeting        Meeting?        @relation(fields: [meetingId], references: [id], onDelete: SetNull)
   fundAccount    FundAccount?    @relation(fields: [fundAccountId], references: [id], onDelete: SetNull)
+
+  // The ledger is the fastest-growing table in the system and is read by
+  // group, by member and by meeting. Ordered by createdAt for statements.
+  @@index([groupId, createdAt])
+  @@index([memberId, createdAt])
+  @@index([meetingId])
 }
 
 model OfflineDevice {
