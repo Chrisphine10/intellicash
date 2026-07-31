@@ -899,6 +899,14 @@ model GroupPolicy {
   /// the near-universal answer, but constitutions differ.
   expenseFundType String @default("SOCIAL")
 
+  /// Basis points charged per month, FLAT on the original principal.
+  ///
+  /// Defaults to 0 deliberately. A group that has not set its rate lends
+  /// interest-free, which understates nothing and invents no debt; guessing a
+  /// typical VSLA rate here would silently charge members money their
+  /// constitution never agreed to. 1000 = 10% a month, the common VSLA figure.
+  loanInterestRateBps Int @default(0)
+
   updatedByUserId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

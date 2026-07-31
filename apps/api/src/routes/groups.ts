@@ -21,7 +21,7 @@ import {
   computeCreditRating,
   latestCreditRating
 } from "../services/credit-rating-service";
-import { canDisburse } from "../domain/loan-math";
+import { canDisburse, loanBalance } from "../domain/loan-math";
 import {
   assertMeetingWritable,
   ensureActiveCycle
@@ -724,6 +724,13 @@ export async function appendLedgerEntry(
     }
   });
 
+  // Keep the Loan projection in step with the money, inside the SAME
+  // transaction. Placed here rather than in a route for the same reason as the
+  // cycle guard above: a new caller cannot forget it, and until 31 Jul 2026
+  // NOTHING created a Loan row, so interest was never charged on anything the
+  // app recorded.
+  await projectLoanFromEntry(tx, ledgerEntry);
+
   if (input.meetingId) {
     const transactionTotal = await tx.ledgerEntry.count({ where: { meetingId: input.meetingId } });
     await tx.meeting.update({
@@ -733,6 +740,104 @@ export async function appendLedgerEntry(
   }
 
   return ledgerEntry;
+}
+
+/**
+ * Mirror a disbursement or a repayment into the `Loan` projection.
+ *
+ * The ledger stays the source of truth: this creates no money and moves none.
+ * It records what a ledger line cannot — the term and rate a loan was agreed
+ * at, so interest can be computed — and points repayments at the loan they
+ * pay down.
+ *
+ * Same shape the backfill script produces, deliberately: `disbursementEntryId`
+ * is UNIQUE, so a loan created here is one the backfill will skip, and the two
+ * can never double-count a disbursement.
+ */
+async function projectLoanFromEntry(
+  tx: Prisma.TransactionClient,
+  entry: { id: string; groupId: string; memberId: string | null; cycleId: string | null; type: string; amountCents: number; createdAt: Date }
+) {
+  if (!entry.memberId) return;
+
+  if (entry.type === "INTERNAL_LOAN_DISBURSEMENT") {
+    // Read the policy through `tx`, not the global client: a read outside the
+    // transaction could see a rate that the same transaction is changing.
+    const policy = await tx.groupPolicy.findUnique({ where: { groupId: entry.groupId } });
+    const termMonths = policy?.defaultLoanTermMonths ?? 1;
+    // The rate is COPIED onto the loan rather than looked up later, so a group
+    // raising its rate next month cannot reprice money already lent.
+    const interestRateBps = policy?.loanInterestRateBps ?? 0;
+
+    const dueAt = new Date(entry.createdAt);
+    dueAt.setMonth(dueAt.getMonth() + termMonths);
+
+    await tx.loan.create({
+      data: {
+        groupId: entry.groupId,
+        memberId: entry.memberId,
+        cycleId: entry.cycleId,
+        principalCents: entry.amountCents,
+        interestRateBps,
+        termMonths,
+        disbursedAt: entry.createdAt,
+        dueAt,
+        status: "ACTIVE",
+        disbursementEntryId: entry.id
+      }
+    });
+    return;
+  }
+
+  if (entry.type !== "LOAN_REPAYMENT") return;
+
+  // Attribute the repayment to the member's oldest loan that still owes
+  // something — the same FIFO rule the backfill uses, so a database built by
+  // either route reports identical balances.
+  const loans = await tx.loan.findMany({
+    where: { groupId: entry.groupId, memberId: entry.memberId, status: "ACTIVE" },
+    orderBy: { disbursedAt: "asc" },
+    include: { repayments: { select: { amountCents: true } } }
+  });
+  if (loans.length === 0) return;
+
+  const asOf = entry.createdAt;
+  const owed = loans.map((loan) => ({
+    id: loan.id,
+    owedCents: loanBalance({
+      principalCents: loan.principalCents,
+      interestRateBps: loan.interestRateBps,
+      termMonths: loan.termMonths,
+      disbursedAt: loan.disbursedAt,
+      repaidCents: loan.repayments.reduce((sum, r) => sum + r.amountCents, 0),
+      asOf
+    }).outstandingCents
+  }));
+
+  const target = owed.find((loan) => loan.owedCents > 0) ?? owed[0];
+  if (!target) return;
+
+  // A repayment larger than the oldest loan stays whole on that loan rather
+  // than being split: a ledger row points at one loan, and the member's TOTAL
+  // outstanding — which is what every report shows — is unaffected either way.
+  await tx.ledgerEntry.update({ where: { id: entry.id }, data: { loanId: target.id } });
+
+  const settled = loans.find((loan) => loan.id === target.id)!;
+  const repaidNow =
+    settled.repayments.reduce((sum, r) => sum + r.amountCents, 0) + entry.amountCents;
+  const remaining = loanBalance({
+    principalCents: settled.principalCents,
+    interestRateBps: settled.interestRateBps,
+    termMonths: settled.termMonths,
+    disbursedAt: settled.disbursedAt,
+    repaidCents: repaidNow,
+    asOf
+  }).outstandingCents;
+
+  if (remaining <= 0) {
+    // Closing the loan stops interest accruing on a debt already settled.
+    await tx.loan.update({ where: { id: settled.id }, data: { status: "REPAID" } });
+  }
 }
 
 async function appendMeetingLedgerEntry(

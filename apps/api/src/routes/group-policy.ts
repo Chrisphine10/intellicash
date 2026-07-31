@@ -18,7 +18,15 @@ export const groupPolicyRouter = Router();
  */
 export const POLICY_DEFAULTS = {
   defaultLoanTermMonths: 1,
-  expenseFundType: "SOCIAL"
+  expenseFundType: "SOCIAL",
+  /**
+   * 0 bps — interest-free until a group deliberately sets its rate.
+   *
+   * The alternative, defaulting to the common 10% a month, would charge every
+   * unconfigured group's members money their constitution never agreed to.
+   * Lending interest-free by default invents no debt.
+   */
+  loanInterestRateBps: 0
 } as const;
 
 /** Which funds an expense may legitimately be drawn from. */
@@ -38,6 +46,7 @@ export async function policyFor(groupId: string) {
     groupId,
     defaultLoanTermMonths: row?.defaultLoanTermMonths ?? POLICY_DEFAULTS.defaultLoanTermMonths,
     expenseFundType: row?.expenseFundType ?? POLICY_DEFAULTS.expenseFundType,
+    loanInterestRateBps: row?.loanInterestRateBps ?? POLICY_DEFAULTS.loanInterestRateBps,
     /** False when the group is running on defaults — useful to a UI. */
     configured: Boolean(row),
     updatedByUserId: row?.updatedByUserId ?? null,
@@ -92,7 +101,12 @@ const updateSchema = z.object({
   // 1..60 months. A zero-month loan would be due the instant it is made, and a
   // term measured in years is not a VSLA loan.
   defaultLoanTermMonths: z.number().int().min(1).max(60).optional(),
-  expenseFundType: z.enum(EXPENSE_FUND_TYPES).optional()
+  expenseFundType: z.enum(EXPENSE_FUND_TYPES).optional(),
+  // 0..2000 bps a month, i.e. up to 20%. VSLA groups commonly charge 10%
+  // (1000). The ceiling is deliberate: a typo of 10000 for "10%" would charge
+  // 100% a month and, on a flat rate over a 12-month term, bill a member
+  // twelve times what they borrowed.
+  loanInterestRateBps: z.number().int().min(0).max(2000).optional()
 });
 
 groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), async (req, res, next) => {
@@ -114,9 +128,13 @@ groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), asy
     const policy = await policyFor(group.id);
     ok(res, {
       policy,
-      // Existing loans keep the term they were made with; changing the default
-      // must not silently reprice money already lent.
-      message: `Saved. New loans default to ${policy.defaultLoanTermMonths} month(s); existing loans keep their agreed term.`
+      // Existing loans keep the term AND the rate they were made with. Both
+      // are copied onto the Loan row at disbursement precisely so that
+      // changing policy can never reprice money already lent.
+      message:
+        `Saved. New loans default to ${policy.defaultLoanTermMonths} month(s) at ` +
+        `${(policy.loanInterestRateBps / 100).toFixed(2)}% a month; ` +
+        `existing loans keep the term and rate they were agreed with.`
     });
   } catch (error) {
     next(error);

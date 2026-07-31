@@ -1,0 +1,11 @@
+-- Per-group monthly interest rate for internal loans, in basis points.
+--
+-- ADD COLUMN with a NOT NULL default: SQLite performs this in place, so the
+-- GroupPolicy table is NOT rebuilt and no existing row is rewritten. Contrast
+-- with the Cycle and Loan migrations, which added foreign keys and therefore
+-- required a full table rebuild.
+--
+-- Default 0: every group already configured keeps lending interest-free until
+-- it deliberately sets a rate. Back-dating a rate onto existing policies would
+-- charge members money their constitution never agreed to.
+ALTER TABLE "GroupPolicy" ADD COLUMN "loanInterestRateBps" INTEGER NOT NULL DEFAULT 0;

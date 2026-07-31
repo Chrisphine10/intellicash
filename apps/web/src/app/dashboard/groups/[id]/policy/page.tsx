@@ -19,6 +19,7 @@ import { apiFetch } from "../../../../../lib/api";
 interface Policy {
   defaultLoanTermMonths: number;
   expenseFundType: string;
+  loanInterestRateBps: number;
   configured: boolean;
   updatedAt: string | null;
 }
@@ -26,7 +27,7 @@ interface Policy {
 interface PolicyResponse {
   group: { id: string; name: string; code: string };
   policy: Policy;
-  defaults: { defaultLoanTermMonths: number; expenseFundType: string };
+  defaults: { defaultLoanTermMonths: number; expenseFundType: string; loanInterestRateBps: number };
   canConfigure: boolean;
 }
 
@@ -41,6 +42,9 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
   const [data, setData] = useState<PolicyResponse | null>(null);
   const [term, setTerm] = useState("");
   const [fund, setFund] = useState("");
+  // Held as a PERCENTAGE, because nobody running a group thinks in basis
+  // points. Converted at the boundary, once.
+  const [ratePercent, setRatePercent] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +55,7 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
     setData(response);
     setTerm(String(response.policy.defaultLoanTermMonths));
     setFund(response.policy.expenseFundType);
+    setRatePercent(String(response.policy.loanInterestRateBps / 100));
   }
 
   useEffect(() => {
@@ -67,7 +72,12 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
     try {
       const response = await apiFetch<{ message: string }>(`/groups/${id}/policy`, {
         method: "PUT",
-        body: JSON.stringify({ defaultLoanTermMonths: Number(term), expenseFundType: fund })
+        body: JSON.stringify({
+          defaultLoanTermMonths: Number(term),
+          expenseFundType: fund,
+          // Rounded, not truncated: 1.005% must not silently become 100 bps.
+          loanInterestRateBps: Math.round(Number(ratePercent) * 100)
+        })
       });
       await load();
       setMessage({ ok: true, text: response.message });
@@ -141,6 +151,25 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
           <p className="dashboard-notice">
             Applies to <strong>new</strong> loans. Existing loans keep the term they were agreed
             with — changing this never reprices money already lent.
+          </p>
+
+          <label>
+            Interest charged (% a month)
+            <input
+              disabled={!data.canConfigure || saving}
+              max={20}
+              min={0}
+              onChange={(event) => setRatePercent(event.target.value)}
+              step={0.5}
+              type="number"
+              value={ratePercent}
+            />
+          </label>
+          <p className="dashboard-notice">
+            Flat on the original amount borrowed — it does not fall as the member repays, and it
+            stops at the end of the agreed term. <strong>0 is a valid setting</strong>: plenty of
+            groups lend interest-free. Each loan keeps the rate it was made at, so changing this
+            never reprices money already lent.
           </p>
 
           <label>

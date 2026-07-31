@@ -59,8 +59,12 @@ describe("group policy", () => {
     // Unspecified settings keep their default rather than being blanked.
     expect(response.body.data.policy.expenseFundType).toBe("SOCIAL");
     // The message must say what does NOT change, since repricing existing
-    // loans is the thing a treasurer would fear.
-    expect(response.body.data.message).toMatch(/existing loans keep their agreed term/i);
+    // loans is the thing a treasurer would fear. It now promises the RATE is
+    // fixed too, not only the term — both are copied onto the Loan row at
+    // disbursement, so neither can be changed after the fact.
+    expect(response.body.data.message).toMatch(
+      /existing loans keep the term and rate they were agreed with/i
+    );
   });
 
   it("rejects a term of zero months", async () => {
@@ -70,6 +74,39 @@ describe("group policy", () => {
       .set("Cookie", cookies)
       .send({ defaultLoanTermMonths: 0 })
       .expect(400);
+  });
+
+  it("stores the group's monthly interest rate", async () => {
+    const response = await request(app)
+      .put(`/api/v1/groups/${groupId}/policy`)
+      .set("Cookie", cookies)
+      .send({ loanInterestRateBps: 1000 })
+      .expect(200);
+    expect(response.body.data.policy.loanInterestRateBps).toBe(1000);
+    // Stated as a percentage, because a treasurer does not think in bps.
+    expect(response.body.data.message).toMatch(/10\.00% a month/);
+  });
+
+  it("refuses a rate high enough to be a typo", async () => {
+    // 10000 bps is 100% A MONTH. Someone entering "10000" meaning 10% would,
+    // on a flat rate over a 12-month term, bill a member twelve times what
+    // they borrowed.
+    await request(app)
+      .put(`/api/v1/groups/${groupId}/policy`)
+      .set("Cookie", cookies)
+      .send({ loanInterestRateBps: 10000 })
+      .expect(400);
+  });
+
+  it("allows an interest-free group", async () => {
+    // Plenty of VSLAs lend at no interest, so zero must be a legitimate
+    // setting rather than read as "unset".
+    const response = await request(app)
+      .put(`/api/v1/groups/${groupId}/policy`)
+      .set("Cookie", cookies)
+      .send({ loanInterestRateBps: 0 })
+      .expect(200);
+    expect(response.body.data.policy.loanInterestRateBps).toBe(0);
   });
 
   it("rejects a fund type that is not a real fund", async () => {
