@@ -116,8 +116,25 @@ export async function buildMemberPassbook(memberId: string) {
     };
   });
   const loanInterestCents = loanDetail.reduce((s, l) => s + l.interestCents, 0);
-  const loanOutstandingWithInterestCents =
-      loanDetail.reduce((s, l) => s + l.outstandingCents, 0);
+  const ledgerOnlyOutstandingCents = Math.max(0, loansReceivedCents - loansRepaidCents);
+  /**
+   * Interest-aware outstanding — but NEVER below what the ledger already
+   * proves is owed.
+   *
+   * `Loan` is a projection, and loans disbursed before it existed have no
+   * Loan row until `prisma/backfill-loans.ts` has been run. Summing only the
+   * projected loans then yields ZERO for a member the ledger says owes real
+   * money, and a client that trusts this field would tell them their debt is
+   * cleared. Found on a seeded database where the ledger showed 4,500.00
+   * outstanding and this figure came back 0.
+   *
+   * With no projection to consult, the ledger difference is the only truth
+   * available: it omits interest, which understates, but understating is a
+   * smaller lie than reporting nothing owed at all.
+   */
+  const loanOutstandingWithInterestCents = loanDetail.length === 0
+    ? ledgerOnlyOutstandingCents
+    : loanDetail.reduce((s, l) => s + l.outstandingCents, 0);
   const welfareReceivedCents = welfareReceived.reduce((s, e) => s + e.amountCents, 0);
   const shareOutReceivedCents = shareOuts.reduce((s, e) => s + e.amountCents, 0);
 
@@ -137,7 +154,7 @@ export async function buildMemberPassbook(memberId: string) {
       loansReceivedCents,
       loansRepaidCents,
       // Never show a negative balance when someone overpays.
-      loanOutstandingCents: Math.max(0, loansReceivedCents - loansRepaidCents),
+      loanOutstandingCents: ledgerOnlyOutstandingCents,
       // The line above is the LEDGER difference and ignores interest. Kept
       // for compatibility; prefer the interest-aware figure below.
       loanInterestCents,
@@ -212,7 +229,18 @@ export async function buildMemberOverview(userId: string) {
       loansRepaidCents: sum((g) => g.summary.loansRepaidCents),
       // Each group's outstanding is already floored at zero, so overpaying in
       // one group can never cancel a real debt in another.
-      loanOutstandingCents: sum((g) => g.summary.loanOutstandingCents)
+      loanOutstandingCents: sum((g) => g.summary.loanOutstandingCents),
+      // The line above is the LEDGER difference and ignores interest — it is
+      // kept only so older clients keep working. Every figure below rolls up
+      // the same interest-aware numbers the single-group passbook reports.
+      // Without them, someone borrowing in two groups saw a combined debt
+      // smaller than either group would actually collect.
+      loanInterestCents: sum((g) => g.summary.loanInterestCents),
+      loanOutstandingWithInterestCents: sum(
+        (g) => g.summary.loanOutstandingWithInterestCents
+      ),
+      welfareReceivedCents: sum((g) => g.summary.welfareReceivedCents),
+      shareOutReceivedCents: sum((g) => g.summary.shareOutReceivedCents)
     },
     groups
   };

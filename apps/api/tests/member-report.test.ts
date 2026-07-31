@@ -51,6 +51,66 @@ describe("member report", () => {
     expect(passbook!.summary.loanInterestCents).toBeGreaterThanOrEqual(100_000);
   });
 
+  it("never reports zero owed just because a loan was never projected", async () => {
+    /**
+     * `Loan` is a projection. A loan disbursed before it existed has no Loan
+     * row until the backfill script has run, so summing projected loans alone
+     * returns ZERO for a member the ledger says owes real money — and a client
+     * preferring that figure tells them their debt is cleared.
+     *
+     * Caught on a seeded database: the ledger showed 4,500.00 outstanding and
+     * the interest-aware figure came back 0.
+     */
+    const group = await prisma.group.findFirstOrThrow({ where: { id: groupId } });
+    const orphan = await prisma.member.create({
+      data: {
+        groupId: group.id,
+        fullName: "Borrowed Before Loans Existed",
+        phone: "254788000222",
+        status: "ACTIVE"
+      }
+    });
+    const sample = await prisma.ledgerEntry.findFirstOrThrow({
+      select: { currency: true, fundAccountId: true }
+    });
+
+    // Ledger only — deliberately NO Loan row, exactly like un-backfilled data.
+    await prisma.ledgerEntry.createMany({
+      data: [
+        {
+          groupId: group.id,
+          memberId: orphan.id,
+          fundAccountId: sample.fundAccountId,
+          currency: sample.currency,
+          signature: "orphan-loan-test",
+          type: "INTERNAL_LOAN_DISBURSEMENT",
+          direction: "DEBIT",
+          amountCents: 1_000_000,
+          description: "Legacy loan"
+        },
+        {
+          groupId: group.id,
+          memberId: orphan.id,
+          fundAccountId: sample.fundAccountId,
+          currency: sample.currency,
+          signature: "orphan-repay-test",
+          type: "LOAN_REPAYMENT",
+          direction: "CREDIT",
+          amountCents: 550_000,
+          description: "Legacy repayment"
+        }
+      ]
+    });
+
+    const passbook = await buildMemberPassbook(orphan.id);
+    expect(passbook!.loans).toHaveLength(0);
+    // 10,000.00 borrowed, 5,500.00 repaid. Interest is unknown without a Loan
+    // row, so the ledger difference stands — understating is a smaller lie
+    // than reporting nothing owed.
+    expect(passbook!.summary.loanOutstandingWithInterestCents).toBe(450_000);
+    expect(passbook!.summary.loanOutstandingCents).toBe(450_000);
+  });
+
   it("separates welfare RECEIVED from welfare contributed", async () => {
     const passbook = await buildMemberPassbook(memberId);
     // Contributions live in summary.socialCents; benefits are their own list.

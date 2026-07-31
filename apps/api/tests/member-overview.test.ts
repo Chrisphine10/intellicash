@@ -167,4 +167,89 @@ describe("a member's report across all their groups", () => {
   it("cannot be read without signing in", async () => {
     await request(app).get("/api/v1/members/me/overview").expect(401);
   });
+
+  /**
+   * The single-group passbook learned about interest when `Loan` landed; this
+   * rollup did not — it summed only the ledger difference, disbursed minus
+   * repaid. Someone borrowing in two groups was therefore shown a combined
+   * debt smaller than either group would actually collect. Interest is where
+   * the group's money is, so understating it is not a rounding problem.
+   */
+  describe("interest, welfare and share-out reach the combined figures", () => {
+    beforeAll(async () => {
+      // Two loans, 10,000.00 each at 10% a month with one month elapsed, so
+      // 1,000.00 of interest apiece under the flat-monthly rule.
+      const memberships = await prisma.userMembership.findMany({
+        where: { user: { email: "overview@example.com" } },
+        select: { memberId: true, groupId: true }
+      });
+      expect(memberships).toHaveLength(2);
+
+      for (const membership of memberships) {
+        const cycle = await prisma.cycle.findFirst({
+          where: { groupId: membership.groupId, status: "ACTIVE" }
+        });
+        await prisma.loan.create({
+          data: {
+            groupId: membership.groupId,
+            memberId: membership.memberId,
+            cycleId: cycle?.id ?? null,
+            principalCents: 1_000_000,
+            interestRateBps: 1000,
+            termMonths: 3,
+            disbursedAt: new Date(Date.now() - 31 * 24 * 3600 * 1000),
+            dueAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
+            status: "ACTIVE"
+          }
+        });
+      }
+    }, 60000);
+
+    it("rolls up interest instead of dropping it", async () => {
+      const { combined } = (await member.get("/api/v1/members/me/overview").expect(200)).body.data;
+      expect(combined.loanInterestCents).toBe(200_000);
+    });
+
+    it("the interest-aware total is knowably HIGHER than the legacy one", async () => {
+      // The legacy field stays for older clients. Asserting the gap is the
+      // point: anyone tempted to collapse these back into one field breaks
+      // this test rather than a member's statement.
+      const { combined } = (await member.get("/api/v1/members/me/overview").expect(200)).body.data;
+      expect(combined.loanOutstandingWithInterestCents).toBeGreaterThan(
+        combined.loanOutstandingCents
+      );
+    });
+
+    it("the combined figure equals the sum of the per-group figures", async () => {
+      // A member checking the total against each group's own page must not
+      // find a discrepancy — that is how trust is lost in a meeting.
+      const { combined, groups } = (await member.get("/api/v1/members/me/overview").expect(200))
+        .body.data;
+      const perGroup = groups.reduce(
+        (total: number, group: any) => total + group.summary.loanOutstandingWithInterestCents,
+        0
+      );
+      expect(combined.loanOutstandingWithInterestCents).toBe(perGroup);
+    });
+
+    it("carries welfare received and share-out history into the rollup", async () => {
+      const { combined, groups } = (await member.get("/api/v1/members/me/overview").expect(200))
+        .body.data;
+      expect(combined).toHaveProperty("welfareReceivedCents");
+      expect(combined).toHaveProperty("shareOutReceivedCents");
+      expect(combined.welfareReceivedCents).toBe(
+        groups.reduce((t: number, g: any) => t + g.summary.welfareReceivedCents, 0)
+      );
+      expect(combined.shareOutReceivedCents).toBe(
+        groups.reduce((t: number, g: any) => t + g.summary.shareOutReceivedCents, 0)
+      );
+    });
+
+    it("still keeps every combined figure in integer cents", async () => {
+      const { combined } = (await member.get("/api/v1/members/me/overview").expect(200)).body.data;
+      for (const value of Object.values(combined)) {
+        expect(Number.isInteger(value as number)).toBe(true);
+      }
+    });
+  });
 });
