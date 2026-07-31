@@ -15,6 +15,7 @@ import { groupPolicyRouter } from "./routes/group-policy";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
+import { memberRolesRouter } from "./routes/member-roles";
 import { integrationsRouter } from "./routes/integrations";
 import { intelliStoreRouter } from "./routes/intelli-store";
 import { intelliAuditRouter } from "./routes/intelliaudit";
@@ -135,6 +136,7 @@ export function createApp(
   app.use("/api/v1", groupPaymentProvidersRouter);
   app.use("/api/v1", cyclesRouter);
   app.use("/api/v1", groupPolicyRouter);
+  app.use("/api/v1", memberRolesRouter);
   app.use("/api/v1", welfareExpensesRouter);
   app.use("/api/v1", partnerPortalRouter);
   app.use("/api/v1", paymentsRouter);

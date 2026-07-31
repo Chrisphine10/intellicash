@@ -563,6 +563,7 @@ model Group {
   loans                    Loan[]
   welfareExpenses          WelfareExpense[]
   groupPolicies            GroupPolicy[]
+  memberRoleAssignments    MemberRoleAssignment[]
 }
 
 model Member {
@@ -596,6 +597,7 @@ model Member {
   pollVotes       PollVote[]
   loans           Loan[]
   welfareExpenses WelfareExpense[]
+  roleAssignments MemberRoleAssignment[]
 }
 
 model Meeting {
@@ -767,11 +769,12 @@ model Cycle {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  group           Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group           Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   meetings        Meeting[]
   ledgerEntries   LedgerEntry[]
   loans           Loan[]
   welfareExpenses WelfareExpense[]
+  roleAssignments MemberRoleAssignment[]
 
   @@unique([groupId, number])
   @@index([groupId, status])
@@ -895,6 +898,38 @@ model GroupPolicy {
   updatedAt       DateTime @updatedAt
 
   group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+/// Who held which office, and when.
+///
+/// `Member.role` says who holds an office NOW. It cannot answer "who was
+/// secretary when this meeting was minuted?" — reassigning simply overwrote it,
+/// so a change quietly rewrote the past. This table keeps the history: an
+/// assignment is ENDED, never edited, and a new row opens.
+///
+/// Cycle-stamped, so a new cycle can reshuffle leadership (#11) without
+/// touching the closed cycle's record of who was responsible.
+model MemberRoleAssignment {
+  id               String    @id @default(cuid())
+  groupId          String
+  memberId         String
+  cycleId          String?
+  /// MEMBER | CHAIRPERSON | SECRETARY | TREASURER | MONEY_COUNTER |
+  /// KEY_HOLDER | VILLAGE_AGENT
+  role             String
+  startedAt        DateTime  @default(now())
+  /// Null while held. Set when the office passes to someone else.
+  endedAt          DateTime?
+  assignedByUserId String?
+  note             String?
+  createdAt        DateTime  @default(now())
+
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cycle  Cycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, role, endedAt])
+  @@index([memberId])
 }
 
 model FundAccount {
