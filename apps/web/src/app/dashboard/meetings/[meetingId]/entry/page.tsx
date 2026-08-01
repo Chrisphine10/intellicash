@@ -1122,10 +1122,12 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                       <span>
                         <strong>Cash paid out {formatKes(shareOutPreview.totalNetPayoutCents)}</strong>
                       </span>
-                      {shareOutPreview.welfarePoolCents > 0 && !shareOutPreview.distributeWelfare ? (
+                      {shareOutPreview.welfarePoolCents > 0 ? (
                         <span>
-                          Welfare fund holds {formatKes(shareOutPreview.welfarePoolCents)} — shared
-                          out separately, not included above.
+                          Welfare fund {formatKes(shareOutPreview.welfarePoolCents)}
+                          {shareOutPreview.distributeWelfare
+                            ? " — split equally and included above"
+                            : " — kept, not shared out"}
                         </span>
                       ) : null}
                       {shareOutPreview.rows.slice(0, 6).map((row) => (

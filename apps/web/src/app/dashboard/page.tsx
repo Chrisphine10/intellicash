@@ -100,7 +100,10 @@ function addEntryToCycle(summary: MemberCycleSummary, entry: LedgerEntry) {
 
   if (entry.type === "SHARE_PURCHASE") {
     summary.sharePurchaseCents += entry.amountCents;
-  } else if (entry.type === "SHARE_OUT_PAYOUT") {
+  } else if (entry.type === "SHARE_OUT_PAYOUT" || entry.type === "WELFARE_SHARE_OUT") {
+    // Both halves of a share-out — the pro-rata payout and the welfare
+    // remainder. Only SHARE_OUT_PAYOUT closes the cycle below, so counting
+    // the welfare half here cannot advance a cycle twice.
     summary.shareOutPayoutCents += entry.amountCents;
     summary.closedAt = entry.createdAt;
   } else {

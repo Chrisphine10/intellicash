@@ -294,6 +294,15 @@ export const ledgerEntryTypes = [
   "EXTERNAL_LOAN_REPAYMENT",
   "GRANT_RECEIPT",
   "SHARE_OUT_PAYOUT",
+  /**
+   * What is left of the welfare fund, handed back to members at share-out.
+   *
+   * Distinct from SHARE_OUT_PAYOUT because the money comes from a different
+   * pot: this DEBITS the SOCIAL fund, the other debits INTERNAL_LOAN. Paying
+   * welfare through the ordinary payout would empty the loan fund and leave
+   * the welfare fund untouched — the right total taken from the wrong money.
+   */
+  "WELFARE_SHARE_OUT",
   "VSLF_DEPOSIT"
 ] as const;
 export type LedgerEntryType = (typeof ledgerEntryTypes)[number];

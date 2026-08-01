@@ -157,7 +157,8 @@ const meetingLedgerEntryTypes = [
   "SOCIAL_CONTRIBUTION",
   "FINE_COLLECTION",
   "WELFARE_EXPENSE",
-  "SHARE_OUT_PAYOUT"
+  "SHARE_OUT_PAYOUT",
+  "WELFARE_SHARE_OUT"
 ] as const;
 
 const meetingLedgerEntrySchema = z.object({
@@ -209,18 +210,18 @@ const shareOutPreviewSchema = z.object({
   /**
    * Whether what REMAINS in the welfare fund is shared out too.
    *
-   * DEFAULTS FALSE, and not because the rule says so — the rule is that the
-   * welfare fund is spent down and the remainder distributed. It is false
-   * because `SHARE_OUT_PAYOUT` debits the INTERNAL_LOAN fund, so paying
-   * welfare through it would drain the loan fund and leave the social fund
-   * untouched: right total, wrong money. Distributing welfare needs its own
-   * SOCIAL-debiting entry type, which is a separate change.
+   * Defaults TRUE, per the rule the welfare module is built around: the fund
+   * is spent down during the cycle and whatever is left is distributed. It
+   * pays through `WELFARE_SHARE_OUT`, which debits the SOCIAL fund, so the
+   * money comes from the pot it actually sits in.
    *
-   * Until then the preview still REPORTS `welfarePoolCents`, so a group can
-   * see what is left and hand it out deliberately rather than being told a
-   * figure the ledger would contradict.
+   * Split EQUALLY, not pro-rata by shares. Welfare is mutual insurance —
+   * everyone contributes the same and is covered the same — so weighting the
+   * remainder by savings would hand the largest savers a fund they have no
+   * greater claim on. A group that keeps its welfare float across cycles
+   * sets this false.
    */
-  distributeWelfare: z.boolean().default(false)
+  distributeWelfare: z.boolean().default(true)
 });
 
 const shareOutPostSchema = shareOutPreviewSchema.extend({
@@ -268,7 +269,11 @@ const meetingLedgerRules: Record<
   // overdraw guard refuses an expense larger than the welfare fund holds —
   // a group cannot spend welfare money it does not have.
   WELFARE_EXPENSE: { fundType: "SOCIAL", direction: "DEBIT", label: "Welfare expense" },
-  SHARE_OUT_PAYOUT: { fundType: "INTERNAL_LOAN", direction: "DEBIT", label: "Share-out payout" }
+  SHARE_OUT_PAYOUT: { fundType: "INTERNAL_LOAN", direction: "DEBIT", label: "Share-out payout" },
+  // The welfare remainder, paid from the fund it actually sits in. The
+  // overdraw guard in appendLedgerEntry then does the right thing for free:
+  // a group cannot distribute welfare money it has already spent.
+  WELFARE_SHARE_OUT: { fundType: "SOCIAL", direction: "DEBIT", label: "Welfare share-out" }
 };
 
 const memberSelect = {
@@ -917,13 +922,13 @@ async function appendMeetingLedgerEntry(
  * real money:
  *
  *   pro-rata share of the pool
+ *   + an equal share of what REMAINS in the welfare fund
  *   − outstanding loans, principal AND interest
  *   = net payout
  *
- * Distributing what remains in the welfare fund is the one rule NOT applied
- * here: the payout entry debits the loan fund, so paying welfare through it
- * would take the money from the wrong place. The remaining balance is
- * reported instead. See `distributeWelfare`.
+ * The two pots are paid by two entry types against two funds — the pro-rata
+ * share debits INTERNAL_LOAN, the welfare remainder debits SOCIAL — so the
+ * money always leaves the pot it was actually sitting in.
  *
  * Outstanding loans NET OFF and are never carried forward, and a member whose
  * debt exceeds their entitlement ends with a NEGATIVE net — a debt to the
@@ -974,14 +979,13 @@ async function computeShareOutPreview(
   // The welfare fund AS IT STANDS — already spent down by every welfare
   // expense recorded this cycle. Gross contributions would distribute money
   // the group has already paid to a hospital.
-  const distributeWelfare = options.distributeWelfare ?? false;
+  const distributeWelfare = options.distributeWelfare ?? true;
   const welfareFund = await tx.fundAccount.findFirst({
     where: { groupId, type: "SOCIAL" },
     select: { balanceCents: true }
   });
-  // Always REPORTED so a group can see what is left to hand out; only
-  // allocated into payouts when asked, because the payout entry debits the
-  // wrong fund for welfare money. See distributeWelfare on the schema.
+  // Always REPORTED, even when not being distributed, so a group that keeps
+  // its float can still see what it is carrying into the next cycle.
   const welfarePoolCents = Math.max(0, welfareFund?.balanceCents ?? 0);
   const welfareShares = distributeWelfare
     ? allocateEqually(welfarePoolCents, eligible.length)
@@ -2263,14 +2267,25 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
       const settlements = [];
 
       for (const row of preview.rows) {
-        // Settle the loan out of the payout FIRST, as a real repayment.
+        // Three truthful entries, not one netted one.
         //
-        // Writing it rather than merely subtracting is what makes "netted off,
-        // never carried forward" true: the repayment flows through the same
-        // path every other repayment takes, so it is attributed to the loan
-        // and closes it. Silently reducing the cash instead would leave the
-        // loan ACTIVE and the member would owe it all over again next cycle.
+        // The member's WHOLE entitlement leaves the fund it sat in, and the
+        // settled loan comes back as a real repayment. Writing the netted
+        // figure as the payout instead would credit the loan fund the full
+        // repayment while debiting it only the remainder, leaving the fund
+        // richer than reality by exactly the amount settled.
+        //
+        //   entitlement 500 from the loan fund, loan owed 300:
+        //     gross:  −500 payout +300 repayment = −200  ✓ cash handed over
+        //     netted: −200 payout +300 repayment = +100  ✗ money invented
+        //
+        // The cash actually counted out at the table is netPayoutCents; the
+        // ledger explains where it came from.
         if (row.loanOffsetCents > 0) {
+          // Through the same path every other repayment takes, so it is
+          // attributed to the loan and closes it. Merely paying less cash
+          // would leave the loan ACTIVE and the member would owe it again
+          // next cycle — "netted off, never carried forward" would be false.
           settlements.push(
             await appendMeetingLedgerEntry(tx, groupId, meetingId, {
               memberId: row.memberId,
@@ -2282,19 +2297,30 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
           );
         }
 
-        // Only positive net leaves the box. A member whose debt exceeded their
-        // entitlement owes the difference — recorded in the preview as
-        // owesGroup, never written as a negative payout.
-        if (row.netPayoutCents <= 0) continue;
-        entries.push(
-          await appendMeetingLedgerEntry(tx, groupId, meetingId, {
-            memberId: row.memberId,
-            type: "SHARE_OUT_PAYOUT",
-            amountCents: row.netPayoutCents,
-            description: payload.description ?? "Reviewed share-out payout",
-            clientRequestId: `${prefix}-${row.memberId}`
-          })
-        );
+        if (row.payoutCents > 0) {
+          entries.push(
+            await appendMeetingLedgerEntry(tx, groupId, meetingId, {
+              memberId: row.memberId,
+              type: "SHARE_OUT_PAYOUT",
+              amountCents: row.payoutCents,
+              description: payload.description ?? "Reviewed share-out payout",
+              clientRequestId: `${prefix}-${row.memberId}`
+            })
+          );
+        }
+
+        // The welfare remainder leaves the SOCIAL fund, never the loan fund.
+        if (row.welfareCents > 0) {
+          entries.push(
+            await appendMeetingLedgerEntry(tx, groupId, meetingId, {
+              memberId: row.memberId,
+              type: "WELFARE_SHARE_OUT",
+              amountCents: row.welfareCents,
+              description: "Welfare fund shared out",
+              clientRequestId: `${prefix}-welfare-${row.memberId}`
+            })
+          );
+        }
       }
 
       return {

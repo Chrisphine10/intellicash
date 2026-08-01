@@ -75,7 +75,10 @@ export async function buildMemberPassbook(memberId: string) {
       select: { id: true, amountCents: true, description: true, createdAt: true }
     }),
     prisma.ledgerEntry.findMany({
-      where: { memberId, type: "SHARE_OUT_PAYOUT" },
+      // Both halves of a share-out: the pro-rata payout from the loan fund
+      // and the welfare remainder from the social fund. Counting only the
+      // first would understate what the member was actually handed.
+      where: { memberId, type: { in: ["SHARE_OUT_PAYOUT", "WELFARE_SHARE_OUT"] } },
       orderBy: { createdAt: "desc" },
       select: { id: true, amountCents: true, description: true, createdAt: true }
     })

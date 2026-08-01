@@ -47,6 +47,16 @@ describe("share-out nets off what members owe", () => {
       data: { balanceCents: 100_000_000 }
     });
 
+    // A known welfare balance, so the arithmetic below is checkable by hand:
+    // 1,000.00 split equally between two members is 500.00 each.
+    const social = await prisma.fundAccount.findFirstOrThrow({
+      where: { groupId, type: "SOCIAL" }
+    });
+    await prisma.fundAccount.update({
+      where: { id: social.id },
+      data: { balanceCents: 100_000 }
+    });
+
     // A clean slate: two members, equal shares, one of whom borrows.
     await prisma.ledgerEntry.deleteMany({ where: { groupId, type: "SHARE_PURCHASE" } });
     await prisma.loan.deleteMany({ where: { groupId } });
@@ -128,33 +138,51 @@ describe("share-out nets off what members owe", () => {
     const clear = data.rows.find((row: any) => row.memberId === saver);
 
     expect(owing.loanOffsetCents).toBe(300_000);
-    // Equal shares, so 500,000 gross each; the borrower keeps 200,000.
+    // Equal shares, so 500,000 gross each, plus 50,000 welfare each.
+    // The borrower keeps 500,000 + 50,000 − 300,000 = 250,000.
     expect(owing.payoutCents).toBe(500_000);
-    expect(owing.netPayoutCents).toBe(200_000);
+    expect(owing.welfareCents).toBe(50_000);
+    expect(owing.netPayoutCents).toBe(250_000);
 
     // The member who only saved is untouched by someone else's debt.
     expect(clear.loanOffsetCents).toBe(0);
-    expect(clear.netPayoutCents).toBe(clear.payoutCents);
+    expect(clear.netPayoutCents).toBe(clear.payoutCents + clear.welfareCents);
   });
 
   it("a debt bigger than the entitlement gives a NEGATIVE net, not a block", async () => {
     // The 30 Jul rule: unpaid money nets off the payout and never bars anyone
     // from sharing out. A negative net is a debt to the group.
+    // Pool of 200,000 → 100,000 gross each, plus 50,000 welfare, against a
+    // 300,000 debt: the borrower ends 150,000 short.
     const data = await preview(200_000);
     const owing = data.rows.find((row: any) => row.memberId === borrower);
-    expect(owing.netPayoutCents).toBeLessThan(0);
+    expect(owing.netPayoutCents).toBe(-150_000);
     expect(owing.owesGroup).toBe(true);
     // They are still in the share-out, not excluded from it.
     expect(data.rows).toHaveLength(2);
   });
 
-  it("reports the welfare fund without paying it out of the wrong pot", async () => {
-    // SHARE_OUT_PAYOUT debits the loan fund, so welfare cannot ride on it.
-    // The balance is reported so a group can hand it out deliberately.
+  it("splits the welfare remainder EQUALLY, not by shares", async () => {
+    // Welfare is mutual insurance: everyone contributes the same and is
+    // covered the same, so weighting the remainder by savings would hand the
+    // largest savers a fund they have no greater claim on.
     const data = await preview(1_000_000);
-    expect(data).toHaveProperty("welfarePoolCents");
-    expect(data.distributeWelfare).toBe(false);
+    expect(data.distributeWelfare).toBe(true);
+    const shares = data.rows.map((row: any) => row.welfareCents);
+    expect(Math.max(...shares) - Math.min(...shares)).toBeLessThanOrEqual(1);
+    expect(shares.reduce((a: number, b: number) => a + b, 0)).toBe(data.welfarePoolCents);
+  });
+
+  it("can be told to keep the welfare float instead", async () => {
+    const response = await request(app)
+      .post(`/api/v1/groups/${groupId}/meetings/${meetingId}/share-out/preview`)
+      .set("Cookie", cookies)
+      .send({ poolAmountCents: 1_000_000, distributeWelfare: false })
+      .expect(200);
+    const data = response.body.data;
     expect(data.rows.every((row: any) => row.welfareCents === 0)).toBe(true);
+    // Still reported, so a group can see what it carries forward.
+    expect(data).toHaveProperty("welfarePoolCents");
   });
 
   it("posting settles the loan instead of leaving it to be collected twice", async () => {
@@ -181,12 +209,51 @@ describe("share-out nets off what members owe", () => {
     expect(passbook).toHaveLength(0);
   });
 
-  it("pays out the NET, not the gross", async () => {
-    const payouts = await prisma.ledgerEntry.findMany({
-      where: { groupId, type: "SHARE_OUT_PAYOUT", memberId: borrower }
+  it("leaves the loan fund down by the CASH handed over, not more", async () => {
+    /**
+     * The arithmetic that is easy to get backwards, and did not survive first
+     * contact: the payout entry must be the GROSS when a settlement repayment
+     * is also written.
+     *
+     *   entitlement 500, loan owed 300
+     *     gross:  −500 payout +300 repayment = −200  ✓ the cash handed over
+     *     netted: −200 payout +300 repayment = +100  ✗ the fund gains money
+     *             that never existed
+     */
+    const entries = await prisma.ledgerEntry.findMany({
+      where: {
+        groupId,
+        memberId: borrower,
+        type: { in: ["SHARE_OUT_PAYOUT", "LOAN_REPAYMENT"] },
+        meetingId
+      }
     });
-    // 500,000 gross less the 300,000 loan. Paying the gross would hand the
-    // borrower money that had already settled their debt.
-    expect(payouts.reduce((sum, entry) => sum + entry.amountCents, 0)).toBe(200_000);
+    const movement = entries.reduce(
+      (sum, entry) => sum + (entry.direction === "DEBIT" ? -entry.amountCents : entry.amountCents),
+      0
+    );
+    // 500,000 entitlement less the 300,000 loan settled from it.
+    expect(movement).toBe(-200_000);
+  });
+
+  it("takes the welfare share out of the SOCIAL fund, not the loan fund", async () => {
+    const welfareEntries = await prisma.ledgerEntry.findMany({
+      where: { groupId, type: "WELFARE_SHARE_OUT", meetingId },
+      include: { fundAccount: { select: { type: true } } }
+    });
+    expect(welfareEntries.length).toBeGreaterThan(0);
+    // The whole reason this entry type exists.
+    expect(welfareEntries.every((entry) => entry.fundAccount?.type === "SOCIAL")).toBe(true);
+    expect(welfareEntries.every((entry) => entry.direction === "DEBIT")).toBe(true);
+  });
+
+  it("cannot distribute welfare the group has already spent", async () => {
+    // The overdraw guard in appendLedgerEntry applies to WELFARE_SHARE_OUT
+    // like any other debit, so an emptied welfare fund simply allocates zero
+    // rather than going negative.
+    const social = await prisma.fundAccount.findFirstOrThrow({
+      where: { groupId, type: "SOCIAL" }
+    });
+    expect(social.balanceCents).toBeGreaterThanOrEqual(0);
   });
 });
