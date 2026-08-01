@@ -39,10 +39,69 @@ const PROVIDER_KEYS: Record<ConfigurableProvider, string[]> = {
     "MPESA_SHORTCODE",
     "MPESA_PASSKEY",
     "MPESA_INITIATOR_NAME",
-    "MPESA_SECURITY_CREDENTIAL"
+    "MPESA_SECURITY_CREDENTIAL",
+    // SANDBOX (default) or LIVE. A group testing with Daraja sandbox keys and
+    // a group running a real till hit different Safaricom hosts, so this has
+    // to travel with the credentials rather than being a platform-wide switch.
+    "MPESA_ENVIRONMENT"
   ],
   PAYSTACK: ["PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY"]
 };
+
+/**
+ * Values accepted for a provider key that is a mode rather than a secret.
+ *
+ * Rejected rather than silently normalised: a group typing "live " or "Live"
+ * gets what it meant, but "lve" must fail visibly instead of quietly leaving
+ * the group on sandbox and looking like a broken gateway later.
+ */
+const ENUM_KEYS: Record<string, string[]> = {
+  MPESA_ENVIRONMENT: ["SANDBOX", "LIVE", "PRODUCTION"]
+};
+
+/**
+ * Keys with a safe default, so their absence is not a misconfiguration.
+ *
+ * Listing MPESA_ENVIRONMENT under `missingKeys` would tell every already-working
+ * group that its gateway is incomplete, which is both false and alarming.
+ */
+const OPTIONAL_KEYS = new Set(["MPESA_ENVIRONMENT"]);
+
+/**
+ * What will ACTUALLY happen when this group takes a payment.
+ *
+ * Derived from the credentials themselves rather than from a mode flag beside
+ * them. A group can set mode LIVE and paste a `sk_test_` key; the flag would
+ * say live, the money would go nowhere real, and nobody would know until a
+ * member complained. Paystack's key prefix is the authority for Paystack, and
+ * the environment key is the authority for Daraja.
+ */
+function effectiveTarget(provider: ConfigurableProvider, credentials: Record<string, string>) {
+  if (provider === "MPESA_DARAJA") {
+    const raw = (credentials.MPESA_ENVIRONMENT ?? "").trim().toUpperCase();
+    const live = raw === "LIVE" || raw === "PRODUCTION";
+    return {
+      environment: live ? "LIVE" : "SANDBOX",
+      host: live ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke",
+      note: live
+        ? "Real money. Payments reach the group's own M-Pesa till."
+        : "Test only. Safaricom's sandbox — no real money moves."
+    };
+  }
+
+  const secret = credentials.PAYSTACK_SECRET_KEY ?? "";
+  if (!secret) {
+    return { environment: "UNSET", host: "https://api.paystack.co", note: "No Paystack key set." };
+  }
+  const live = secret.startsWith("sk_live_");
+  return {
+    environment: live ? "LIVE" : "SANDBOX",
+    host: "https://api.paystack.co",
+    note: live
+      ? "Real money. Read from the sk_live_ key itself, not a setting."
+      : "Test key (sk_test_). No real money moves."
+  };
+}
 
 /** Keys whose value must never leave the server, not even to an admin. */
 const SECRET_KEYS = new Set([
@@ -117,7 +176,8 @@ function presentConfig(
         credentials[key] ? (SECRET_KEYS.has(key) ? "__set__" : credentials[key]) : null
       ])
     ),
-    missingKeys: keys.filter((key) => !credentials[key])
+    missingKeys: keys.filter((key) => !credentials[key] && !OPTIONAL_KEYS.has(key)),
+    effective: effectiveTarget(provider, credentials)
   };
 }
 
@@ -177,6 +237,24 @@ groupPaymentProvidersRouter.put(
 
       const body = upsertSchema.parse(req.body ?? {});
       const incoming = sanitizeCredentials(body.credentials, PROVIDER_KEYS[provider]);
+
+      // Validate mode-style keys before anything is stored. An unrecognised
+      // value would fall back to SANDBOX at transaction time, and the group
+      // would look like it had gone live while nothing reached the real till.
+      for (const [key, allowed] of Object.entries(ENUM_KEYS)) {
+        const value = incoming[key];
+        if (value === undefined) continue;
+        const upper = value.toUpperCase();
+        if (!allowed.includes(upper)) {
+          throw new ApiHttpError(
+            400,
+            "INVALID_CREDENTIAL_VALUE",
+            `${key} must be one of ${allowed.join(", ")}.`,
+            { key, allowed, received: value }
+          );
+        }
+        incoming[key] = upper;
+      }
 
       const existingRow = await prisma.groupIntegrationConfig.findUnique({
         where: { groupId_provider: { groupId: group.id, provider } }

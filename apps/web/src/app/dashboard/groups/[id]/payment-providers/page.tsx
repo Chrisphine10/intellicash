@@ -26,6 +26,8 @@ interface ProviderConfig {
   credentialsUpdatedAt: string | null;
   values: Record<string, string | null>;
   missingKeys: string[];
+  /** Where money will ACTUALLY go, derived from the credentials themselves. */
+  effective: { environment: string; host: string; note: string };
 }
 
 interface ProvidersResponse {
@@ -44,6 +46,7 @@ const FIELD_LABELS: Record<string, string> = {
   MPESA_PASSKEY: "Passkey",
   MPESA_INITIATOR_NAME: "Initiator name",
   MPESA_SECURITY_CREDENTIAL: "Security credential",
+  MPESA_ENVIRONMENT: "Safaricom environment",
   PAYSTACK_SECRET_KEY: "Secret key",
   PAYSTACK_PUBLIC_KEY: "Public key"
 };
@@ -204,6 +207,24 @@ export default function GroupPaymentProvidersPage({ params }: { params: Promise<
                 const isSecret = isSecretField(key);
                 const savedNonSecret = saved && saved !== SECRET_PLACEHOLDER ? saved : "";
 
+                // A choice, not free text: typing "lve" here is the difference
+                // between reaching a real till and silently staying on test.
+                if (key === "MPESA_ENVIRONMENT") {
+                  return (
+                    <label key={key}>
+                      {FIELD_LABELS[key]}
+                      <select
+                        disabled={!data.canConfigure || saving === config.provider}
+                        onChange={(event) => setDraft(config.provider, key, event.target.value)}
+                        value={drafts[config.provider]?.[key] ?? (savedNonSecret || "SANDBOX")}
+                      >
+                        <option value="SANDBOX">Sandbox — testing, no real money</option>
+                        <option value="LIVE">Live — real money to this group&apos;s till</option>
+                      </select>
+                    </label>
+                  );
+                }
+
                 return (
                   <label key={key}>
                     {FIELD_LABELS[key] ?? key}
@@ -222,6 +243,18 @@ export default function GroupPaymentProvidersPage({ params }: { params: Promise<
                   </label>
                 );
               })}
+
+              {/* The one line that matters before anyone takes a payment. It is
+                  derived from the credentials, so it cannot flatter a group that
+                  has pasted a test key while believing it is live. */}
+              {config.configured ? (
+                <p className={`dashboard-notice ${config.effective.environment === "LIVE" ? "" : "error"}`}>
+                  <strong>
+                    {config.effective.environment === "LIVE" ? "Live" : "Test mode"}
+                  </strong>{" "}
+                  — {config.effective.note}
+                </p>
+              ) : null}
 
               {config.missingKeys.length > 0 && config.configured ? (
                 <p className="dashboard-notice error">

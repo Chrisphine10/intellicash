@@ -61,6 +61,49 @@ const providerKeys: Record<Exclude<PaymentProvider, "INTERNAL">, string[]> = {
   PAYSTACK: ["PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY"]
 };
 
+/**
+ * Keys that are carried through but are NOT required.
+ *
+ * `MPESA_ENVIRONMENT` cannot be required: every group already configured would
+ * become "incomplete" the moment it was added, and collections would start
+ * failing for groups that had changed nothing.
+ */
+const optionalProviderKeys: Record<Exclude<PaymentProvider, "INTERNAL">, string[]> = {
+  MPESA_DARAJA: ["MPESA_ENVIRONMENT"],
+  PAYSTACK: []
+};
+
+/**
+ * Which Safaricom host a group's Daraja credentials belong to.
+ *
+ * Until 2 Aug 2026 every Daraja call was hardcoded to sandbox.safaricom.co.ke,
+ * so a group holding a REAL Daraja account could not transact at all — live
+ * credentials presented to the sandbox are simply rejected. That made the
+ * whole per-group provider feature untestable in production.
+ *
+ * Defaults to SANDBOX deliberately. A wrong guess in this direction fails
+ * loudly at authentication; the opposite default would quietly send a
+ * misconfigured group's members' money through the live rails.
+ */
+const MPESA_HOSTS = {
+  SANDBOX: "https://sandbox.safaricom.co.ke",
+  LIVE: "https://api.safaricom.co.ke"
+} as const;
+
+export type MpesaEnvironment = keyof typeof MPESA_HOSTS;
+
+export function mpesaEnvironment(credentials: Record<string, string>): MpesaEnvironment {
+  const raw = (credentials.MPESA_ENVIRONMENT ?? "").trim().toUpperCase();
+  // PRODUCTION is what Safaricom's own portal calls it, so accept both rather
+  // than silently dropping a group onto sandbox because of a synonym.
+  if (raw === "LIVE" || raw === "PRODUCTION") return "LIVE";
+  return "SANDBOX";
+}
+
+export function mpesaBaseUrl(credentials: Record<string, string>) {
+  return MPESA_HOSTS[mpesaEnvironment(credentials)];
+}
+
 function metadataJson(value: unknown) {
   return JSON.stringify(value ?? {});
 }
@@ -91,7 +134,7 @@ function combineCredentials(
   storedCredentials: Record<string, string>
 ) {
   const credentials: Record<string, string> = {};
-  for (const key of providerKeys[provider]) {
+  for (const key of [...providerKeys[provider], ...optionalProviderKeys[provider]]) {
     const value = storedCredentials[key] || process.env[key];
     if (value) credentials[key] = value;
   }
@@ -155,9 +198,10 @@ async function mpesaToken(credentials: Record<string, string>) {
   if (!key || !secret) throw new ApiHttpError(400, "MPESA_NOT_CONFIGURED", "M-Pesa credentials are incomplete.");
 
   const auth = Buffer.from(`${key}:${secret}`).toString("base64");
-  const response = await fetch("https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials", {
-    headers: { Authorization: `Basic ${auth}` }
-  });
+  const response = await fetch(
+    `${mpesaBaseUrl(credentials)}/oauth/v1/generate?grant_type=client_credentials`,
+    { headers: { Authorization: `Basic ${auth}` } }
+  );
   const payload = (await response.json().catch(() => null)) as { access_token?: string } | null;
 
   if (!response.ok || !payload?.access_token) {
@@ -238,7 +282,7 @@ export async function initiateIncomingPayment(input: IncomingPaymentInput): Prom
 
   const requestTimestamp = timestamp();
   const token = await mpesaToken(credentials);
-  const response = await fetch("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
+  const response = await fetch(`${mpesaBaseUrl(credentials)}/mpesa/stkpush/v1/processrequest`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -330,7 +374,7 @@ export async function initiatePayout(input: PayoutInput): Promise<GatewayResult>
   }
 
   const token = await mpesaToken(credentials);
-  const response = await fetch("https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest", {
+  const response = await fetch(`${mpesaBaseUrl(credentials)}/mpesa/b2c/v1/paymentrequest`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
