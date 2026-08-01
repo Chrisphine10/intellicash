@@ -1111,10 +1111,33 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                       <strong>{shareOutPreview.rows.length} payouts</strong>
                       <span>Total share purchase {formatKes(shareOutPreview.totalShareCents)}</span>
                       <span>Rounding {formatKes(shareOutPreview.roundingDifferenceCents)}</span>
+                      {shareOutPreview.totalLoanOffsetCents > 0 ? (
+                        <span>
+                          Loans settled from payouts{" "}
+                          {formatKes(shareOutPreview.totalLoanOffsetCents)}
+                        </span>
+                      ) : null}
+                      {/* The figure the treasurer counts out of the box. Showing
+                          the gross here would not match what actually leaves. */}
+                      <span>
+                        <strong>Cash paid out {formatKes(shareOutPreview.totalNetPayoutCents)}</strong>
+                      </span>
+                      {shareOutPreview.welfarePoolCents > 0 && !shareOutPreview.distributeWelfare ? (
+                        <span>
+                          Welfare fund holds {formatKes(shareOutPreview.welfarePoolCents)} — shared
+                          out separately, not included above.
+                        </span>
+                      ) : null}
                       {shareOutPreview.rows.slice(0, 6).map((row) => (
                         <div key={row.memberId}>
                           <span>{row.member?.fullName ?? row.memberId}</span>
-                          <strong>{formatKes(row.payoutCents)}</strong>
+                          <strong>{formatKes(row.netPayoutCents)}</strong>
+                          {row.loanOffsetCents > 0 ? (
+                            <span>
+                              {formatKes(row.payoutCents)} less {formatKes(row.loanOffsetCents)} loan
+                            </span>
+                          ) : null}
+                          {row.owesGroup ? <span>Owes the group after share-out</span> : null}
                         </div>
                       ))}
                     </div>

@@ -50,13 +50,27 @@ export interface ShareOutPreview {
   poolAmountCents: number;
   totalShareCents: number;
   roundingDifferenceCents: number;
+  /** What remains in the welfare fund. Reported, not paid out here. */
+  welfarePoolCents: number;
+  distributeWelfare: boolean;
+  totalLoanOffsetCents: number;
+  /** The cash that actually leaves the box. */
+  totalNetPayoutCents: number;
   rows: Array<{
     memberId: string;
     member?: { fullName: string; role: string } | null;
     sharePurchaseCents: number;
     shareCount: number;
     percentage: number;
+    /** The pro-rata split before deductions. */
     payoutCents: number;
+    welfareCents: number;
+    /** Outstanding loan, principal and interest, settled from the payout. */
+    loanOffsetCents: number;
+    /** payoutCents + welfareCents − loanOffsetCents. What they receive. */
+    netPayoutCents: number;
+    /** Their debt exceeded their entitlement; they owe the difference. */
+    owesGroup: boolean;
   }>;
 }
 

@@ -205,7 +205,22 @@ const offlineSyncSchema = z.object({
 });
 
 const shareOutPreviewSchema = z.object({
-  poolAmountCents: z.number().int().min(1)
+  poolAmountCents: z.number().int().min(1),
+  /**
+   * Whether what REMAINS in the welfare fund is shared out too.
+   *
+   * DEFAULTS FALSE, and not because the rule says so — the rule is that the
+   * welfare fund is spent down and the remainder distributed. It is false
+   * because `SHARE_OUT_PAYOUT` debits the INTERNAL_LOAN fund, so paying
+   * welfare through it would drain the loan fund and leave the social fund
+   * untouched: right total, wrong money. Distributing welfare needs its own
+   * SOCIAL-debiting entry type, which is a separate change.
+   *
+   * Until then the preview still REPORTS `welfarePoolCents`, so a group can
+   * see what is left and hand it out deliberately rather than being told a
+   * figure the ledger would contradict.
+   */
+  distributeWelfare: z.boolean().default(false)
 });
 
 const shareOutPostSchema = shareOutPreviewSchema.extend({
@@ -893,10 +908,34 @@ async function appendMeetingLedgerEntry(
   });
 }
 
+/**
+ * What each member actually walks away with at share-out.
+ *
+ * The pro-rata split is only the first line. The 30 Jul 2026 rules decide the
+ * rest, and until 1 Aug 2026 NONE of them were applied here — the server paid
+ * out gross while the phone's calculator netted, so the two disagreed about
+ * real money:
+ *
+ *   pro-rata share of the pool
+ *   − outstanding loans, principal AND interest
+ *   = net payout
+ *
+ * Distributing what remains in the welfare fund is the one rule NOT applied
+ * here: the payout entry debits the loan fund, so paying welfare through it
+ * would take the money from the wrong place. The remaining balance is
+ * reported instead. See `distributeWelfare`.
+ *
+ * Outstanding loans NET OFF and are never carried forward, and a member whose
+ * debt exceeds their entitlement ends with a NEGATIVE net — a debt to the
+ * group, never a bar on sharing out. `payoutCents` stays the gross pro-rata
+ * figure so the existing invariant (gross sums to the pool) still holds;
+ * `netPayoutCents` is what leaves the box.
+ */
 async function computeShareOutPreview(
   tx: Prisma.TransactionClient,
   groupId: string,
-  poolAmountCents: number
+  poolAmountCents: number,
+  options: { distributeWelfare?: boolean } = {}
 ) {
   const lastShareOut = await tx.ledgerEntry.findFirst({
     where: { groupId, type: "SHARE_OUT_PAYOUT" },
@@ -921,34 +960,117 @@ async function computeShareOutPreview(
   });
   const membersById = new Map(members.map((member) => [member.id, member]));
   const totalShareCents = rows.reduce((sum, row) => sum + (row._sum.amountCents ?? 0), 0);
-  let allocated = 0;
-  const preview = rows
-    .filter((row) => row.memberId && (row._sum.amountCents ?? 0) > 0)
-    .map((row, index, filteredRows) => {
-      const sharePurchaseCents = row._sum.amountCents ?? 0;
-      const payoutCents =
-        index === filteredRows.length - 1
-          ? poolAmountCents - allocated
-          : Math.floor((poolAmountCents * sharePurchaseCents) / totalShareCents);
-      allocated += payoutCents;
-      const member = membersById.get(row.memberId!);
 
-      return {
-        memberId: row.memberId!,
-        member,
-        sharePurchaseCents,
-        shareCount: sharePurchaseCents,
-        percentage: totalShareCents > 0 ? sharePurchaseCents / totalShareCents : 0,
-        payoutCents
-      };
-    });
+  // What each member still owes, interest included — the same figure the
+  // passbook shows them, from the same maths, so share-out cannot quietly
+  // forgive interest the member has been told they owe.
+  const eligible = rows.filter((row) => row.memberId && (row._sum.amountCents ?? 0) > 0);
+  const outstandingByMember = await shareOutLoanOffsets(
+    tx,
+    groupId,
+    eligible.map((row) => row.memberId!)
+  );
+
+  // The welfare fund AS IT STANDS — already spent down by every welfare
+  // expense recorded this cycle. Gross contributions would distribute money
+  // the group has already paid to a hospital.
+  const distributeWelfare = options.distributeWelfare ?? false;
+  const welfareFund = await tx.fundAccount.findFirst({
+    where: { groupId, type: "SOCIAL" },
+    select: { balanceCents: true }
+  });
+  // Always REPORTED so a group can see what is left to hand out; only
+  // allocated into payouts when asked, because the payout entry debits the
+  // wrong fund for welfare money. See distributeWelfare on the schema.
+  const welfarePoolCents = Math.max(0, welfareFund?.balanceCents ?? 0);
+  const welfareShares = distributeWelfare
+    ? allocateEqually(welfarePoolCents, eligible.length)
+    : new Array<number>(eligible.length).fill(0);
+
+  let allocated = 0;
+  const preview = eligible.map((row, index, filteredRows) => {
+    const sharePurchaseCents = row._sum.amountCents ?? 0;
+    const payoutCents =
+      index === filteredRows.length - 1
+        ? poolAmountCents - allocated
+        : Math.floor((poolAmountCents * sharePurchaseCents) / totalShareCents);
+    allocated += payoutCents;
+    const member = membersById.get(row.memberId!);
+    const welfareCents = welfareShares[index] ?? 0;
+    const loanOffsetCents = outstandingByMember.get(row.memberId!) ?? 0;
+    const netPayoutCents = payoutCents + welfareCents - loanOffsetCents;
+
+    return {
+      memberId: row.memberId!,
+      member,
+      sharePurchaseCents,
+      shareCount: sharePurchaseCents,
+      percentage: totalShareCents > 0 ? sharePurchaseCents / totalShareCents : 0,
+      payoutCents,
+      welfareCents,
+      /** Principal AND interest, settled out of the payout. */
+      loanOffsetCents,
+      netPayoutCents,
+      /** A debt to the group, not a bar on sharing out. */
+      owesGroup: netPayoutCents < 0
+    };
+  });
 
   return {
     poolAmountCents,
     totalShareCents,
+    distributeWelfare,
+    welfarePoolCents,
+    totalLoanOffsetCents: preview.reduce((sum, row) => sum + row.loanOffsetCents, 0),
+    /** The cash that actually leaves the box. Members owing pay in instead. */
+    totalNetPayoutCents: preview.reduce((sum, row) => sum + Math.max(0, row.netPayoutCents), 0),
     roundingDifferenceCents: poolAmountCents - preview.reduce((sum, row) => sum + row.payoutCents, 0),
     rows: preview
   };
+}
+
+/**
+ * Split `total` equally, giving the remainder cents to the earliest members.
+ *
+ * Every cent is allocated. Dropping the remainder would leave money in a fund
+ * that is supposed to be emptied, and a group counting cash at the table would
+ * find a discrepancy nobody could explain.
+ */
+function allocateEqually(totalCents: number, count: number) {
+  if (count <= 0 || totalCents <= 0) return new Array<number>(Math.max(0, count)).fill(0);
+  const base = Math.floor(totalCents / count);
+  const remainder = totalCents - base * count;
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+/** Interest-aware outstanding per member, from the Loan projection. */
+async function shareOutLoanOffsets(
+  tx: Prisma.TransactionClient,
+  groupId: string,
+  memberIds: string[]
+) {
+  const offsets = new Map<string, number>();
+  if (memberIds.length === 0) return offsets;
+
+  const loans = await tx.loan.findMany({
+    where: { groupId, memberId: { in: memberIds }, status: "ACTIVE" },
+    include: { repayments: { select: { amountCents: true } } }
+  });
+
+  const asOf = new Date();
+  for (const loan of loans) {
+    const balance = loanBalance({
+      principalCents: loan.principalCents,
+      interestRateBps: loan.interestRateBps,
+      termMonths: loan.termMonths,
+      disbursedAt: loan.disbursedAt,
+      repaidCents: loan.repayments.reduce((sum, r) => sum + r.amountCents, 0),
+      asOf
+    });
+    offsets.set(loan.memberId, (offsets.get(loan.memberId) ?? 0) + balance.outstandingCents);
+  }
+
+  return offsets;
 }
 
 function buildOfflineVerifier(deviceId: string, memberId: string, pin: string) {
@@ -2115,7 +2237,9 @@ router.post("/groups/:id/meetings/:meetingId/share-out/preview", requireAuth("le
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
     const preview = await prisma.$transaction(async (tx) => {
       await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
-      return computeShareOutPreview(tx, routeParam(req.params.id, "id"), payload.poolAmountCents);
+      return computeShareOutPreview(tx, routeParam(req.params.id, "id"), payload.poolAmountCents, {
+        distributeWelfare: payload.distributeWelfare
+      });
     });
     ok(res, preview);
   } catch (error) {
@@ -2129,23 +2253,61 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
     const result = await prisma.$transaction(async (tx) => {
       await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
-      const preview = await computeShareOutPreview(tx, routeParam(req.params.id, "id"), payload.poolAmountCents);
+      const groupId = routeParam(req.params.id, "id");
+      const meetingId = routeParam(req.params.meetingId, "meetingId");
+      const preview = await computeShareOutPreview(tx, groupId, payload.poolAmountCents, {
+        distributeWelfare: payload.distributeWelfare
+      });
+      const prefix = payload.clientRequestPrefix ?? `shareout-${meetingId}`;
       const entries = [];
+      const settlements = [];
+
       for (const row of preview.rows) {
-        if (row.payoutCents <= 0) continue;
+        // Settle the loan out of the payout FIRST, as a real repayment.
+        //
+        // Writing it rather than merely subtracting is what makes "netted off,
+        // never carried forward" true: the repayment flows through the same
+        // path every other repayment takes, so it is attributed to the loan
+        // and closes it. Silently reducing the cash instead would leave the
+        // loan ACTIVE and the member would owe it all over again next cycle.
+        if (row.loanOffsetCents > 0) {
+          settlements.push(
+            await appendMeetingLedgerEntry(tx, groupId, meetingId, {
+              memberId: row.memberId,
+              type: "LOAN_REPAYMENT",
+              amountCents: row.loanOffsetCents,
+              description: "Loan settled from share-out",
+              clientRequestId: `${prefix}-settle-${row.memberId}`
+            })
+          );
+        }
+
+        // Only positive net leaves the box. A member whose debt exceeded their
+        // entitlement owes the difference — recorded in the preview as
+        // owesGroup, never written as a negative payout.
+        if (row.netPayoutCents <= 0) continue;
         entries.push(
-          await appendMeetingLedgerEntry(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"), {
+          await appendMeetingLedgerEntry(tx, groupId, meetingId, {
             memberId: row.memberId,
             type: "SHARE_OUT_PAYOUT",
-            amountCents: row.payoutCents,
+            amountCents: row.netPayoutCents,
             description: payload.description ?? "Reviewed share-out payout",
-            clientRequestId: payload.clientRequestPrefix
-              ? `${payload.clientRequestPrefix}-${row.memberId}`
-              : `shareout-${routeParam(req.params.meetingId, "meetingId")}-${row.memberId}`
+            clientRequestId: `${prefix}-${row.memberId}`
           })
         );
       }
-      return { preview, entries };
+
+      return {
+        preview,
+        entries,
+        settlements,
+        membersOwing: preview.rows
+          .filter((row) => row.owesGroup)
+          .map((row) => ({
+            memberId: row.memberId,
+            owedCents: Math.abs(row.netPayoutCents)
+          }))
+      };
     });
     ok(res.status(201), result);
   } catch (error) {
