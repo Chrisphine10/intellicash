@@ -285,7 +285,10 @@ describe("Intellicash API", () => {
         id: member.id,
         groupId: group.id,
         fullName: "Updated Member Details",
-        phone: "+254757255710",
+        // Sent as "+254757255710", stored canonical: the phone is how a person
+        // is recognised across the platform, so it is normalised on the way in
+        // rather than kept in whatever shape the operator happened to type.
+        phone: "254757255710",
         role: "TREASURER",
         kycStatus: "VERIFIED",
         status: "SUSPENDED"

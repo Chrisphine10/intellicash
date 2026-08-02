@@ -47,6 +47,7 @@ import {
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, sha256 } from "../lib/crypto";
 import { canViewMemberContact, maskPhone } from "../lib/privacy";
+import { normalisePhone } from "../lib/phone";
 import { reconcileMembership } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
 
@@ -1326,10 +1327,32 @@ router.get("/groups/:id/members", requireAuth("members:read"), async (req, res, 
 router.post("/groups/:id/members", requireAuth("members:write"), async (req, res, next) => {
   try {
     const payload = memberCreateSchema.parse(req.body);
-    await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    const groupId = routeParam(req.params.id, "id");
+    await assertGroupAccess(req.user, groupId);
+
+    // Canonicalised on the way in, for the same reason it is on update: the
+    // phone is how a person is recognised later, and guarding the edit path
+    // while leaving the add path open would let duplicates in the front door.
+    const phone = normalisePhone(payload.phone);
+    if (!phone) {
+      throw new ApiHttpError(400, "INVALID_PHONE", "That does not look like a usable phone number.");
+    }
+    const existing = await prisma.member.findFirst({
+      where: { groupId, phone },
+      select: { id: true, fullName: true }
+    });
+    if (existing) {
+      throw new ApiHttpError(
+        409,
+        "PHONE_ALREADY_IN_GROUP",
+        `${existing.fullName} already uses that number in this group. Adding a second member on one number is how savings end up in the wrong passbook.`,
+        { memberId: existing.id }
+      );
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const member = await tx.member.create({
-        data: { ...payload, groupId: routeParam(req.params.id, "id") },
+        data: { ...payload, phone, groupId },
         select: memberSelect
       });
       return generateAndQueueMemberPin(tx, member, {
@@ -1352,21 +1375,103 @@ router.post("/groups/:id/members", requireAuth("members:write"), async (req, res
   }
 });
 
+/**
+ * Correct a member's details — most often a name spelling or a mistyped phone.
+ *
+ * The phone is not just a contact detail: it is how a person is recognised
+ * across the platform. A join request is matched to an existing member by
+ * phone, and a member whose number fails to match is handed a fresh empty
+ * passbook instead of the savings already recorded against her name. So an
+ * edit here has to do three things the previous version did none of:
+ * canonicalise the number, refuse one that already belongs to somebody else
+ * in the group, and keep the member's sign-in account in step.
+ */
 router.patch("/groups/:id/members/:memberId", requireAuth("members:write"), async (req, res, next) => {
   try {
     const payload = memberUpdateSchema.parse(req.body);
-    await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    const groupId = routeParam(req.params.id, "id");
+    const memberId = routeParam(req.params.memberId, "memberId");
+    await assertGroupAccess(req.user, groupId);
+
     const member = await prisma.member.findFirst({
-      where: { id: routeParam(req.params.memberId, "memberId"), groupId: routeParam(req.params.id, "id") },
-      select: { id: true }
+      where: { id: memberId, groupId },
+      select: { id: true, phone: true, fullName: true }
     });
     if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
 
-    const updated = await prisma.member.update({
-      where: { id: routeParam(req.params.memberId, "memberId") },
-      data: payload,
-      select: memberSelect
+    const data: Record<string, unknown> = { ...payload };
+
+    if (payload.phone !== undefined) {
+      // Stored canonical. "0712345678" and "+254 712 345 678" are one person,
+      // and storing them as typed is what produced duplicate accounts before.
+      const canonical = normalisePhone(payload.phone);
+      if (!canonical) {
+        throw new ApiHttpError(400, "INVALID_PHONE", "That does not look like a usable phone number.");
+      }
+      data.phone = canonical;
+
+      if (canonical !== normalisePhone(member.phone)) {
+        const clash = await prisma.member.findFirst({
+          where: { groupId, phone: canonical, id: { not: memberId } },
+          select: { id: true, fullName: true }
+        });
+        if (clash) {
+          throw new ApiHttpError(
+            409,
+            "PHONE_ALREADY_IN_GROUP",
+            `${clash.fullName} already uses that number in this group. Two members cannot share one number — it is how the group tells them apart.`,
+            { memberId: clash.id }
+          );
+        }
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.member.update({ where: { id: memberId }, data, select: memberSelect });
+
+      // A member with a sign-in account signs in WITH THIS NUMBER. Leaving the
+      // account behind would lock them out of their own savings while the
+      // roster showed the new number and looked correct.
+      if (typeof data.phone === "string" && data.phone !== normalisePhone(member.phone)) {
+        const account = await tx.user.findFirst({
+          where: { memberId },
+          select: { id: true, phone: true }
+        });
+        if (account) {
+          const takenBy = await tx.user.findFirst({
+            where: { phone: data.phone, id: { not: account.id } },
+            select: { id: true }
+          });
+          if (takenBy) {
+            throw new ApiHttpError(
+              409,
+              "PHONE_ALREADY_HAS_ACCOUNT",
+              "Another sign-in account already uses that number. Change it there first, or the two accounts would collide.",
+              { memberId }
+            );
+          }
+          await tx.user.update({ where: { id: account.id }, data: { phone: data.phone } });
+        }
+      }
+
+      return result;
     });
+
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "MEMBER",
+      entityId: memberId,
+      type: "MEMBER_UPDATED",
+      // The old value is the point: without it nobody can tell whether a
+      // number was corrected or quietly pointed at a different person.
+      payload: {
+        groupId,
+        changed: Object.keys(payload),
+        ...(payload.phone !== undefined ? { previousPhone: member.phone } : {}),
+        ...(payload.fullName !== undefined ? { previousName: member.fullName } : {})
+      }
+    });
+
     ok(res, serializeMember(updated, { viewerRole: req.user?.role }));
   } catch (error) {
     next(error);
