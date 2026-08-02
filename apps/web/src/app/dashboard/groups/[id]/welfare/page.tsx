@@ -36,12 +36,22 @@ interface Member {
   fullName: string;
 }
 
+/** Welfare is paid out during a meeting, so the page needs the open ones. */
+interface Meeting {
+  id: string;
+  title: string;
+  status: string;
+  scheduledAt: string;
+}
+
 const CATEGORIES = ["MEDICAL", "BEREAVEMENT", "EDUCATION", "EMERGENCY", "OTHER"];
 
 export default function GroupWelfarePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [data, setData] = useState<WelfareResponse | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [openMeetings, setOpenMeetings] = useState<Meeting[]>([]);
+  const [meetingId, setMeetingId] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [payeeMemberId, setPayeeMemberId] = useState("");
@@ -53,10 +63,16 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const [welfare, memberList] = await Promise.all([
+    const [welfare, memberList, meetingList] = await Promise.all([
       apiFetch<WelfareResponse>(`/groups/${id}/welfare-expenses`),
-      apiFetch<Member[]>(`/groups/${id}/members`)
+      apiFetch<Member[]>(`/groups/${id}/members`),
+      apiFetch<Meeting[]>(`/groups/${id}/meetings`)
     ]);
+    const open = meetingList.filter((meeting) => meeting.status === "IN_PROGRESS");
+    setOpenMeetings(open);
+    // One open meeting is the normal case; preselect it rather than making an
+    // official pick from a list of one.
+    setMeetingId((current) => (open.some((m) => m.id === current) ? current : open[0]?.id ?? ""));
     setData(welfare);
     setMembers(memberList);
   }
@@ -79,6 +95,12 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
     if (!payeeMemberId && !payeeName.trim()) {
       return setMessage({ ok: false, text: "Record who received the money — a member, or a name." });
     }
+    if (!meetingId) {
+      return setMessage({
+        ok: false,
+        text: "Welfare is paid out during a meeting. Open a meeting first, then record it there."
+      });
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -89,7 +111,8 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
           category,
           payeeMemberId: payeeMemberId || undefined,
           payeeName: payeeName.trim() || undefined,
-          note: note.trim() || undefined
+          note: note.trim() || undefined,
+          meetingId
         })
       });
       setAmount("");
@@ -150,6 +173,27 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
               value={amount}
             />
           </label>
+          {/* Which meeting this payment is being made in. Welfare leaves the
+              fund in front of the members it belongs to, so there is no way to
+              record one without naming the meeting. */}
+          {openMeetings.length === 0 ? (
+            <p className="dashboard-notice error">
+              No meeting is open. Welfare is paid out during a meeting, in front of the members —
+              open one first, then record the payment there.
+            </p>
+          ) : (
+            <label>
+              Recorded in meeting
+              <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
+                {openMeetings.map((meeting) => (
+                  <option key={meeting.id} value={meeting.id}>
+                    {meeting.title} — {new Date(meeting.scheduledAt).toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <label>
             What for
             <select onChange={(event) => setCategory(event.target.value)} value={category}>

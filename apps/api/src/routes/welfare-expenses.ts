@@ -39,7 +39,14 @@ const createSchema = z.object({
   payeeMemberId: z.string().optional(),
   payeeName: z.string().trim().max(120).optional(),
   note: z.string().trim().max(500).optional(),
-  meetingId: z.string().optional(),
+  /**
+   * REQUIRED. Welfare money leaves the fund in front of the members it
+   * belongs to, in an open meeting — not from an office, between meetings,
+   * on someone's say-so. Until 2 Aug 2026 this was optional, so a welfare
+   * payment could be recorded with no meeting, no attendance and nobody
+   * having approved it.
+   */
+  meetingId: z.string(),
   clientRequestId: z.string().trim().min(4).max(120).optional()
 });
 
@@ -81,6 +88,26 @@ welfareExpensesRouter.post(
               availableCents: fund.balanceCents,
               shortfallCents: body.amountCents - fund.balanceCents
             }
+          );
+        }
+
+        // The meeting must belong to this group and still be open. A sealed
+        // meeting is a closed record — attaching a payment to it afterwards
+        // would change what the group already signed off.
+        const meeting = await tx.meeting.findFirst({
+          where: { id: body.meetingId, groupId: group.id },
+          select: { id: true, status: true, title: true }
+        });
+        if (!meeting) {
+          throw new ApiHttpError(404, "MEETING_NOT_FOUND", "Meeting does not exist in this group.");
+        }
+        if (meeting.status !== "IN_PROGRESS") {
+          throw new ApiHttpError(
+            409,
+            "MEETING_NOT_OPEN",
+            "Welfare is paid out during an open meeting, in front of the members. " +
+              `"${meeting.title}" is ${meeting.status.toLowerCase().replace("_", " ")}.`,
+            { meetingId: meeting.id, status: meeting.status }
           );
         }
 

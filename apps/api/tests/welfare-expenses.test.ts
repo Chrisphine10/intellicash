@@ -33,6 +33,7 @@ async function welfareBalance(groupId: string) {
 describe("welfare expenses", () => {
   let groupId: string;
   let memberId: string;
+  let meetingId: string;
   let cookies: string[];
 
   beforeAll(async () => {
@@ -42,6 +43,18 @@ describe("welfare expenses", () => {
     const member = await prisma.member.findFirst({ where: { groupId } });
     memberId = member!.id;
     cookies = await adminCookies();
+
+    // Welfare is paid out DURING a meeting, so every case below needs one open.
+    const meeting = await prisma.meeting.create({
+      data: {
+        groupId,
+        title: "Welfare meeting",
+        scheduledAt: new Date(),
+        status: "IN_PROGRESS",
+        openedAt: new Date()
+      }
+    });
+    meetingId = meeting.id;
   }, 60000);
 
   it("reduces the welfare fund by the amount spent", async () => {
@@ -55,7 +68,8 @@ describe("welfare expenses", () => {
         amountCents: amount,
         category: "MEDICAL",
         payeeMemberId: memberId,
-        note: "Clinic bill"
+        note: "Clinic bill",
+        meetingId
       })
       .expect(201);
 
@@ -86,7 +100,7 @@ describe("welfare expenses", () => {
     const response = await request(app)
       .post(`/api/v1/groups/${groupId}/welfare-expenses`)
       .set("Cookie", cookies)
-      .send({ amountCents: available + 50_000, category: "EMERGENCY", payeeName: "Hospital" })
+      .send({ amountCents: available + 50_000, category: "EMERGENCY", payeeName: "Hospital", meetingId })
       .expect(400);
 
     expect(response.body.error.code).toBe("INSUFFICIENT_WELFARE_FUND");
@@ -99,7 +113,7 @@ describe("welfare expenses", () => {
     const response = await request(app)
       .post(`/api/v1/groups/${groupId}/welfare-expenses`)
       .set("Cookie", cookies)
-      .send({ amountCents: 1_000, category: "OTHER" })
+      .send({ amountCents: 1_000, category: "OTHER", meetingId })
       .expect(400);
 
     expect(response.body.error.code).toBe("PAYEE_REQUIRED");
@@ -110,7 +124,7 @@ describe("welfare expenses", () => {
     await request(app)
       .post(`/api/v1/groups/${groupId}/welfare-expenses`)
       .set("Cookie", cookies)
-      .send({ amountCents: 2_000, category: "BEREAVEMENT", payeeName: "Njeri family" })
+      .send({ amountCents: 2_000, category: "BEREAVEMENT", payeeName: "Njeri family", meetingId })
       .expect(201);
 
     expect(await welfareBalance(groupId)).toBe(before - 2_000);
@@ -123,7 +137,7 @@ describe("welfare expenses", () => {
     const response = await request(app)
       .post(`/api/v1/groups/${groupId}/welfare-expenses`)
       .set("Cookie", cookies)
-      .send({ amountCents: 1_000, category: "OTHER", payeeMemberId: outsider.id })
+      .send({ amountCents: 1_000, category: "OTHER", payeeMemberId: outsider.id, meetingId })
       .expect(404);
 
     expect(response.body.error.code).toBe("MEMBER_NOT_FOUND");

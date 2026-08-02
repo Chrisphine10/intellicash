@@ -1563,9 +1563,25 @@ describe("Intellicash API", () => {
 
     expect(vote.body.data.hash).toHaveLength(64);
 
+    // Closing a meeting now needs an official to prove it is them, so the
+    // group gets a secretary with a known PIN to close with.
+    const closingOfficial = await prisma.member.create({
+      data: {
+        groupId,
+        fullName: "Closing Secretary",
+        phone: "+254700990001",
+        role: "SECRETARY",
+        status: "ACTIVE",
+        pinHash: await bcrypt.hash("454545", 12)
+      }
+    });
+
     const sealed = await groupAgent
       .post(`/api/v1/groups/${groupId}/meetings/${meeting.body.data.id}/seal`)
-      .send({ minutes: "All test workflow steps completed." })
+      .send({
+        minutes: "All test workflow steps completed.",
+        keySubmission: { memberId: closingOfficial.id, pin: "454545" }
+      })
       .expect(200);
 
     expect(sealed.body.data).toEqual(

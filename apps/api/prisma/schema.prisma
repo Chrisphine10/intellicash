@@ -618,6 +618,12 @@ model Meeting {
   gpsCompliant     Boolean   @default(false)
   transactionTotal Int       @default(0)
   minutes          String?
+
+  /// Which official closed the meeting, proved by their own PIN at the moment
+  /// of sealing. Nullable because meetings sealed before this was required
+  /// have no such proof, and inventing one would be worse than admitting it.
+  sealedByMemberId String?
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

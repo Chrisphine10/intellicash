@@ -136,7 +136,22 @@ const attendanceBatchItemSchema = attendanceSchema.extend({
   clientRequestId: z.string().trim().min(4).max(120).optional()
 });
 
-const meetingSealSchema = z.object({ minutes: z.string().optional() });
+/**
+ * Closing a meeting requires an official to prove it is them.
+ *
+ * Sealing freezes the record: after it, the money and the minutes cannot be
+ * changed. Until 2 Aug 2026 anyone holding a `meetings:write` session could do
+ * that with an empty body — no PIN, no named official, nothing tying the
+ * closure to a person who was actually in the room.
+ *
+ * The key submission is REQUIRED. Opening already demands officials' PINs, so
+ * accepting an open-time submission as proof of closing would make the rule
+ * vacuous — the PIN has to be entered now, to close this meeting.
+ */
+const meetingSealSchema = z.object({
+  minutes: z.string().optional(),
+  keySubmission: meetingKeySubmissionSchema
+});
 
 const ledgerCreateSchema = z.object({
   memberId: z.string().optional(),
@@ -1909,12 +1924,44 @@ router.post("/groups/:id/meetings/:meetingId/seal", requireAuth("meetings:write"
       if (existing.status !== "IN_PROGRESS") {
         throw new ApiHttpError(400, "MEETING_NOT_ACTIVE", "Only active meetings can be sealed.");
       }
+      // Identity FIRST, before anything about the meeting's state is checked
+      // or revealed. Someone who cannot prove they are an official of this
+      // group has no business learning how far through its agenda it is.
+      const sealingMemberId = meetingKeyMemberId(req.user, payload.keySubmission);
+      const official = await tx.member.findFirst({
+        where: { id: sealingMemberId, groupId: routeParam(req.params.id, "id"), status: "ACTIVE" },
+        select: {
+          id: true,
+          fullName: true,
+          role: true,
+          pinHash: true,
+          currentOtpHash: true,
+          currentOtpExpiresAt: true
+        }
+      });
+      if (!official) {
+        throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+      }
+      if (!officialMemberRoles.has(official.role)) {
+        throw new ApiHttpError(
+          403,
+          "OFFICIAL_REQUIRED",
+          `${official.fullName} is not an official of this group. Closing a meeting needs a chairperson, secretary, treasurer, money counter or key holder.`,
+          { memberId: official.id, role: official.role }
+        );
+      }
+      if (req.user?.role === "MEMBER" && req.user.memberId !== official.id) {
+        throw new ApiHttpError(403, "FORBIDDEN", "Members can only submit their own meeting key.");
+      }
+      await verifyMeetingCredential(payload.keySubmission, official);
+
       const completedCount = await tx.meetingStepRecord.count({
         where: { meetingId: routeParam(req.params.meetingId, "meetingId"), status: "COMPLETED" }
       });
       if (completedCount < meetingSteps.length) {
         throw new ApiHttpError(400, "MEETING_WORKFLOW_INCOMPLETE", "Complete every meeting step before sealing.");
       }
+
       const [ledgerCount, voteCount] = await Promise.all([
         tx.ledgerEntry.count({ where: { meetingId: routeParam(req.params.meetingId, "meetingId") } }),
         tx.vote.count({ where: { meetingId: routeParam(req.params.meetingId, "meetingId") } })
@@ -1925,6 +1972,7 @@ router.post("/groups/:id/meetings/:meetingId/seal", requireAuth("meetings:write"
           status: "SEALED",
           closedAt: new Date(),
           minutes: payload.minutes,
+          sealedByMemberId: official.id,
           transactionTotal: ledgerCount + voteCount
         },
         include: meetingInclude(req.user)
