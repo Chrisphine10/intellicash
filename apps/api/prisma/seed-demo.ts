@@ -1,0 +1,474 @@
+/**
+ * A demo group with every module populated, for testing against a real server.
+ *
+ *   npm run db:seed:demo -w @intellicash/api
+ *
+ * Layered ON TOP of `seed.ts` rather than folded into it. The base seed is
+ * what 328 tests build their fixtures from; adding loans, welfare spending and
+ * officials there would rewrite the ground every one of them stands on. This
+ * runs separately and touches nothing the tests read.
+ *
+ * Money is written through `appendLedgerEntry`, the same function the API uses
+ * — not straight into the tables. That is the whole point: it stamps the cycle,
+ * signs the entry, moves the fund balance and creates the `Loan` projection, so
+ * the demo data is shaped exactly like data a real group would produce. Writing
+ * rows directly would create a database no production code path could ever have
+ * made, and the screens would be tested against a fiction.
+ *
+ * Idempotent: the demo group is dropped and rebuilt on every run.
+ */
+import bcrypt from "bcryptjs";
+import { prisma } from "../src/lib/prisma";
+import { appendLedgerEntry } from "../src/routes/groups";
+import { encryptCredentials } from "../src/services/integration-credentials";
+
+const DEMO_CODE = "IWL-DEMO-0001";
+const DEMO_PIN = "112233";
+
+/** Members of the demo group, with the offices a VSLA actually fills. */
+const ROSTER = [
+  { name: "Naomi Wairimu", phone: "254720100001", role: "CHAIRPERSON" },
+  { name: "Esther Adhiambo", phone: "254720100002", role: "SECRETARY" },
+  { name: "Lucy Kamene", phone: "254720100003", role: "TREASURER" },
+  { name: "Beatrice Nyambura", phone: "254720100004", role: "MONEY_COUNTER" },
+  { name: "Sarah Chebet", phone: "254720100005", role: "KEY_HOLDER" },
+  { name: "Miriam Atieno", phone: "254720100006", role: "MEMBER" },
+  { name: "Peninah Wangui", phone: "254720100007", role: "MEMBER" },
+  { name: "Judith Anyango", phone: "254720100008", role: "MEMBER" }
+] as const;
+
+function log(step: string, detail = "") {
+  console.log(`  ${step.padEnd(34)}${detail}`);
+}
+
+async function main() {
+  console.log("\nDemo data for testing\n");
+
+  // ---- start clean -------------------------------------------------------
+  const existing = await prisma.group.findFirst({ where: { code: DEMO_CODE } });
+  if (existing) {
+    /**
+     * `LedgerEntry.group` is `onDelete: Restrict` on purpose: deleting a group
+     * must never silently destroy its money record. That protection is right,
+     * so this steps around it explicitly for the demo group rather than
+     * weakening the constraint for every group on the platform.
+     *
+     * Order is forced by the foreign keys: welfare expenses point at ledger
+     * entries, repayments point at loans, and users do not cascade from a
+     * group at all (deleting a group should not delete people's sign-ins).
+     */
+    const groupId = existing.id;
+    await prisma.welfareExpense.deleteMany({ where: { groupId } });
+    await prisma.ledgerEntry.deleteMany({ where: { groupId } });
+    await prisma.loan.deleteMany({ where: { groupId } });
+    await prisma.user.deleteMany({ where: { groupId } });
+    await prisma.group.delete({ where: { id: groupId } });
+    log("removed previous demo group", DEMO_CODE);
+  }
+
+  const programme = await prisma.programme.findFirst();
+  const villageAgent = await prisma.villageAgent.findFirst();
+  if (!programme) {
+    throw new Error("Run the base seed first: npm run db:seed -w @intellicash/api");
+  }
+
+  // ---- the group ---------------------------------------------------------
+  const group = await prisma.group.create({
+    data: {
+      programmeId: programme.id,
+      villageAgentId: villageAgent?.id ?? null,
+      name: "Demo Test VSLA",
+      code: DEMO_CODE,
+      phase: "INTENSIVE",
+      county: "Embu",
+      subCounty: "Manyatta",
+      meetingDay: "Tuesday",
+      gpsLatitude: -0.5389,
+      gpsLongitude: 37.4597,
+      gpsRadiusMeters: 100,
+      constitutionVersion: "IWLSGS-1.0",
+      cycleNumber: 1
+    }
+  });
+  log("group", `${group.name} (${group.code})`);
+
+  const funds = await Promise.all(
+    (["INTERNAL_LOAN", "SOCIAL", "EXTERNAL_LOAN", "GRANT", "VSLF"] as const).map((type) =>
+      prisma.fundAccount.create({
+        data: { groupId: group.id, type, balanceCents: 0, currency: "KES" }
+      })
+    )
+  );
+  const loanFund = funds.find((f) => f.type === "INTERNAL_LOAN")!;
+  const socialFund = funds.find((f) => f.type === "SOCIAL")!;
+
+  // ---- members, each able to unlock a meeting ----------------------------
+  const pinHash = await bcrypt.hash(DEMO_PIN, 12);
+  const members: Array<{ id: string; fullName: string }> = [];
+  for (const person of ROSTER) {
+    members.push(
+      await prisma.member.create({
+        data: {
+          groupId: group.id,
+          fullName: person.name,
+          phone: person.phone,
+          role: person.role,
+          status: "ACTIVE",
+          kycStatus: "VERIFIED",
+          pinHash,
+          pinSetAt: new Date()
+        }
+      })
+    );
+  }
+  log("members", `${members.length}, all with PIN ${DEMO_PIN}`);
+
+  // ---- a sign-in for this group -----------------------------------------
+  //
+  // A GROUP_ACCOUNT is scoped to ONE group, so the existing demo account can
+  // never see this one — it would sign in and find nothing. This group needs
+  // an account of its own, and a member account to test the member's own view.
+  const accountPassword = await bcrypt.hash("IntellicashDemo#2026", 12);
+  await prisma.user.deleteMany({
+    where: { email: { in: ["demo.group@intellicash.co.ke", "demo.member@intellicash.co.ke"] } }
+  });
+  await prisma.user.create({
+    data: {
+      name: "Demo Group Account",
+      email: "demo.group@intellicash.co.ke",
+      phone: "254720100100",
+      passwordHash: accountPassword,
+      role: "GROUP_ACCOUNT",
+      groupId: group.id,
+      status: "ACTIVE"
+    }
+  });
+  await prisma.user.create({
+    data: {
+      name: members[0]!.fullName,
+      email: "demo.member@intellicash.co.ke",
+      phone: "254720100101",
+      passwordHash: accountPassword,
+      role: "MEMBER",
+      groupId: group.id,
+      memberId: members[0]!.id,
+      status: "ACTIVE"
+    }
+  });
+  log("sign-ins", "demo.group@ and demo.member@intellicash.co.ke");
+
+  // ---- the group's own rules --------------------------------------------
+  await prisma.groupPolicy.create({
+    data: {
+      groupId: group.id,
+      defaultLoanTermMonths: 3,
+      loanInterestRateBps: 1000, // 10% a month, the common VSLA rate
+      expenseFundType: "SOCIAL"
+    }
+  });
+  log("group policy", "3-month loans at 10% a month");
+
+  // ---- who holds which office -------------------------------------------
+  const cycle = await prisma.cycle.findFirst({ where: { groupId: group.id, status: "ACTIVE" } });
+  for (const [index, person] of ROSTER.entries()) {
+    if (person.role === "MEMBER") continue;
+    await prisma.memberRoleAssignment.create({
+      data: {
+        groupId: group.id,
+        memberId: members[index]!.id,
+        cycleId: cycle?.id ?? null,
+        role: person.role,
+        startedAt: new Date(Date.now() - 60 * 24 * 3600 * 1000),
+        note: "Elected at the cycle-opening meeting"
+      }
+    });
+  }
+  log("officials", "chairperson, secretary, treasurer, counter, key holder");
+
+  // ---- per-group payment providers ---------------------------------------
+  // Both providers configured so the screen has something real to show. The
+  // Daraja row is explicitly SANDBOX and the Paystack key is an sk_test_ key,
+  // so nothing here can move real money even by accident.
+  await prisma.groupIntegrationConfig.create({
+    data: {
+      groupId: group.id,
+      provider: "MPESA_DARAJA",
+      enabled: true,
+      mode: "SANDBOX",
+      credentialsUpdatedAt: new Date(),
+      credentialsJson: encryptCredentials({
+        MPESA_CONSUMER_KEY: "demo-consumer-key",
+        MPESA_CONSUMER_SECRET: "demo-consumer-secret",
+        MPESA_SHORTCODE: "174379",
+        MPESA_PASSKEY: "demo-passkey",
+        MPESA_ENVIRONMENT: "SANDBOX"
+      })
+    }
+  });
+  await prisma.groupIntegrationConfig.create({
+    data: {
+      groupId: group.id,
+      provider: "PAYSTACK",
+      enabled: true,
+      mode: "SANDBOX",
+      credentialsUpdatedAt: new Date(),
+      credentialsJson: encryptCredentials({
+        PAYSTACK_SECRET_KEY: "sk_test_demo0000000000000000000000000000",
+        PAYSTACK_PUBLIC_KEY: "pk_test_demo0000000000000000000000000000"
+      })
+    }
+  });
+  log("payment providers", "M-Pesa Daraja (sandbox) + Paystack (test key)");
+
+  // ---- a sealed meeting's worth of money, then an open one ---------------
+  const sealed = await prisma.meeting.create({
+    data: {
+      groupId: group.id,
+      title: "Week 1 — savings and loans",
+      scheduledAt: new Date(Date.now() - 35 * 24 * 3600 * 1000),
+      openedAt: new Date(Date.now() - 35 * 24 * 3600 * 1000),
+      closedAt: new Date(Date.now() - 35 * 24 * 3600 * 1000),
+      status: "SEALED",
+      unlockStatus: "OFFICIALS_VERIFIED",
+      sealedByMemberId: members[1]!.id
+    }
+  });
+
+  const open = await prisma.meeting.create({
+    data: {
+      groupId: group.id,
+      title: "This week's meeting",
+      scheduledAt: new Date(),
+      openedAt: new Date(),
+      status: "IN_PROGRESS",
+      unlockStatus: "OFFICIALS_VERIFIED"
+    }
+  });
+  log("meetings", "one sealed, one OPEN for recording");
+
+  // Everything below goes through the real money path.
+  await prisma.$transaction(async (tx) => {
+    for (const member of members) {
+      await appendLedgerEntry(tx, {
+        groupId: group.id,
+        memberId: member.id,
+        meetingId: sealed.id,
+        fundAccountId: loanFund.id,
+        type: "SHARE_PURCHASE",
+        amountCents: 500_000,
+        direction: "CREDIT",
+        description: "Shares bought"
+      });
+      await appendLedgerEntry(tx, {
+        groupId: group.id,
+        memberId: member.id,
+        meetingId: sealed.id,
+        fundAccountId: socialFund.id,
+        type: "SOCIAL_CONTRIBUTION",
+        amountCents: 50_000,
+        direction: "CREDIT",
+        description: "Welfare contribution"
+      });
+    }
+
+    // Two fines, so the social fund is not uniform.
+    await appendLedgerEntry(tx, {
+      groupId: group.id,
+      memberId: members[6]!.id,
+      meetingId: sealed.id,
+      fundAccountId: socialFund.id,
+      type: "FINE_COLLECTION",
+      amountCents: 10_000,
+      direction: "CREDIT",
+      description: "Late to the meeting"
+    });
+  }, { timeout: 30_000 });
+  log("savings", "8 x KSh 5,000 shares, 8 x KSh 500 welfare, 1 fine");
+
+  // ---- loans, which now create Loan rows through the projection ----------
+  await prisma.$transaction(async (tx) => {
+    await appendLedgerEntry(tx, {
+      groupId: group.id,
+      memberId: members[5]!.id,
+      meetingId: sealed.id,
+      fundAccountId: loanFund.id,
+      type: "INTERNAL_LOAN_DISBURSEMENT",
+      amountCents: 1_000_000,
+      direction: "DEBIT",
+      description: "Business stock"
+    });
+    await appendLedgerEntry(tx, {
+      groupId: group.id,
+      memberId: members[7]!.id,
+      meetingId: sealed.id,
+      fundAccountId: loanFund.id,
+      type: "INTERNAL_LOAN_DISBURSEMENT",
+      amountCents: 600_000,
+      direction: "DEBIT",
+      description: "School fees"
+    });
+  }, { timeout: 30_000 });
+
+  // Backdate one loan so it has accrued interest to show, and part-repay it.
+  const firstLoan = await prisma.loan.findFirst({
+    where: { groupId: group.id, memberId: members[5]!.id }
+  });
+  if (firstLoan) {
+    await prisma.loan.update({
+      where: { id: firstLoan.id },
+      data: { disbursedAt: new Date(Date.now() - 31 * 24 * 3600 * 1000) }
+    });
+  }
+  await prisma.$transaction(async (tx) => {
+    await appendLedgerEntry(tx, {
+      groupId: group.id,
+      memberId: members[5]!.id,
+      meetingId: sealed.id,
+      fundAccountId: loanFund.id,
+      type: "LOAN_REPAYMENT",
+      amountCents: 300_000,
+      direction: "CREDIT",
+      description: "First repayment"
+    });
+  }, { timeout: 30_000 });
+
+  const loans = await prisma.loan.count({ where: { groupId: group.id } });
+  log("loans", `${loans} active, one a month old with interest and a repayment`);
+
+  // ---- welfare spending, inside the open meeting -------------------------
+  await prisma.$transaction(async (tx) => {
+    const entry = await appendLedgerEntry(tx, {
+      groupId: group.id,
+      memberId: members[3]!.id,
+      meetingId: open.id,
+      fundAccountId: socialFund.id,
+      type: "WELFARE_EXPENSE",
+      amountCents: 120_000,
+      direction: "DEBIT",
+      description: "Hospital bill"
+    });
+    await tx.welfareExpense.create({
+      data: {
+        groupId: group.id,
+        cycleId: entry.cycleId,
+        meetingId: open.id,
+        ledgerEntryId: entry.id,
+        category: "MEDICAL",
+        payeeMemberId: members[3]!.id,
+        note: "Maternity bill at Embu Level 5"
+      }
+    });
+  }, { timeout: 30_000 });
+  log("welfare", "KSh 1,200 paid out, recorded in the open meeting");
+
+  // ---- a decision and an election ---------------------------------------
+  const decision = await prisma.poll.create({
+    data: {
+      groupId: group.id,
+      meetingId: open.id,
+      type: "DECISION",
+      title: "Raise the share value to KSh 600?",
+      description: "Proposed at the last meeting.",
+      status: "OPEN",
+      options: {
+        create: [
+          { label: "Yes", position: 0 },
+          { label: "No", position: 1 }
+        ]
+      }
+    },
+    include: { options: true }
+  });
+  for (const [index, member] of members.slice(0, 5).entries()) {
+    await prisma.pollVote.create({
+      data: {
+        pollId: decision.id,
+        optionId: decision.options[index < 3 ? 0 : 1]!.id,
+        memberId: member.id
+      }
+    });
+  }
+  log("votes", "an open motion with 5 ballots cast");
+
+  // ---- Intelli-Store: more to browse, and a live credit request ----------
+  const supplier =
+    (await prisma.storeSupplier.findFirst()) ??
+    (await prisma.storeSupplier.create({
+      data: { name: "Demo Supplies Ltd", status: "ACTIVE", county: "Embu" }
+    }));
+
+  const catalogue = [
+    {
+      name: "Dairy Milking Can (50L)",
+      slug: "dairy-milking-can-50l",
+      category: "AGRI_EQUIPMENT",
+      priceCents: 1_200_000,
+      depositCents: 120_000,
+      inventoryCount: 25,
+      description: "Stainless milking can for dairy groups selling to a cooling plant."
+    },
+    {
+      name: "Solar Home Lighting Kit",
+      slug: "solar-home-lighting-kit",
+      category: "ENERGY",
+      priceCents: 2_400_000,
+      depositCents: 240_000,
+      inventoryCount: 40,
+      description: "Three lamps, a phone charger and a panel — bought on credit and repaid weekly."
+    },
+    {
+      name: "Certified Maize Seed (10kg)",
+      slug: "certified-maize-seed-10kg",
+      category: "AGRI_INPUTS",
+      priceCents: 320_000,
+      depositCents: 32_000,
+      inventoryCount: 120,
+      description: "One season's certified seed for a smallholder plot."
+    }
+  ];
+
+  let created = 0;
+  for (const item of catalogue) {
+    const exists = await prisma.storeProduct.findFirst({ where: { slug: item.slug } });
+    if (exists) continue;
+    await prisma.storeProduct.create({
+      data: {
+        ...item,
+        status: "ACTIVE",
+        supplierId: supplier.id,
+        currency: "KES",
+        sellerName: supplier.name,
+        creditSummary: "Deposit, then weekly repayment through the group.",
+        fulfilmentSummary: "Delivered to the group's meeting point."
+      }
+    });
+    created += 1;
+  }
+  log("intelli-store", `${created} products added (catalogue now browsable)`);
+
+  // ---- summary -----------------------------------------------------------
+  const [loanBal, socialBal] = await Promise.all([
+    prisma.fundAccount.findFirst({ where: { groupId: group.id, type: "INTERNAL_LOAN" } }),
+    prisma.fundAccount.findFirst({ where: { groupId: group.id, type: "SOCIAL" } })
+  ]);
+
+  console.log("\nReady to test:");
+  console.log(`  group          ${group.name} (${group.code})`);
+  console.log(`  loan fund      KSh ${((loanBal?.balanceCents ?? 0) / 100).toLocaleString()}`);
+  console.log(`  welfare fund   KSh ${((socialBal?.balanceCents ?? 0) / 100).toLocaleString()}`);
+  console.log(`  open meeting   "${open.title}" — welfare and votes can be recorded here`);
+  console.log(`  member PIN     ${DEMO_PIN} (every member)`);
+  console.log("\nSign in as:");
+  console.log("  group   demo.group@intellicash.co.ke   / IntellicashDemo#2026");
+  console.log("  member  demo.member@intellicash.co.ke  / IntellicashDemo#2026");
+  console.log("  admin   admin@intellicash.co.ke sees every group.\n");
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -17,7 +17,9 @@
     "db:seed": "cross-env DATABASE_URL=file:./dev.db tsx prisma/seed.ts",
     "db:seed:env": "tsx prisma/seed.ts",
     "db:seed:if-empty": "tsx prisma/seed-if-empty.ts",
-    "import:ftma": "cross-env DATABASE_URL=file:./dev.db tsx prisma/import-ftma-workbook.ts"
+    "import:ftma": "cross-env DATABASE_URL=file:./dev.db tsx prisma/import-ftma-workbook.ts",
+    "db:seed:demo": "cross-env DATABASE_URL=file:./dev.db tsx prisma/seed-demo.ts",
+    "db:seed:demo:env": "tsx prisma/seed-demo.ts"
   },
   "dependencies": {
     "@intellicash/shared": "*",
