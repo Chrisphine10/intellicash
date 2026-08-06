@@ -90,11 +90,33 @@ async function main() {
     log("removed previous demo group", DEMO_CODE);
   }
 
-  const programme = await prisma.programme.findFirst();
+  /**
+   * Stand alone rather than depending on the base seed.
+   *
+   * A production database has no programmes — and it must not be given the
+   * base seed to get one, because that fixture ships demo accounts on a
+   * password published in the repo. So the minimum scaffolding a group needs
+   * is created here if it is missing, and reused if it is not.
+   */
+  const partner =
+    (await prisma.partner.findFirst()) ??
+    (await prisma.partner.create({
+      data: { name: "Demo Programme Partner", type: "NGO", status: "ACTIVE" }
+    }));
+
+  const programme =
+    (await prisma.programme.findFirst()) ??
+    (await prisma.programme.create({
+      data: {
+        partnerId: partner.id,
+        name: "Demo Programme",
+        country: "Kenya",
+        county: "Embu",
+        description: "Scaffolding for the demo group. Safe to delete once real programmes exist."
+      }
+    }));
+
   const villageAgent = await prisma.villageAgent.findFirst();
-  if (!programme) {
-    throw new Error("Run the base seed first: npm run db:seed -w @intellicash/api");
-  }
 
   // ---- the group ---------------------------------------------------------
   const group = await prisma.group.create({
