@@ -479,9 +479,33 @@ async function main() {
   ];
 
   let created = 0;
+  let linked = 0;
   for (const item of catalogue) {
-    const exists = await prisma.storeProduct.findFirst({ where: { slug: item.slug } });
-    if (exists) continue;
+    const exists = await prisma.storeProduct.findFirst({
+      where: { slug: item.slug },
+      include: { programmeLinks: true }
+    });
+    if (exists) {
+      // An earlier run created this product before the programme link existed.
+      // Skipping outright leaves it permanently invisible in the catalogue —
+      // "already there" is not the same as "already correct".
+      if (exists.programmeLinks.length === 0) {
+        await prisma.storeProductProgramme.create({
+          data: {
+            productId: exists.id,
+            programmeId: programme.id,
+            creditTerms: "10% deposit, then weekly repayment through the group.",
+            depositRateBps: 1000,
+            installmentCount: 8,
+            installmentFrequency: "WEEKLY",
+            flatInterestRateBps: 1000,
+            gracePeriodDays: 14
+          }
+        });
+        linked += 1;
+      }
+      continue;
+    }
     await prisma.storeProduct.create({
       data: {
         ...item,
@@ -521,7 +545,7 @@ async function main() {
       programmeLinks: { some: { programme: { publicStatus: "ONGOING" } } }
     }
   });
-  log("intelli-store", `${created} added, ${visible} visible in the public catalogue`);
+  log("intelli-store", `${created} added, ${linked} linked, ${visible} visible in the catalogue`);
 
   // ---- summary -----------------------------------------------------------
   const [loanBal, socialBal] = await Promise.all([
