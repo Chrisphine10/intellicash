@@ -17,6 +17,7 @@
  *
  * Idempotent: the demo group is dropped and rebuilt on every run.
  */
+import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma";
 import { appendLedgerEntry } from "../src/routes/groups";
@@ -24,6 +25,27 @@ import { encryptCredentials } from "../src/services/integration-credentials";
 
 const DEMO_CODE = "IWL-DEMO-0001";
 const DEMO_PIN = "112233";
+
+/**
+ * The demo accounts' password.
+ *
+ * `IntellicashDemo#2026` is a constant in the shared package and therefore
+ * public. That is fine on a laptop and not fine on a live server, where it
+ * would be a known-password account against real infrastructure. On production
+ * a strong one is generated and printed ONCE; set DEMO_PASSWORD to choose your
+ * own.
+ */
+function resolveDemoPassword() {
+  const supplied = process.env.DEMO_PASSWORD?.trim();
+  if (supplied) return { password: supplied, generated: false };
+
+  if (process.env.NODE_ENV === "production") {
+    const password = `Demo-${randomBytes(12).toString("base64url")}`;
+    return { password, generated: true };
+  }
+
+  return { password: "IntellicashDemo#2026", generated: false };
+}
 
 /** Members of the demo group, with the offices a VSLA actually fills. */
 const ROSTER = [
@@ -40,6 +62,8 @@ const ROSTER = [
 function log(step: string, detail = "") {
   console.log(`  ${step.padEnd(34)}${detail}`);
 }
+
+const { password: demoPassword, generated: passwordGenerated } = resolveDemoPassword();
 
 async function main() {
   console.log("\nDemo data for testing\n");
@@ -128,7 +152,7 @@ async function main() {
   // A GROUP_ACCOUNT is scoped to ONE group, so the existing demo account can
   // never see this one — it would sign in and find nothing. This group needs
   // an account of its own, and a member account to test the member's own view.
-  const accountPassword = await bcrypt.hash("IntellicashDemo#2026", 12);
+  const accountPassword = await bcrypt.hash(demoPassword, 12);
   await prisma.user.deleteMany({
     where: { email: { in: ["demo.group@intellicash.co.ke", "demo.member@intellicash.co.ke"] } }
   });
@@ -459,9 +483,14 @@ async function main() {
   console.log(`  open meeting   "${open.title}" — welfare and votes can be recorded here`);
   console.log(`  member PIN     ${DEMO_PIN} (every member)`);
   console.log("\nSign in as:");
-  console.log("  group   demo.group@intellicash.co.ke   / IntellicashDemo#2026");
-  console.log("  member  demo.member@intellicash.co.ke  / IntellicashDemo#2026");
-  console.log("  admin   admin@intellicash.co.ke sees every group.\n");
+  console.log("  group    demo.group@intellicash.co.ke");
+  console.log("  member   demo.member@intellicash.co.ke");
+  console.log(`  password ${demoPassword}`);
+  if (passwordGenerated) {
+    console.log("\n  ^ generated for this environment and shown ONCE. Store it now —");
+    console.log("    it is not recoverable, only replaceable by re-running this.");
+  }
+  console.log("");
 }
 
 main()
