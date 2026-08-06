@@ -112,6 +112,11 @@ async function main() {
         name: "Demo Programme",
         country: "Kenya",
         county: "Embu",
+        // ONGOING, not the DRAFT default: the public store only lists products
+        // whose programme is ongoing, so a draft programme yields an empty
+        // catalogue and the store looks broken rather than unconfigured.
+        publicStatus: "ONGOING",
+        publicSlug: "demo-programme",
         description: "Scaffolding for the demo group. Safe to delete once real programmes exist."
       }
     }));
@@ -485,12 +490,38 @@ async function main() {
         currency: "KES",
         sellerName: supplier.name,
         creditSummary: "Deposit, then weekly repayment through the group.",
-        fulfilmentSummary: "Delivered to the group's meeting point."
+        fulfilmentSummary: "Delivered to the group's meeting point.",
+        // Without a programme link the public catalogue filters the product
+        // out entirely — it is listed by programme, not by supplier.
+        programmeLinks: {
+          create: {
+            programmeId: programme.id,
+            creditTerms: "10% deposit, then weekly repayment through the group.",
+            depositRateBps: 1000,
+            installmentCount: 8,
+            installmentFrequency: "WEEKLY",
+            flatInterestRateBps: 1000,
+            gracePeriodDays: 14
+          }
+        }
       }
     });
     created += 1;
   }
-  log("intelli-store", `${created} products added (catalogue now browsable)`);
+  // An earlier run may have created these before the programme link existed,
+  // and the base seed's programme may still be DRAFT. Publish whatever is
+  // there so the catalogue a tester opens is not silently empty.
+  await prisma.programme.updateMany({
+    where: { id: programme.id },
+    data: { publicStatus: "ONGOING" }
+  });
+  const visible = await prisma.storeProduct.count({
+    where: {
+      status: "ACTIVE",
+      programmeLinks: { some: { programme: { publicStatus: "ONGOING" } } }
+    }
+  });
+  log("intelli-store", `${created} added, ${visible} visible in the public catalogue`);
 
   // ---- summary -----------------------------------------------------------
   const [loanBal, socialBal] = await Promise.all([
