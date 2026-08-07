@@ -3818,7 +3818,19 @@ tr:last-child td {
   inset: 0;
   z-index: 100;
   display: grid;
-  place-items: center;
+  /*
+   * `safe` centring, and the overlay scrolls.
+   *
+   * A grid that centres an over-tall child overflows it in BOTH directions, so
+   * the top of a long dialog ends up above the viewport with no way to reach
+   * it — the heading and the first fields are simply gone. `safe` makes the
+   * child align to the start instead of centring once it no longer fits, and
+   * `overflow-y: auto` gives the overlay somewhere to scroll when a dialog is
+   * taller than the screen.
+   */
+  place-items: safe center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
 }
 
@@ -3834,7 +3846,14 @@ tr:last-child td {
   position: relative;
   z-index: 1;
   width: min(920px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
+  /*
+   * dvh, not vh. On a phone `100vh` is the viewport with the browser chrome
+   * RETRACTED, so a dialog sized against it is taller than what is actually on
+   * screen and its last rows — which is where Save lives — sit under the
+   * address bar. `.group-editor-modal` already used dvh; every other dialog in
+   * the app went through this rule and did not.
+   */
+  max-height: min(760px, calc(100dvh - 48px));
   overflow: auto;
   box-shadow: 0 30px 80px rgba(0, 11, 5, 0.3);
 }
@@ -4156,7 +4175,9 @@ tr:last-child td {
 .report-list-panel {
   position: sticky;
   top: 96px;
-  max-height: calc(100vh - 124px);
+  /* dvh for the same reason as the dialogs: a sticky panel measured against
+     retracted browser chrome runs off the bottom of a phone screen. */
+  max-height: calc(100dvh - 124px);
   overflow-y: auto;
   padding-right: 4px;
 }
