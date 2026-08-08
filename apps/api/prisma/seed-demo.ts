@@ -181,7 +181,15 @@ async function main() {
   // an account of its own, and a member account to test the member's own view.
   const accountPassword = await bcrypt.hash(demoPassword, 12);
   await prisma.user.deleteMany({
-    where: { email: { in: ["demo.group@intellicash.co.ke", "demo.member@intellicash.co.ke"] } }
+    where: {
+      email: {
+        in: [
+          "demo.group@intellicash.co.ke",
+          "demo.member@intellicash.co.ke",
+          "demo.agent@intellicash.co.ke"
+        ]
+      }
+    }
   });
   await prisma.user.create({
     data: {
@@ -206,7 +214,40 @@ async function main() {
       status: "ACTIVE"
     }
   });
-  log("sign-ins", "demo.group@ and demo.member@intellicash.co.ke");
+  // A Village Agent / CBT sees exactly the groups whose `villageAgentId` is
+  // theirs (see account-scope.ts), so the login alone is not enough — without
+  // the VillageAgent record AND the group pointing at it, the agent signs in
+  // to an empty caseload, which looks identical to the app being broken.
+  const agent =
+    (await prisma.villageAgent.findFirst({
+      where: { email: "demo.agent@intellicash.co.ke" }
+    })) ??
+    (await prisma.villageAgent.create({
+      data: {
+        programmeId: programme.id,
+        name: "Grace Wanjiku",
+        phone: "254720100102",
+        email: "demo.agent@intellicash.co.ke",
+        county: "Bungoma",
+        status: "ACTIVE"
+      }
+    }));
+  await prisma.group.update({
+    where: { id: group.id },
+    data: { villageAgentId: agent.id }
+  });
+  await prisma.user.create({
+    data: {
+      name: agent.name,
+      email: "demo.agent@intellicash.co.ke",
+      phone: "254720100102",
+      passwordHash: accountPassword,
+      role: "VILLAGE_AGENT",
+      villageAgentId: agent.id,
+      status: "ACTIVE"
+    }
+  });
+  log("sign-ins", "demo.group@, demo.member@ and demo.agent@intellicash.co.ke");
 
   // ---- the group's own rules --------------------------------------------
   await prisma.groupPolicy.create({
@@ -562,6 +603,7 @@ async function main() {
   console.log("\nSign in as:");
   console.log("  group    demo.group@intellicash.co.ke");
   console.log("  member   demo.member@intellicash.co.ke");
+  console.log("  agent    demo.agent@intellicash.co.ke  (VA / CBT)");
   console.log(`  password ${demoPassword}`);
   if (passwordGenerated) {
     console.log("\n  ^ generated for this environment and shown ONCE. Store it now —");
