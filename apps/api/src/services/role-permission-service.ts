@@ -4,7 +4,27 @@ import { prisma } from "../lib/prisma";
 
 const permissionSet = new Set<string>(permissions);
 const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
-const apiKeyPermissions = new Set<Permission>(["api-keys:read", "api-keys:write"]);
+
+/**
+ * Permissions introduced after this table first shipped, oldest batch first.
+ *
+ * `ensureRolePermissionTemplatesOnce` upserts with `update: {}`, so a database
+ * that already holds RolePermissionTemplate rows never sees a newly added
+ * default: the row was written before the permission existed, and
+ * `permissionsForRoleFromStore` reads that row rather than `rolePermissions`.
+ * The effect is that a new permission works perfectly on a fresh database and
+ * 403s every existing deployment — which is exactly what happened to
+ * `api-keys:*`, and is why that batch is here.
+ *
+ * Each batch is delivered once. If any stored row already mentions any
+ * permission in a batch, that batch is treated as delivered and never applied
+ * again — which is what stops a deliberate removal by an admin from being
+ * silently reinstated on the next boot.
+ */
+const permissionBackfills: readonly (readonly Permission[])[] = [
+  ["api-keys:read", "api-keys:write"],
+  ["visits:read", "visits:write", "visits:amend", "group-pin:write"]
+];
 const adminOnlyPermissions = new Set<Permission>([
   "audit:read",
   "intelliaudit:read",
@@ -73,11 +93,19 @@ export async function ensureRolePermissionTemplates() {
   await rolePermissionTemplateBootstrap;
 }
 
+/**
+ * Test-only: clears the once-per-process memo so a test can rewrite the stored
+ * templates and observe bootstrap again. Without this the backfill can only
+ * ever be exercised in whichever test happens to run first.
+ */
+export function __resetRolePermissionBootstrapForTests() {
+  rolePermissionTemplateBootstrap = null;
+}
+
 async function ensureRolePermissionTemplatesOnce() {
-  const existingRows = await prisma.rolePermissionTemplate.findMany();
-  const existingRowsHadApiKeyPermissions = existingRows.some((row) =>
-    (readPermissionValues(row.permissionsJson) ?? []).some((permission) => apiKeyPermissions.has(permission))
-  );
+  // Snapshot BEFORE the upsert. Rows created by the upsert below carry current
+  // defaults, so including them would make every batch look already-delivered.
+  const rowsBeforeBootstrap = await prisma.rolePermissionTemplate.findMany();
 
   await Promise.all(
     roles.map((role) =>
@@ -94,19 +122,42 @@ async function ensureRolePermissionTemplatesOnce() {
 
   await pruneReservedPermissionsFromNonAdminTemplates();
 
-  if (existingRows.length === 0 || existingRowsHadApiKeyPermissions) return;
+  // A database with no rows was just seeded with current defaults; there is
+  // nothing older to bring forward.
+  if (rowsBeforeBootstrap.length === 0) return;
+
+  for (const batch of permissionBackfills) {
+    await deliverPermissionBatch(rowsBeforeBootstrap, batch);
+  }
+}
+
+/**
+ * Adds a batch of newly introduced permissions to the stored templates, giving
+ * each role only what `rolePermissions` says it should have.
+ */
+async function deliverPermissionBatch(
+  rowsBeforeBootstrap: { role: string; permissionsJson: string }[],
+  batch: readonly Permission[]
+) {
+  const batchSet = new Set<Permission>(batch);
+  const alreadyDelivered = rowsBeforeBootstrap.some((row) =>
+    (readPermissionValues(row.permissionsJson) ?? []).some((permission) =>
+      batchSet.has(permission as Permission)
+    )
+  );
+  if (alreadyDelivered) return;
 
   const rows = await prisma.rolePermissionTemplate.findMany();
   await Promise.all(
     rows.map((row) => {
       if (!isRole(row.role)) return null;
-      const defaultsToAdd = rolePermissions[row.role].filter((permission) => apiKeyPermissions.has(permission));
+      const defaultsToAdd = rolePermissions[row.role].filter((permission) => batchSet.has(permission));
       if (defaultsToAdd.length === 0) return null;
 
-      const merged = permissionsForRoleWithAdminReserve(
-        row.role,
-        [...(readPermissionValues(row.permissionsJson) ?? []), ...defaultsToAdd]
-      );
+      const stored = readPermissionValues(row.permissionsJson) ?? [];
+      const merged = permissionsForRoleWithAdminReserve(row.role, [...stored, ...defaultsToAdd]);
+      if (JSON.stringify(stored) === JSON.stringify(merged)) return null;
+
       return prisma.rolePermissionTemplate.update({
         where: { role: row.role },
         data: {

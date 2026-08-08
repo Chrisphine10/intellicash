@@ -26,6 +26,11 @@ const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   API_PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().default("file:./dev.db"),
+  /**
+   * Where uploaded files live. Empty means "derive from DATABASE_URL" — see
+   * `lib/uploads.ts`. Set this explicitly to put evidence on its own volume.
+   */
+  UPLOAD_ROOT: z.string().default(""),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
   API_PUBLIC_URL: z.string().default("http://localhost:4000"),
   SESSION_SECRET: z.string().default("development-session-secret-change-me"),

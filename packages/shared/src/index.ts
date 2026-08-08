@@ -118,6 +118,21 @@ export const permissions = [
   "signup-requests:approve",
   "votes:read",
   "votes:write",
+  /**
+   * Field-agent group visits.
+   *
+   * `group-pin:write` sets the 4-digit PIN a group uses to attest that a visit
+   * really happened on its premises. It is deliberately NOT granted to
+   * VILLAGE_AGENT: an agent who could set the PIN could attest to their own
+   * visit, which is the one thing the PIN exists to prevent.
+   *
+   * `visits:amend` is admin-only. A submitted visit is immutable; amending
+   * snapshots the previous revision rather than overwriting it.
+   */
+  "visits:read",
+  "visits:write",
+  "visits:amend",
+  "group-pin:write",
   "analytics:read",
   "audit:read",
   "intelliaudit:read",
@@ -151,6 +166,9 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read",
     "store:write",
     "votes:read",
+    // Programme staff oversee the agents doing the visiting, so they read
+    // visit records. They do not conduct visits and cannot amend them.
+    "visits:read",
     "analytics:read"
   ],
   GROUP_ACCOUNT: [
@@ -167,6 +185,11 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:write",
     "votes:read",
     "votes:write",
+    // The group reads visits made to it, and owns the 4-digit PIN it uses to
+    // attest that a visit happened. The visiting agent must never hold that
+    // secret — see the note on `group-pin:write`.
+    "visits:read",
+    "group-pin:write",
     "analytics:read"
   ],
   MEMBER: [
@@ -214,6 +237,11 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "votes:read",
     "store:read",
     "store:write",
+    // Conducting and reading visits is the agent's core job. Note the absence
+    // of `group-pin:write` and `visits:amend`: the agent cannot mint the PIN
+    // that attests to their own visit, and cannot rewrite a submitted one.
+    "visits:read",
+    "visits:write",
     "analytics:read"
   ],
   READ_ONLY: [
@@ -454,9 +482,49 @@ export const auditEventTypes = [
   "INTELLIAUDIT_REPORT_EXPORTED",
   "INTELLIAUDIT_REQUEST_REJECTED",
   "INTELLIAUDIT_RECONCILIATION_STAGED",
-  "INTELLIAUDIT_RECONCILIATION_APPROVED"
+  "INTELLIAUDIT_RECONCILIATION_APPROVED",
+  "GROUP_VISIT_PIN_SET",
+  "GROUP_VISIT_PIN_VERIFY_FAILED",
+  "GROUP_VISIT_SUBMITTED",
+  "GROUP_VISIT_AMENDED"
 ] as const;
 export type AuditEventType = (typeof auditEventTypes)[number];
+
+/**
+ * How a field visit came about. These differ in intent, not in what is
+ * captured, so they exist for reporting rather than to branch the flow — with
+ * one exception: INTELLI_CASH_SUPPORT collects digitisation readiness only.
+ */
+export const groupVisitTypes = [
+  "INITIAL",
+  "FOLLOW_UP",
+  "QUARTERLY_REVIEW",
+  "INTELLI_CASH_SUPPORT",
+  "UNANNOUNCED"
+] as const;
+export type GroupVisitType = (typeof groupVisitTypes)[number];
+
+/**
+ * A visit is DRAFT on the phone, SUBMITTED once it reaches the server, and
+ * from then on immutable — an amendment writes a revision rather than
+ * changing the row. CANCELLED covers a visit abandoned before submission.
+ */
+export const groupVisitStatuses = ["DRAFT", "SUBMITTED", "AMENDED", "CANCELLED"] as const;
+export type GroupVisitStatus = (typeof groupVisitStatuses)[number];
+
+/**
+ * Why a visit's location could not be confirmed against the group's registered
+ * point. Recorded rather than blocking: a group that legitimately met at the
+ * chief's camp must still be able to file its visit.
+ */
+export const visitLocationOutcomes = [
+  "WITHIN_GEOFENCE",
+  "OUTSIDE_GEOFENCE",
+  "NO_GROUP_LOCATION",
+  "NO_DEVICE_FIX",
+  "LOW_ACCURACY"
+] as const;
+export type VisitLocationOutcome = (typeof visitLocationOutcomes)[number];
 
 export const memberRoles = [
   "MEMBER",
