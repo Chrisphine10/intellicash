@@ -49,6 +49,8 @@ model User {
   visitPinsSet             GroupVisitPin[]           @relation("GroupVisitPinSetter")
   visitsSubmitted          GroupVisit[]              @relation("GroupVisitSubmitter")
   visitsAmended            GroupVisitRevision[]      @relation("GroupVisitAmender")
+  templatesPublished       AssessmentTemplate[]      @relation("AssessmentTemplatePublisher")
+  templatesCreated         AssessmentTemplate[]      @relation("AssessmentTemplateCreator")
 }
 
 model Notification {
@@ -665,6 +667,7 @@ model GroupVisit {
   villageAgent VillageAgent?        @relation(fields: [villageAgentId], references: [id])
   submittedBy  User?                @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
   revisions    GroupVisitRevision[]
+  assessment   GroupVisitAssessment?
 
   @@index([groupId, startedAt])
   @@index([villageAgentId, startedAt])
@@ -687,6 +690,176 @@ model GroupVisitRevision {
   amendedBy  User?      @relation("GroupVisitAmender", fields: [amendedByUserId], references: [id])
 
   @@unique([visitId, revision])
+}
+
+/// One version of a scorecard.
+///
+/// A DRAFT is editable. Publishing validates it, freezes a snapshot, and makes
+/// the row immutable — editing a published template means cloning it to a new
+/// DRAFT at `version + 1`. That is what lets a two-year-old assessment still be
+/// defended: the rules that scored it cannot be edited out from under it.
+///
+/// `familyKey` is stable across versions — it is what says v1 and v4 are the
+/// same instrument, and what cross-version trends join on.
+model AssessmentTemplate {
+  id          String  @id @default(cuid())
+  familyKey   String
+  version     Int
+  status      String  @default("DRAFT")
+  title       String
+  description String?
+
+  /// Sum of the question weights. Null until published, because until then it
+  /// is still moving — and it is computed, never typed in. There is no 92 here.
+  maxPoints Float?
+
+  /// The band definitions, as authored. JSON rather than a table: they are
+  /// meaningless apart from the template, always read as a set, and never
+  /// queried across templates.
+  bandsJson String @default("[]")
+
+  publishedAt       DateTime?
+  publishedByUserId String?
+  createdByUserId   String?
+  /// Set when this template was cloned from another, so the lineage is legible.
+  clonedFromId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sections    AssessmentSection[]
+  snapshot    AssessmentTemplateSnapshot?
+  assessments GroupVisitAssessment[]
+  publishedBy User?                       @relation("AssessmentTemplatePublisher", fields: [publishedByUserId], references: [id])
+  createdBy   User?                       @relation("AssessmentTemplateCreator", fields: [createdByUserId], references: [id])
+  clonedFrom  AssessmentTemplate?         @relation("AssessmentTemplateLineage", fields: [clonedFromId], references: [id])
+  clones      AssessmentTemplate[]        @relation("AssessmentTemplateLineage")
+
+  @@unique([familyKey, version])
+  @@index([status])
+}
+
+model AssessmentSection {
+  id          String  @id @default(cuid())
+  templateId  String
+  /// Stable across versions. Section-level trends join on this, so renaming a
+  /// section is free but re-keying one breaks the history.
+  key         String
+  title       String
+  description String?
+  position    Int
+
+  template  AssessmentTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  questions AssessmentQuestion[]
+
+  @@unique([templateId, key])
+}
+
+model AssessmentQuestion {
+  id        String  @id @default(cuid())
+  sectionId String
+  key       String
+  prompt    String
+  guidance  String?
+  /// Points at full credit. Yes/Partial/No earn all/half/none of it.
+  weight       Float
+  position     Int
+  requiresNote Boolean @default(false)
+
+  section AssessmentSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  /// Only section-scoped here — SQLite cannot express uniqueness across the
+  /// whole template through a join. Template-wide uniqueness is enforced by
+  /// `validateAssessmentTemplate` at publish, which is also where a duplicate
+  /// would first do damage.
+  @@unique([sectionId, key])
+}
+
+/// The frozen, self-contained form of a published template.
+///
+/// Everything needed to render and score, with no foreign keys to walk — so a
+/// historical assessment reads its snapshot and never touches the live rows.
+model AssessmentTemplateSnapshot {
+  id         String @id @default(cuid())
+  templateId String @unique
+  version    Int
+
+  /// The full AssessmentTemplateSnapshot document from the contract.
+  snapshotJson String
+  /// sha256 over the canonical form. The phone sends the checksum of the
+  /// snapshot it rendered; a mismatch means it scored against a stale copy and
+  /// the server's re-score is authoritative.
+  checksum               String
+  maxPoints              Float
+  scoringContractVersion String
+
+  createdAt DateTime @default(now())
+
+  template    AssessmentTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  assessments GroupVisitAssessment[]
+
+  @@index([checksum])
+}
+
+/// One completed assessment, belonging to exactly one visit.
+///
+/// Every scoring input is stored alongside the result — snapshot, template
+/// version, contract version and the full breakdown — so the number can be
+/// re-derived and explained without re-reading anything that may have changed.
+model GroupVisitAssessment {
+  id      String @id @default(cuid())
+  visitId String @unique
+
+  templateSnapshotId     String
+  templateId             String
+  templateVersion        Int
+  scoringContractVersion String
+
+  earnedPoints     Float
+  applicablePoints Float
+  maxPoints        Float
+  /// Earned points rescaled onto the full range, which is what was banded.
+  scaledPoints Float
+  percentage   Float
+  bandKey      String?
+  bandLabel    String?
+
+  /// False when questions were left unanswered — a partial assessment is
+  /// recorded rather than refused, but it is never silently treated as whole.
+  complete Boolean @default(false)
+
+  /// The full AssessmentScore, so the section-by-section explanation survives
+  /// without re-running the contract.
+  breakdownJson String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visit    GroupVisit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  snapshot AssessmentTemplateSnapshot @relation(fields: [templateSnapshotId], references: [id])
+  template AssessmentTemplate         @relation(fields: [templateId], references: [id])
+  answers  GroupVisitAnswer[]
+
+  @@index([templateId, createdAt])
+}
+
+model GroupVisitAnswer {
+  id           String  @id @default(cuid())
+  assessmentId String
+  /// Denormalized from the snapshot so a per-question or per-section query does
+  /// not have to parse JSON, and so the answer stays readable if the question
+  /// is dropped in a later template version.
+  sectionKey  String
+  questionKey String
+  choice      String
+  note        String?
+
+  assessment GroupVisitAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// The idempotency guard for answers: a retried visit payload re-upserts the
+  /// same rows rather than forking a second set.
+  @@unique([assessmentId, questionKey])
+  @@index([questionKey])
 }
 
 model Member {

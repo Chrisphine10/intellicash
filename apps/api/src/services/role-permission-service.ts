@@ -23,7 +23,8 @@ const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
  */
 const permissionBackfills: readonly (readonly Permission[])[] = [
   ["api-keys:read", "api-keys:write"],
-  ["visits:read", "visits:write", "visits:amend", "group-pin:write"]
+  ["visits:read", "visits:write", "visits:amend", "group-pin:write"],
+  ["assessment-templates:write"]
 ];
 const adminOnlyPermissions = new Set<Permission>([
   "audit:read",

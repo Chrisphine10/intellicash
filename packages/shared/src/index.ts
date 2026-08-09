@@ -133,6 +133,16 @@ export const permissions = [
   "visits:write",
   "visits:amend",
   "group-pin:write",
+  /**
+   * Authoring the assessment scorecard — creating, editing and publishing a
+   * template version. Deliberately narrower than `visits:write`: an agent fills
+   * the form in and must not be able to change what it asks or how it scores.
+   *
+   * Reading the published form needs no permission of its own; it comes with
+   * `visits:read`, because rendering the questions is part of conducting and
+   * reviewing a visit.
+   */
+  "assessment-templates:write",
   "analytics:read",
   "audit:read",
   "intelliaudit:read",
@@ -486,7 +496,9 @@ export const auditEventTypes = [
   "GROUP_VISIT_PIN_SET",
   "GROUP_VISIT_PIN_VERIFY_FAILED",
   "GROUP_VISIT_SUBMITTED",
-  "GROUP_VISIT_AMENDED"
+  "GROUP_VISIT_AMENDED",
+  "GROUP_VISIT_ASSESSED",
+  "ASSESSMENT_TEMPLATE_PUBLISHED"
 ] as const;
 export type AuditEventType = (typeof auditEventTypes)[number];
 
