@@ -25,6 +25,25 @@ function generateNonce(): string {
   return btoa(binary);
 }
 
+/**
+ * The API origin to permit beyond 'self', or "" when there is none.
+ *
+ * Only an absolute, cross-origin `NEXT_PUBLIC_API_BASE_URL` widens the policy;
+ * a relative value or one already on this host adds nothing. A malformed value
+ * is ignored rather than throwing — a bad environment variable must not take
+ * every page down with it.
+ */
+function extraConnectSrc() {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (!configured || configured.startsWith("/")) return "";
+
+  try {
+    return ` ${new URL(configured).origin}`;
+  } catch {
+    return "";
+  }
+}
+
 export function middleware(request: NextRequest) {
   const nonce = generateNonce();
 
@@ -38,8 +57,14 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' https: data:",
-    // The API is same-origin (/api/v1 on this very host).
-    "connect-src 'self'",
+    // The API is same-origin (/api/v1 on this very host) in every deployment.
+    // A split setup — API on its own port during development — has to declare
+    // itself with NEXT_PUBLIC_API_BASE_URL, and is then allowed here. Reading
+    // the same variable `lib/api.ts` calls means the policy cannot forbid the
+    // origin the client is about to use, which is precisely what happened
+    // before: the client hardcoded :4000 on localhost while this said 'self',
+    // so every dashboard fetch was blocked.
+    `connect-src 'self'${extraConnectSrc()}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

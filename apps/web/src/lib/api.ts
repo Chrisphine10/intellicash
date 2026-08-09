@@ -4,15 +4,28 @@ function normalizeApiBaseUrl(value: string) {
   return value.replace(/\/$/, "");
 }
 
-function isLocalHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1";
-}
-
+/**
+ * Where the browser should call the API.
+ *
+ * Same-origin `/api/v1` everywhere, because that is the shape the Content
+ * Security Policy in `middleware.ts` assumes: it sets `connect-src 'self'`, so
+ * a page served from one origin cannot fetch from another.
+ *
+ * This used to force `http://localhost:4000` whenever the hostname was
+ * localhost, which quietly could not work — the CSP is applied in development
+ * too, so the browser blocked every dashboard fetch and each page showed
+ * "Network request failed". Production was unaffected, which is why it went
+ * unnoticed: there the API really is on this host.
+ *
+ * A split setup — web and API on different ports — is still supported, but has
+ * to be declared with `NEXT_PUBLIC_API_BASE_URL`. The middleware reads the same
+ * variable and widens `connect-src` to match, so the two cannot disagree.
+ */
 function fallbackApiBaseUrl() {
-  if (typeof window !== "undefined") {
-    return isLocalHost(window.location.hostname) ? LOCAL_API_BASE_URL : `${window.location.origin}/api/v1`;
-  }
+  if (typeof window !== "undefined") return `${window.location.origin}/api/v1`;
 
+  // Server-side render and build: no window, and nothing is fetched from a
+  // browser yet. The local default keeps `next build` working.
   return LOCAL_API_BASE_URL;
 }
 
