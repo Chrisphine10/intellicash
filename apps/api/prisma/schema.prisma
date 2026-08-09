@@ -46,6 +46,9 @@ model User {
   externalLoanApplications ExternalLoanApplication[] @relation("ExternalLoanRequester")
   groupJoinRequests        GroupJoinRequest[]
   memberships              UserMembership[]
+  visitPinsSet             GroupVisitPin[]           @relation("GroupVisitPinSetter")
+  visitsSubmitted          GroupVisit[]              @relation("GroupVisitSubmitter")
+  visitsAmended            GroupVisitRevision[]      @relation("GroupVisitAmender")
 }
 
 model Notification {
@@ -322,6 +325,7 @@ model VillageAgent {
    */
   userAccounts             User[]
   bookingRequests          AgentBookingRequest[]
+  visits                   GroupVisit[]
   signupRequests           PartnerSignupRequest[]       @relation("SignupFieldAgent")
   storeCreditDistributions StoreCreditRequest[]         @relation("StoreCreditDistributor")
   storeProductProgrammes   StoreProductProgrammeAgent[]
@@ -564,6 +568,125 @@ model Group {
   welfareExpenses          WelfareExpense[]
   groupPolicies            GroupPolicy[]
   memberRoleAssignments    MemberRoleAssignment[]
+  visitPin                 GroupVisitPin?
+  visits                   GroupVisit[]
+}
+
+/// The 4-digit PIN a group uses to attest that a field visit really happened.
+///
+/// Its own table, not a column on Group, for two reasons. The secret then
+/// cannot leak through any of the several places a Group is serialized — the
+/// agent's caseload list among them, which is read by the very people the PIN
+/// is meant to keep honest. And lockout state belongs with the secret rather
+/// than widening the group row.
+///
+/// Deliberately separate from `Member.pinHash` (6 digits, identifies one
+/// person, unlocks a meeting) and from the 3-key meeting unlock. This one
+/// identifies the *place and occasion*: it says a representative of this group
+/// was present when the agent opened the visit.
+model GroupVisitPin {
+  id           String    @id @default(cuid())
+  groupId      String    @unique
+  /// bcrypt, same cost as member PINs. Never returned by any endpoint.
+  pinHash      String
+  setByUserId  String?
+  setAt        DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  /// Consecutive failures since the last success. Reset on success.
+  failedCount  Int       @default(0)
+  /// Set when failedCount crosses the threshold; verification refuses until
+  /// it passes. Stored rather than derived so a restart cannot clear it.
+  lockedUntil  DateTime?
+  lastFailedAt DateTime?
+
+  group  Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  setBy  User? @relation("GroupVisitPinSetter", fields: [setByUserId], references: [id])
+}
+
+/// One field visit: one agent, one group, one occasion.
+///
+/// A SUBMITTED visit is immutable. There is no PATCH — an amendment writes a
+/// GroupVisitRevision holding the previous state and bumps `revision`, so the
+/// record of what was reported at the time survives the correction.
+model GroupVisit {
+  id      String @id @default(cuid())
+  groupId String
+  /// The agent row, not the login. An agent may hold several logins over time
+  /// and the visit belongs to the person, not the credential.
+  villageAgentId String?
+  /// The login that submitted it, for the audit trail.
+  submittedByUserId String?
+
+  /// Minted on the phone when the opening PIN passes, and never regenerated —
+  /// not on retry, resume, or reinstall. This is the whole idempotency story:
+  /// a repeat POST returns the existing visit rather than creating a second.
+  clientRequestId String @unique
+
+  visitType String @default("FOLLOW_UP")
+  status    String @default("SUBMITTED")
+
+  /// When the agent opened the visit on the device, which is not when the
+  /// server received it — often days apart in the field.
+  startedAt   DateTime
+  completedAt DateTime?
+  submittedAt DateTime  @default(now())
+
+  /// Device reading. Nullable: a phone that never got a fix must still be able
+  /// to file the visit.
+  deviceLatitude  Float?
+  deviceLongitude Float?
+  /// Metres of uncertainty reported by the device.
+  locationAccuracyM Float?
+  locationCapturedAt DateTime?
+
+  /// Server-computed distance to the group's registered point, and the verdict
+  /// derived from it. Never trusted from the client — the deliberate contrast
+  /// with Meeting.gpsCompliant, a client-asserted boolean nobody validates.
+  distanceFromGroupM Float?
+  locationOutcome    String  @default("NO_DEVICE_FIX")
+  withinGeofence     Boolean @default(false)
+
+  /// The agent's explanation when the location does not match — "group met at
+  /// the chief's camp". An explanation channel, not evidence.
+  locationNote String?
+
+  /// Non-fatal observations worth surfacing to a reviewer: PIN retries, a fix
+  /// far outside the geofence, a device clock well adrift. JSON array.
+  authenticityFlagsJson String @default("[]")
+
+  deviceId String?
+  notes    String?
+
+  revision  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  villageAgent VillageAgent?        @relation(fields: [villageAgentId], references: [id])
+  submittedBy  User?                @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
+  revisions    GroupVisitRevision[]
+
+  @@index([groupId, startedAt])
+  @@index([villageAgentId, startedAt])
+}
+
+/// The state of a visit before an amendment. Append-only.
+model GroupVisitRevision {
+  id       String @id @default(cuid())
+  visitId  String
+  /// The revision number this snapshot holds — i.e. the value before the bump.
+  revision Int
+  /// Full serialized visit as it stood, so a reviewer can read what was
+  /// originally reported without reconstructing it from field-level diffs.
+  snapshotJson  String
+  reason        String?
+  amendedByUserId String?
+  createdAt     DateTime @default(now())
+
+  visit      GroupVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  amendedBy  User?      @relation("GroupVisitAmender", fields: [amendedByUserId], references: [id])
+
+  @@unique([visitId, revision])
 }
 
 model Member {
