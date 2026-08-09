@@ -236,6 +236,47 @@ visitsRouter.get("/groups/:groupId/visits", requireAuth("visits:read"), async (r
   }
 });
 
+/**
+ * Visits across every group the caller can see.
+ *
+ * The admin console needs one list rather than a request per group, and an
+ * agent gets their own caseload from the same route — `scopeGroupWhere`
+ * already narrows it, so there is no separate agent endpoint to keep in step.
+ */
+visitsRouter.get("/visits", requireAuth("visits:read"), async (req, res, next) => {
+  try {
+    const groupId = typeof req.query.groupId === "string" ? req.query.groupId : undefined;
+    const outcome =
+      typeof req.query.locationOutcome === "string" ? req.query.locationOutcome : undefined;
+
+    const visits = await prisma.groupVisit.findMany({
+      where: {
+        AND: [
+          { group: scopeGroupWhere(req.user) },
+          ...(groupId ? [{ groupId }] : []),
+          ...(outcome ? [{ locationOutcome: outcome }] : [])
+        ]
+      },
+      orderBy: { startedAt: "desc" },
+      take: 300,
+      include: {
+        group: { select: { id: true, name: true, code: true, county: true } },
+        villageAgent: { select: { id: true, name: true } }
+      }
+    });
+
+    ok(res, {
+      visits: visits.map((visit) => ({
+        ...serializeVisit(visit),
+        group: visit.group,
+        agent: visit.villageAgent
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 visitsRouter.get("/visits/:visitId", requireAuth("visits:read"), async (req, res, next) => {
   try {
     const visit = await prisma.groupVisit.findFirst({

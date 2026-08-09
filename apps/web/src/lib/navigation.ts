@@ -15,7 +15,8 @@ import {
   ShoppingBag,
   UserCog,
   UsersRound,
-  WalletCards
+  WalletCards,
+  MapPinned
 } from "@/lib/theme-icons";
 import type { Role } from "@intellicash/shared";
 
@@ -99,6 +100,16 @@ export const navigationItems: NavigationItem[] = [
     roles: ["IWL_ADMIN", "PARTNER_OFFICER", "READ_ONLY"],
     section: "work",
     priority: { default: 40, IWL_ADMIN: 40, PARTNER_OFFICER: 50, READ_ONLY: 50 }
+  },
+  {
+    label: "Field visits",
+    href: "/dashboard/visits",
+    icon: MapPinned,
+    // Not READ_ONLY or LENDER: visit records carry free text about named
+    // individuals, materially wider than the ledger totals those roles see.
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER"],
+    section: "work",
+    priority: { default: 55, IWL_ADMIN: 55, PARTNER_OFFICER: 45 }
   },
   {
     label: "VA / CBT",

@@ -318,6 +318,42 @@ describe("group visits", () => {
         .expect(404);
     });
 
+    it("narrows the cross-group list to what the caller may see", async () => {
+      // The admin console reads one list rather than a request per group. The
+      // same route serves an agent, so the scope has to hold here too — this
+      // is the endpoint most likely to leak another caseload's visits.
+      const outsideVisit = await request(app)
+        .post(`/api/v1/groups/${otherGroupId}/visits`)
+        .set("Cookie", adminCookies)
+        .send({ clientRequestId: `visit-other-${Date.now()}`, startedAt: new Date().toISOString() })
+        .expect(201);
+
+      const asAgent = await request(app)
+        .get("/api/v1/visits")
+        .set("Cookie", agentCookies)
+        .expect(200);
+      const agentIds = asAgent.body.data.visits.map((v: { id: string }) => v.id);
+      expect(agentIds).not.toContain(outsideVisit.body.data.visit.id);
+
+      const asAdmin = await request(app)
+        .get("/api/v1/visits")
+        .set("Cookie", adminCookies)
+        .expect(200);
+      const adminIds = asAdmin.body.data.visits.map((v: { id: string }) => v.id);
+      expect(adminIds).toContain(outsideVisit.body.data.visit.id);
+    });
+
+    it("filters the cross-group list by group", async () => {
+      const response = await request(app)
+        .get(`/api/v1/visits?groupId=${agentGroupId}`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+      expect(response.body.data.visits.length).toBeGreaterThan(0);
+      for (const visit of response.body.data.visits as { groupId: string }[]) {
+        expect(visit.groupId).toBe(agentGroupId);
+      }
+    });
+
     it("lists an agent's own visits across their caseload", async () => {
       const response = await request(app)
         .get("/api/v1/agents/me/visits")
