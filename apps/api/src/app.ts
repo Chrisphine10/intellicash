@@ -14,6 +14,7 @@ import { groupPaymentsRouter } from "./routes/group-payments";
 import { groupPolicyRouter } from "./routes/group-policy";
 import { visitsRouter } from "./routes/visits";
 import { assessmentsRouter } from "./routes/assessments";
+import { attachmentsRouter } from "./routes/attachments";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
@@ -122,6 +123,12 @@ export function createApp(
   app.use("/uploads", express.static(uploadRoot, { maxAge: "7d" }));
 
   app.use("/api/v1/auth", authRouter);
+  // BEFORE uploadsRouter, deliberately. That router owns `/uploads/:kind` and
+  // answers 404 for any kind it does not know, so it would swallow
+  // `/uploads/visit-photo` — which needs its own size limit, its own
+  // date-sharded destination and the disk-fill guard. Express matches in
+  // registration order, so the specific path has to be mounted first.
+  app.use("/api/v1", attachmentsRouter);
   app.use("/api/v1", uploadsRouter);
   app.use("/api/v1", apiKeysRouter);
   app.use("/api/v1", adminRouter);

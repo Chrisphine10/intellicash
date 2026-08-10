@@ -50,6 +50,8 @@ model User {
   visitsSubmitted          GroupVisit[]              @relation("GroupVisitSubmitter")
   visitsAmended            GroupVisitRevision[]      @relation("GroupVisitAmender")
   templatesPublished       AssessmentTemplate[]      @relation("AssessmentTemplatePublisher")
+  attachmentsUploaded      Attachment[]              @relation("AttachmentUploader")
+  documentsVerified        GroupDocument[]           @relation("GroupDocumentVerifier")
   templatesCreated         AssessmentTemplate[]      @relation("AssessmentTemplateCreator")
 }
 
@@ -328,6 +330,7 @@ model VillageAgent {
   userAccounts             User[]
   bookingRequests          AgentBookingRequest[]
   visits                   GroupVisit[]
+  attachments              Attachment[]
   signupRequests           PartnerSignupRequest[]       @relation("SignupFieldAgent")
   storeCreditDistributions StoreCreditRequest[]         @relation("StoreCreditDistributor")
   storeProductProgrammes   StoreProductProgrammeAgent[]
@@ -572,6 +575,8 @@ model Group {
   memberRoleAssignments    MemberRoleAssignment[]
   visitPin                 GroupVisitPin?
   visits                   GroupVisit[]
+  attachments              Attachment[]
+  documents                GroupDocument[]
 }
 
 /// The 4-digit PIN a group uses to attest that a field visit really happened.
@@ -668,6 +673,7 @@ model GroupVisit {
   submittedBy  User?                @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
   revisions    GroupVisitRevision[]
   assessment   GroupVisitAssessment?
+  attachments  Attachment[]
 
   @@index([groupId, startedAt])
   @@index([villageAgentId, startedAt])
@@ -860,6 +866,104 @@ model GroupVisitAnswer {
   /// same rows rather than forking a second set.
   @@unique([assessmentId, questionKey])
   @@index([questionKey])
+}
+
+/// A photograph or document, always bound to what it is evidence OF.
+///
+/// One table serves both a visit photo and a standing group document, so the
+/// linkage columns are nullable. That is a storage fact, not a licence: the
+/// "never an anonymous gallery" rule is enforced per kind in Zod at the route,
+/// where VISIT_PHOTO requires visit, section, agent and capture time. Encoding
+/// it in column nullability instead would mean either a second table or
+/// columns that lie about GROUP_DOCUMENT.
+model Attachment {
+  id      String @id @default(cuid())
+  kind    String
+  groupId String
+
+  /// Set for evidence captured during a visit; null for a standing document.
+  visitId String?
+  /// Which question the photograph answers. The reason capture is offered only
+  /// from a question rather than a global "add photo" button — a picture with
+  /// no claim attached to it is not evidence of anything.
+  sectionKey  String?
+  questionKey String?
+
+  villageAgentId   String?
+  uploadedByUserId String?
+
+  /// Relative to the upload root, e.g. `visit-photo/2026/08/<uuid>.jpg`.
+  /// Never an absolute path: the storage location is allowed to move.
+  storagePath String
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  /// Content hash. What makes a retried upload safe.
+  sha256 String
+
+  /// When the photograph was TAKEN on the device, which is not when it was
+  /// received — often days apart in the field.
+  capturedAt DateTime?
+
+  caption String?
+
+  /// Minted on the phone and never regenerated, so a retry re-binds the same
+  /// attachment rather than creating a second.
+  clientRequestId String? @unique
+
+  createdAt DateTime @default(now())
+
+  group        Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  visit        GroupVisit?   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  villageAgent VillageAgent? @relation(fields: [villageAgentId], references: [id])
+  uploadedBy   User?         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id])
+
+  /// The same image cannot be attached to one visit twice. Scoped to the visit
+  /// rather than global: two groups may legitimately photograph the same blank
+  /// form, and a hash collision across unrelated visits is not a duplicate.
+  @@unique([sha256, visitId])
+  @@index([groupId, createdAt])
+  @@index([visitId])
+}
+
+/// A document a group is expected to hold — registration certificate, bank
+/// mandate, constitution.
+///
+/// `presence` and `verification` are deliberately separate columns rather than
+/// one four-state enum. Verified / Not verified / Missing / Expired conflates
+/// three different things: whether the document exists, a back-office judgement
+/// about it, and a fact derived from a date. Merged, the question "how many
+/// verified certificates expire this quarter" cannot be asked at all — an
+/// expired one has overwritten the fact that it was ever verified.
+///
+/// EXPIRED is therefore never stored. It is derived from `expiresOn`, which
+/// means it cannot go stale and no nightly job is needed to keep it honest.
+model GroupDocument {
+  id      String @id @default(cuid())
+  groupId String
+
+  documentType String
+  /// PRESENT | MISSING — does the group have it at all?
+  presence String @default("MISSING")
+  /// UNVERIFIED | VERIFIED | REJECTED — a human judgement about the copy held.
+  verification String @default("UNVERIFIED")
+
+  /// Null when the document does not expire.
+  expiresOn DateTime?
+
+  attachmentId String?
+  notes        String?
+
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group      Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  verifiedBy User? @relation("GroupDocumentVerifier", fields: [verifiedByUserId], references: [id])
+
+  @@unique([groupId, documentType])
 }
 
 model Member {

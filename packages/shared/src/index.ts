@@ -143,6 +143,15 @@ export const permissions = [
    * reviewing a visit.
    */
   "assessment-templates:write",
+  /**
+   * Standing group documents — registration certificate, bank mandate,
+   * constitution — and the back-office judgement about them.
+   *
+   * Separate from `visits:write`: an agent photographs what they find, but
+   * whether a certificate is accepted as genuine is not their call to make.
+   */
+  "documents:read",
+  "documents:write",
   "analytics:read",
   "audit:read",
   "intelliaudit:read",
@@ -179,6 +188,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     // Programme staff oversee the agents doing the visiting, so they read
     // visit records. They do not conduct visits and cannot amend them.
     "visits:read",
+    // Back-office verification of a group's documents is exactly this role's
+    // job — deciding whether the certificate on file is genuine.
+    "documents:read",
+    "documents:write",
     "analytics:read"
   ],
   GROUP_ACCOUNT: [
@@ -200,6 +213,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     // secret — see the note on `group-pin:write`.
     "visits:read",
     "group-pin:write",
+    // A group sees which of its own documents are on file and what is missing.
+    // It cannot mark its own certificate verified — that judgement is not the
+    // subject's to make about itself.
+    "documents:read",
     "analytics:read"
   ],
   MEMBER: [
@@ -252,6 +269,12 @@ export const rolePermissions: Record<Role, Permission[]> = {
     // that attests to their own visit, and cannot rewrite a submitted one.
     "visits:read",
     "visits:write",
+    // An agent records what they can see in front of them: that a certificate
+    // exists, and a photograph of it. The route refuses to let them set the
+    // VERIFICATION on the role, the same way it refuses the visit PIN — an
+    // agent attesting to their own evidence defeats the point of collecting it.
+    "documents:read",
+    "documents:write",
     "analytics:read"
   ],
   READ_ONLY: [
@@ -498,7 +521,10 @@ export const auditEventTypes = [
   "GROUP_VISIT_SUBMITTED",
   "GROUP_VISIT_AMENDED",
   "GROUP_VISIT_ASSESSED",
-  "ASSESSMENT_TEMPLATE_PUBLISHED"
+  "ASSESSMENT_TEMPLATE_PUBLISHED",
+  "VISIT_ATTACHMENT_ADDED",
+  "VISIT_ATTACHMENT_REMOVED",
+  "GROUP_DOCUMENT_UPDATED"
 ] as const;
 export type AuditEventType = (typeof auditEventTypes)[number];
 
@@ -529,6 +555,42 @@ export type GroupVisitStatus = (typeof groupVisitStatuses)[number];
  * point. Recorded rather than blocking: a group that legitimately met at the
  * chief's camp must still be able to file its visit.
  */
+/**
+ * What an attachment is evidence of.
+ *
+ * VISIT_PHOTO is bound to a visit, a section and an agent; GROUP_DOCUMENT is a
+ * standing record with no visit. They share a table, so the difference is
+ * enforced per kind at the route rather than by column nullability.
+ */
+export const attachmentKinds = ["VISIT_PHOTO", "GROUP_DOCUMENT"] as const;
+export type AttachmentKind = (typeof attachmentKinds)[number];
+
+/** Does the group hold the document at all? A fact, not a judgement. */
+export const documentPresence = ["PRESENT", "MISSING"] as const;
+export type DocumentPresence = (typeof documentPresence)[number];
+
+/**
+ * The back-office judgement about a document that is present.
+ *
+ * Deliberately NOT merged with presence, and deliberately containing no
+ * EXPIRED: expiry is derived from `expiresOn` at read time, so it cannot go
+ * stale and does not erase the fact that the document was once verified.
+ * Storing EXPIRED here would make "how many verified certificates expire this
+ * quarter" unanswerable.
+ */
+export const documentVerification = ["UNVERIFIED", "VERIFIED", "REJECTED"] as const;
+export type DocumentVerification = (typeof documentVerification)[number];
+
+export const groupDocumentTypes = [
+  "REGISTRATION_CERTIFICATE",
+  "CONSTITUTION",
+  "BANK_MANDATE",
+  "MEMBER_REGISTER",
+  "MEETING_MINUTES",
+  "AUDIT_REPORT"
+] as const;
+export type GroupDocumentType = (typeof groupDocumentTypes)[number];
+
 export const visitLocationOutcomes = [
   "WITHIN_GEOFENCE",
   "OUTSIDE_GEOFENCE",
