@@ -577,6 +577,7 @@ model Group {
   visits                   GroupVisit[]
   attachments              Attachment[]
   documents                GroupDocument[]
+  actionItems              VisitActionItem[]
 }
 
 /// The 4-digit PIN a group uses to attest that a field visit really happened.
@@ -674,6 +675,9 @@ model GroupVisit {
   revisions    GroupVisitRevision[]
   assessment   GroupVisitAssessment?
   attachments  Attachment[]
+  mentorship   VisitMentorshipSession[]
+  ratings      VisitMentorshipRating[]
+  actionItems  VisitActionItem[]       @relation("ActionItemRaisedAt")
 
   @@index([groupId, startedAt])
   @@index([villageAgentId, startedAt])
@@ -964,6 +968,124 @@ model GroupDocument {
   verifiedBy User? @relation("GroupDocumentVerifier", fields: [verifiedByUserId], references: [id])
 
   @@unique([groupId, documentType])
+}
+
+/// A subject a field agent can coach a group on. Configurable reference data.
+model MentorshipTopic {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  title       String
+  description String?
+  position    Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions VisitMentorshipSession[]
+}
+
+/// Coaching delivered during one visit, on one topic.
+///
+/// `topicKeySnapshot` and `topicTitleSnapshot` are copied in at write time so
+/// the record still reads if the topic is later renamed or retired. A session
+/// that says "we coached them on <deleted>" is worthless as history, and
+/// forbidding deletion instead would leave a settings screen nobody can tidy.
+model VisitMentorshipSession {
+  id      String @id @default(cuid())
+  visitId String
+
+  topicId            String?
+  topicKeySnapshot   String
+  topicTitleSnapshot String
+
+  /// What was actually discussed and advised.
+  notes String?
+  /// Minutes spent, when the agent records it.
+  durationMinutes Int?
+
+  createdAt DateTime @default(now())
+
+  visit GroupVisit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  topic MentorshipTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@unique([visitId, topicKeySnapshot])
+  @@index([topicKeySnapshot])
+}
+
+/// An axis the group scores the coaching on — clarity, usefulness, respect.
+model MentorshipRatingDimension {
+  id       String  @id @default(cuid())
+  key      String  @unique
+  title    String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  ratings VisitMentorshipRating[]
+}
+
+/// The group's 1-5 score for the mentorship it received.
+///
+/// Given by the group's REPRESENTATIVE, not the agent. An agent rating their
+/// own session scores 4 or 5 every time and the aggregate says nothing; the
+/// representative is already holding the phone for the sign-off PIN, so asking
+/// them costs nothing. `ratedByRole` records who actually answered, so an
+/// aggregate can exclude anything not given by the group.
+model VisitMentorshipRating {
+  id      String @id @default(cuid())
+  visitId String
+
+  dimensionId          String?
+  dimensionKeySnapshot String
+  score                Int
+
+  /// GROUP_REPRESENTATIVE | AGENT. Stored rather than assumed.
+  ratedByRole String  @default("GROUP_REPRESENTATIVE")
+  comment     String?
+
+  createdAt DateTime @default(now())
+
+  visit     GroupVisit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  dimension MentorshipRatingDimension? @relation(fields: [dimensionId], references: [id], onDelete: SetNull)
+
+  @@unique([visitId, dimensionKeySnapshot])
+}
+
+/// Something the group agreed to do before the next visit.
+///
+/// Deliberately separate from IntelliAuditRecommendation, which carries the
+/// same owner/dueDate/status shape but is bound to audit findings and an
+/// approval flow that does not apply here.
+///
+/// There is NO stored OVERDUE column. Lateness is derived from `dueDate` at
+/// read time — see `domain/action-plan.ts` — so it is right the moment it is
+/// asked and needs no nightly job.
+model VisitActionItem {
+  id      String @id @default(cuid())
+  visitId String
+  groupId String
+
+  title       String
+  detail      String?
+  /// Free text: "the treasurer", "the chairlady". Not a member FK, because the
+  /// owner is often a role rather than a person on the register.
+  owner    String?
+  dueDate  DateTime?
+  status   String    @default("OPEN")
+
+  /// The visit at which it was closed, when it was.
+  closedAtVisitId String?
+  closedAt        DateTime?
+  closingNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visit GroupVisit @relation("ActionItemRaisedAt", fields: [visitId], references: [id], onDelete: Cascade)
+  group Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, status])
+  @@index([status, dueDate])
 }
 
 model Member {

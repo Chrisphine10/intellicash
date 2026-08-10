@@ -16,6 +16,7 @@ import { visitsRouter } from "./routes/visits";
 import { assessmentsRouter } from "./routes/assessments";
 import { attachmentsRouter } from "./routes/attachments";
 import { documentsRouter } from "./routes/documents";
+import { mentorshipRouter } from "./routes/mentorship";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
@@ -137,6 +138,7 @@ export function createApp(
   app.use("/api/v1", visitsRouter);
   app.use("/api/v1", assessmentsRouter);
   app.use("/api/v1", documentsRouter);
+  app.use("/api/v1", mentorshipRouter);
   app.use("/api/v1", analyticsRouter);
   app.use("/api/v1", reportsRouter);
   app.use("/api/v1", auditRouter);

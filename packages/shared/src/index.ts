@@ -524,7 +524,9 @@ export const auditEventTypes = [
   "ASSESSMENT_TEMPLATE_PUBLISHED",
   "VISIT_ATTACHMENT_ADDED",
   "VISIT_ATTACHMENT_REMOVED",
-  "GROUP_DOCUMENT_UPDATED"
+  "GROUP_DOCUMENT_UPDATED",
+  "VISIT_MENTORSHIP_RECORDED",
+  "VISIT_ACTION_ITEM_UPDATED"
 ] as const;
 export type AuditEventType = (typeof auditEventTypes)[number];
 
