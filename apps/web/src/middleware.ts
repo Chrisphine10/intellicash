@@ -51,7 +51,16 @@ export function middleware(request: NextRequest) {
     "default-src 'self'",
     // 'strict-dynamic' lets the nonce'd bootstrap load the rest of the chunks,
     // so every later script inherits trust without whitelisting paths.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    //
+    // 'unsafe-eval' is added in DEVELOPMENT ONLY. Next's dev server compiles
+    // and hot-reloads modules through eval, so without it every dashboard page
+    // dies on "Evaluating a string as JavaScript violates CSP" and sits on
+    // "Loading workspace…" forever — the app is unusable locally. A production
+    // build contains no eval, so the directive never reaches production and
+    // the policy there is unchanged.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${
+      process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"
+    }`,
     // Next inlines critical CSS and the font loader emits style attributes;
     // there is no nonce hook for those, and inline CSS is not script execution.
     "style-src 'self' 'unsafe-inline'",

@@ -373,6 +373,29 @@ describe("visit assessments", () => {
       expect(prompts).not.toContain("Rewritten prompt");
     });
 
+    it("serves a published version from its snapshot, not the live rows", async () => {
+      // The admin console must show the form agents are actually scoring
+      // against. The live rows were mutated by the test above, so if this
+      // endpoint read them it would report 140 points and flag an already
+      // published version as unpublishable — which is what it did before.
+      const response = await request(app)
+        .get(`/api/v1/assessment-templates/${templateId}`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+
+      const { data } = response.body;
+      expect(data.status).toBe("PUBLISHED");
+      expect(data.maxPoints).toBe(92);
+      expect(data.validation.ok).toBe(true);
+      expect(JSON.stringify(data.sections)).not.toContain("Rewritten prompt");
+
+      // The live row really is different — proving the snapshot is doing the work.
+      const live = await prisma.assessmentQuestion.findFirstOrThrow({
+        where: { key: "constitution_written" }
+      });
+      expect(live.weight).toBe(50);
+    });
+
     it("stamps the contract version onto the stored assessment", async () => {
       const stored = await prisma.groupVisitAssessment.findUniqueOrThrow({
         where: { visitId }

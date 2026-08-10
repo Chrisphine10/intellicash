@@ -238,6 +238,7 @@ assessmentsRouter.get(
       const template = await prisma.assessmentTemplate.findUnique({
         where: { id: req.params.templateId as string },
         include: {
+          snapshot: true,
           sections: {
             orderBy: { position: "asc" },
             include: { questions: { orderBy: { position: "asc" } } }
@@ -246,6 +247,35 @@ assessmentsRouter.get(
       });
       if (!template) {
         throw new ApiHttpError(404, "TEMPLATE_NOT_FOUND", "That assessment template does not exist.");
+      }
+
+      // A published version is served from its FROZEN SNAPSHOT, never from the
+      // live rows. They should be identical — the API refuses to edit a
+      // published template — but the snapshot is what agents actually score
+      // against, so it is what a reviewer must be shown. Reading the live rows
+      // here would mean the admin console could display a form that differs
+      // from every assessment made under it, which is precisely the failure
+      // the snapshot exists to prevent.
+      if (template.status !== TEMPLATE_STATUS.draft && template.snapshot) {
+        const frozen = JSON.parse(template.snapshot.snapshotJson);
+        ok(res, {
+          id: template.id,
+          familyKey: template.familyKey,
+          version: template.version,
+          status: template.status,
+          maxPoints: template.snapshot.maxPoints,
+          publishedAt: template.publishedAt,
+          checksum: template.snapshot.checksum,
+          title: frozen.title,
+          description: frozen.description,
+          sections: frozen.sections,
+          bands: frozen.bands,
+          // Already published, so there is nothing to validate. Reporting
+          // issues against a locked version reads as "this is broken" when it
+          // is simply finished.
+          validation: { ok: true, maxPoints: template.snapshot.maxPoints }
+        });
+        return;
       }
 
       const draft = draftFromTemplate(template as never);

@@ -112,6 +112,16 @@ export const navigationItems: NavigationItem[] = [
     priority: { default: 55, IWL_ADMIN: 55, PARTNER_OFFICER: 45 }
   },
   {
+    label: "Scorecard",
+    href: "/dashboard/assessment-templates",
+    icon: ClipboardList,
+    // Authoring only. Agents fill the form in and must not be able to change
+    // what it asks or how it scores, so this is not on their nav at all.
+    roles: ["IWL_ADMIN"],
+    section: "work",
+    priority: { default: 56, IWL_ADMIN: 56 }
+  },
+  {
     label: "VA / CBT",
     href: "/dashboard/agents",
     icon: ShieldCheck,

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ASSESSMENT_CHOICES,
@@ -409,6 +411,53 @@ describe("reproducibility", () => {
       "committee"
     ]);
     expect(sectionOf(snapshot, "governance").questions.map((q) => q.position)).toEqual([0, 1]);
+  });
+});
+
+describe("golden fixture (shared with the Flutter app)", () => {
+  /**
+   * A byte-identical copy of this file lives at
+   * `intellicash_mobile/test/fixtures/visit_assessment_golden.json` and is
+   * asserted by the Dart mirror of this contract. Two implementations of the
+   * same rules will drift silently otherwise — the phone would show an agent a
+   * band the server disagrees with, and neither side would know.
+   *
+   * If this fails, do not edit the expectation. Work out which engine moved.
+   * The server is authoritative; the phone's figure is provisional until sync.
+   */
+  const fixture = JSON.parse(
+    readFileSync(join(__dirname, "fixtures", "visit-assessment-golden.json"), "utf8")
+  ) as {
+    snapshot: AssessmentTemplateSnapshot;
+    answers: AssessmentAnswerInput[];
+    expected: Record<string, unknown>;
+  };
+
+  it("scores the fixture exactly as recorded", () => {
+    const score = scoreAssessment(fixture.snapshot, fixture.answers);
+
+    expect(score.scoringContractVersion).toBe(fixture.expected.scoringContractVersion);
+    expect(score.earnedPoints).toBe(fixture.expected.earnedPoints);
+    expect(score.applicablePoints).toBe(fixture.expected.applicablePoints);
+    expect(score.maxPoints).toBe(fixture.expected.maxPoints);
+    expect(score.scaledPoints).toBe(fixture.expected.scaledPoints);
+    expect(score.percentage).toBe(fixture.expected.percentage);
+    expect(score.bandKey).toBe(fixture.expected.bandKey);
+    expect(score.complete).toBe(fixture.expected.complete);
+    expect(score.unansweredKeys).toEqual(fixture.expected.unansweredKeys);
+    expect(score.unknownAnswerKeys).toEqual(fixture.expected.unknownAnswerKeys);
+  });
+
+  it("agrees section by section", () => {
+    const score = scoreAssessment(fixture.snapshot, fixture.answers);
+    expect(
+      score.sections.map((section) => ({
+        sectionKey: section.sectionKey,
+        earnedPoints: section.earnedPoints,
+        applicablePoints: section.applicablePoints,
+        percentage: section.percentage
+      }))
+    ).toEqual(fixture.expected.sections);
   });
 });
 
