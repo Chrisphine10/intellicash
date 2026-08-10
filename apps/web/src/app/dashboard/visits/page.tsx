@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { CalendarDays, CheckCircle2, MapPinned, ShieldCheck } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { DataTable } from "../../../components/dashboard/data-table";
@@ -175,7 +176,12 @@ export default function VisitsPage() {
               value: (row) => row.group?.name ?? "—",
               cell: (row) => (
                 <div className="record-card-meta">
-                  <strong>{row.group?.name ?? "Unknown group"}</strong>
+                  {/* The way into the visit, and therefore into its evidence.
+                      Without this the photographs an agent collects are
+                      reachable only through the API. */}
+                  <Link href={`/dashboard/visits/${row.id}`}>
+                    <strong>{row.group?.name ?? "Unknown group"}</strong>
+                  </Link>
                   <span className="eyebrow">
                     {[row.group?.code, row.group?.county].filter(Boolean).join(" · ")}
                   </span>

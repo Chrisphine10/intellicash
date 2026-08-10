@@ -8167,3 +8167,35 @@ html[data-theme="dark"] .pwa-splash-screen {
   max-width: 100%;
 }
 
+/* Visit evidence, grouped by the question each photo answers. */
+.evidence-grid {
+  display: grid;
+  /* auto-fill rather than a fixed column count: these pages are read on
+     laptops and on a phone in the field, and a fixed grid overflows the
+     narrow one. */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+
+.evidence-item {
+  margin: 0;
+  min-width: 0;
+}
+
+.evidence-item img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: block;
+}
+
+.evidence-item figcaption {
+  margin-top: 4px;
+  /* Evidence captions name a question key, which can be long. Wrapping beats
+     truncating: the claim the photo answers is the point of showing it. */
+  overflow-wrap: anywhere;
+}

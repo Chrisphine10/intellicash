@@ -25,3 +25,9 @@ apps/android/local.properties
 *.apk
 *.aab
 .archive-free-dashboard-template/
+
+# Throwaway databases created by `prisma migrate diff --shadow-database-url`.
+# They are rebuilt on demand and have twice now turned up in `git status`
+# alongside real work.
+shadow-*.db
+apps/api/shadow-*.db
