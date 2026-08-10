@@ -53,11 +53,50 @@ interface AssessmentSummary {
   templateVersion: number;
 }
 
+interface Mentorship {
+  sessions: {
+    topicKey: string;
+    topicTitle: string;
+    notes: string | null;
+    durationMinutes: number | null;
+  }[];
+  ratings: {
+    dimensionKey: string;
+    score: number;
+    ratedByRole: string;
+    comment: string | null;
+  }[];
+  /** Null when the group was never asked — which is not the same as zero. */
+  averageGroupRating: number | null;
+  ratedByGroup: boolean;
+}
+
+interface ActionItem {
+  id: string;
+  title: string;
+  detail: string | null;
+  owner: string | null;
+  status: string;
+  closingNote: string | null;
+  /** Lateness is computed by the server on every read, never stored. */
+  state: {
+    state: string;
+    label: string;
+    daysOverdue: number;
+    daysUntilDue: number | null;
+    dueDate: string | null;
+    open: boolean;
+  };
+}
+
 export default function VisitDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [visit, setVisit] = useState<Visit | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [assessment, setAssessment] = useState<AssessmentSummary | null>(null);
+  const [mentorship, setMentorship] = useState<Mentorship | null>(null);
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [busyItem, setBusyItem] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,12 +116,46 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
       } catch (e) {
         if (!(e instanceof ApiClientError && e.status === 404)) throw e;
       }
+
+      setMentorship(await apiFetch<Mentorship>(`/visits/${id}/mentorship`));
+      await loadActionItems(visitData.groupId);
+    }
+
+    async function loadActionItems(groupId: string) {
+      // Fetched for the GROUP, not the visit: an item raised here may be
+      // closed at a later one, and the point of the plan is that it outlives
+      // the occasion it was agreed at.
+      const data = await apiFetch<{ items: ActionItem[] }>(
+        `/groups/${groupId}/action-items`
+      );
+      setActionItems(data.items ?? []);
     }
 
     load()
       .catch((e) => setError(e instanceof Error ? e.message : "Unable to load this visit."))
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function closeItem(itemId: string) {
+    if (!visit) return;
+    setBusyItem(itemId);
+    try {
+      await apiFetch(`/action-items/${itemId}`, {
+        method: "PATCH",
+        // Recorded against THIS visit, so the loop is traceable both ways:
+        // where it was agreed, and where it was closed.
+        body: JSON.stringify({ status: "DONE", closedAtVisitId: id })
+      });
+      const data = await apiFetch<{ items: ActionItem[] }>(
+        `/groups/${visit.groupId}/action-items`
+      );
+      setActionItems(data.items ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not close that item.");
+    } finally {
+      setBusyItem(null);
+    }
+  }
 
   if (loading) return <div className="loading-panel">Loading visit…</div>;
   if (error) return <div className="dashboard-notice error">{error}</div>;
@@ -146,6 +219,144 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
         </article>
       ) : null}
 
+      {mentorship && (mentorship.sessions.length > 0 || mentorship.ratings.length > 0) ? (
+        <article className="data-card">
+          <h3>Mentorship</h3>
+          <p className="metric-value">
+            {mentorship.averageGroupRating === null
+              ? "Not rated"
+              : `${mentorship.averageGroupRating} / 5`}
+          </p>
+          <p className="eyebrow">
+            {mentorship.ratedByGroup
+              ? "Scored by the group's representative. An agent's own score of their own session is recorded but never counted here."
+              : "The group was not asked to score this session. That is different from a low score, and is why the figure above is blank rather than zero."}
+          </p>
+
+          {mentorship.sessions.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Topic</th>
+                  <th>What was advised</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mentorship.sessions.map((session) => (
+                  <tr key={session.topicKey}>
+                    {/* The title is the one snapshotted at the visit, so this
+                        still reads correctly after a topic is retired. */}
+                    <td>{session.topicTitle}</td>
+                    <td>{session.notes ?? <span className="eyebrow">No note</span>}</td>
+                    <td>
+                      {session.durationMinutes === null
+                        ? "—"
+                        : `${session.durationMinutes} min`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+
+          {mentorship.ratings.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Question</th>
+                  <th>Score</th>
+                  <th>Answered by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mentorship.ratings.map((rating) => (
+                  <tr key={rating.dimensionKey}>
+                    <td>{humanizeEnum(rating.dimensionKey)}</td>
+                    <td>{rating.score} / 5</td>
+                    <td>
+                      {rating.ratedByRole === "GROUP_REPRESENTATIVE" ? (
+                        "The group"
+                      ) : (
+                        <span className="pill gold">The agent</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </article>
+      ) : null}
+
+      <article className="data-card">
+        <h3>Action plan</h3>
+        {actionItems.length === 0 ? (
+          <p className="eyebrow">Nothing was agreed for this group.</p>
+        ) : (
+          <>
+            <p className="eyebrow">
+              Everything outstanding for this group, not only what was raised at this
+              visit — an item agreed here is usually closed at the next one.
+              &ldquo;Overdue&rdquo; is worked out from the due date on every read, so it
+              cannot drift out of step with the calendar.
+            </p>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Owner</th>
+                  <th>Due</th>
+                  <th>State</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {actionItems.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      {item.title}
+                      {item.detail ? (
+                        <div className="eyebrow">{item.detail}</div>
+                      ) : null}
+                    </td>
+                    <td>{item.owner ?? "—"}</td>
+                    <td>
+                      {item.state.dueDate
+                        ? new Date(item.state.dueDate).toLocaleDateString()
+                        : "—"}
+                      {item.state.daysOverdue > 0 ? (
+                        <div className="eyebrow">
+                          {item.state.daysOverdue} days late
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <span className={actionPill(item.state.state)}>
+                        {item.state.label}
+                      </span>
+                    </td>
+                    <td>
+                      {item.state.open ? (
+                        <button
+                          className="button subtle"
+                          disabled={busyItem === item.id}
+                          onClick={() => closeItem(item.id)}
+                        >
+                          Mark done
+                        </button>
+                      ) : (
+                        <span className="eyebrow">{item.closingNote ?? "Closed"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </article>
+
       <article className="data-card">
         <h3>Evidence</h3>
         {attachments.length === 0 ? (
@@ -206,4 +417,16 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
 function formatDistance(metres: number) {
   if (metres >= 1000) return `${(metres / 1000).toFixed(1)} km`;
   return `${Math.round(metres)} m`;
+}
+
+/**
+ * Maps the server's derived state onto the house pill variants.
+ *
+ * Keyed on the derived state rather than the stored status, so the colour and
+ * the label can never disagree.
+ */
+function actionPill(state: string) {
+  if (state === "OVERDUE") return "pill red";
+  if (state === "DUE_SOON") return "pill gold";
+  return "pill";
 }
