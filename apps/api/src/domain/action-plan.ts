@@ -94,7 +94,11 @@ export function actionItemState(
     status: facts.status,
     dueDate,
     daysUntilDue,
-    daysOverdue: overdue ? Math.abs(daysUntilDue) : 0,
+    // Whole days ELAPSED since the date, not the absolute value of a floored
+    // negative. Something due 12 days and 14 hours ago has been overdue for 12
+    // days; `Math.abs(Math.floor(-12.58))` reported 13, which is a number an
+    // agent reads off a screen and repeats to a group.
+    daysOverdue: overdue ? Math.floor((now.getTime() - dueDate!.getTime()) / MS_PER_DAY) : 0,
     open: true,
     label: LABELS[state]
   };

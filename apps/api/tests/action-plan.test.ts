@@ -33,6 +33,30 @@ describe("actionItemState", () => {
     expect(state.status).toBe("OPEN");
   });
 
+  it("counts whole days elapsed, not a floored negative", () => {
+    // Due 12 days and 14 hours ago. It has been overdue for TWELVE days.
+    // `Math.abs(Math.floor(-12.58))` said 13 — a number an agent reads off a
+    // screen and repeats to a group, so being out by one is not cosmetic.
+    const state = actionItemState(
+      { status: "OPEN", dueDate: new Date(now.getTime() - 12.58 * DAY) },
+      now
+    );
+
+    expect(state.state).toBe("OVERDUE");
+    expect(state.daysOverdue).toBe(12);
+  });
+
+  it("reports zero days overdue within the first day past the date", () => {
+    // Overdue, but not yet by a whole day. Better than claiming "1 day".
+    const state = actionItemState(
+      { status: "OPEN", dueDate: new Date(now.getTime() - 0.4 * DAY) },
+      now
+    );
+
+    expect(state.state).toBe("OVERDUE");
+    expect(state.daysOverdue).toBe(0);
+  });
+
   it("warns before an item slips rather than only after", () => {
     const state = actionItemState({ status: "OPEN", dueDate: at(DUE_SOON_DAYS - 1) }, now);
 
