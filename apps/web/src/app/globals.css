@@ -5309,6 +5309,40 @@ tr:last-child td {
   overflow: hidden;
 }
 
+/*
+ * A card clips; a dialog scrolls.
+ *
+ * `.app-shell .data-card { overflow: hidden }` earlier in this file is right
+ * for a card sitting in a page — it stops a wide table bleeding past the
+ * rounded corner. But every dialog in the console is
+ * `class="data-card credential-modal"`, so that rule ALSO won on specificity
+ * (0,2,0 against 0,1,0) over `.credential-modal { overflow: auto }`. The
+ * result: a form taller than the viewport was cut off at the fold with no way
+ * to reach the rest of it, and Save — which lives at the bottom of every one of
+ * these forms — could not be clicked. Creating a group was impossible.
+ *
+ * Re-asserted here at equal specificity but later in the cascade, so it applies
+ * to dialogs and leaves ordinary cards clipping as before.
+ */
+.app-shell .credential-modal {
+  overflow: auto;
+}
+
+/*
+ * The three dialogs that scroll a CHILD instead.
+ *
+ * They lay themselves out as a grid — fixed header, scrolling body, fixed
+ * action bar — so the outer element must keep clipping or the header scrolls
+ * away and two scrollbars appear. Listed here, after the rule above, rather
+ * than by escalating each one's specificity: the decision about which dialogs
+ * scroll themselves belongs in one place.
+ */
+.app-shell .group-editor-modal,
+.app-shell .meeting-entry-modal,
+.app-shell .meeting-detail-modal {
+  overflow: hidden;
+}
+
 .app-shell .group-editor-modal > header {
   position: relative;
   z-index: 2;
