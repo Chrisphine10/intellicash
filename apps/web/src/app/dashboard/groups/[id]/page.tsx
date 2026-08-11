@@ -300,7 +300,7 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
       {isEditOpen && canEditGroup ? (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Edit group">
           <button className="modal-backdrop" onClick={closeGroupModal} type="button" aria-label="Close group editor" />
-          <section className="data-card credential-modal">
+          <section className="data-card credential-modal group-editor-modal">
             <header>
               <div>
                 <h3>Edit Group</h3>
@@ -310,8 +310,9 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
                 <X size={18} />
               </button>
             </header>
-            <form className="credential-form" onSubmit={submitGroup}>
-              <div className="credential-grid">
+            <form className="credential-form group-editor-form" onSubmit={submitGroup}>
+              <div className="group-form-scroll">
+                <div className="credential-grid">
                 <label className="credential-field">
                   <span>Group name</span>
                   <input
@@ -491,10 +492,11 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
                     value={form.cycleNumber}
                   />
                 </label>
+                </div>
+                {message ? (
+                  <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
+                ) : null}
               </div>
-              {message ? (
-                <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
-              ) : null}
               <div className="credential-actions">
                 <button className="button" disabled={saving} type="submit">
                   <Pencil size={16} />
