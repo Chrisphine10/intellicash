@@ -578,6 +578,7 @@ model Group {
   attachments              Attachment[]
   documents                GroupDocument[]
   actionItems              VisitActionItem[]
+  businessProfile          GroupBusinessProfile?
 }
 
 /// The 4-digit PIN a group uses to attest that a field visit really happened.
@@ -1086,6 +1087,66 @@ model VisitActionItem {
 
   @@index([groupId, status])
   @@index([status, dueDate])
+}
+
+/// The group's collective enterprise, as it stands today.
+///
+/// One current row per group, plus a snapshot per visit in
+/// GroupBusinessProfileVersion — so "did revenue grow between visits" is a
+/// query rather than an archaeology exercise. Keeping only the current row
+/// would make the question unanswerable the moment it is updated.
+///
+/// Member-level enterprise profiles are deliberately NOT modelled. Surveying
+/// every member feeds no named decision, and the group profile carries the
+/// reporting value; adding it later is additive if a decision is ever named.
+model GroupBusinessProfile {
+  id      String @id @default(cuid())
+  groupId String @unique
+
+  /// What the group does together, e.g. poultry, cereal aggregation.
+  enterpriseType String?
+  description    String?
+
+  /// Money in CENTS, like every other amount in this schema. Storing shillings
+  /// as a float is how a ledger ends up out by a rounding error.
+  monthlyRevenueCents Int?
+  monthlyCostsCents   Int?
+
+  employsPeople Int?
+  startedOn     DateTime?
+
+  /// Free text: "no reliable market", "needs cold storage".
+  mainChallenge String?
+  supportNeeded String?
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  group    Group                         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  versions GroupBusinessProfileVersion[]
+}
+
+/// What the profile said at one visit. Append-only.
+model GroupBusinessProfileVersion {
+  id        String @id @default(cuid())
+  profileId String
+  groupId   String
+  visitId   String?
+
+  enterpriseType      String?
+  description         String?
+  monthlyRevenueCents Int?
+  monthlyCostsCents   Int?
+  employsPeople       Int?
+  mainChallenge       String?
+  supportNeeded       String?
+
+  recordedAt DateTime @default(now())
+
+  profile GroupBusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, visitId])
+  @@index([groupId, recordedAt])
 }
 
 model Member {
