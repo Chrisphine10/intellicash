@@ -3,7 +3,7 @@
 import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowLeft, Banknote, FileText, HeartHandshake, Pencil, Settings, UserCog, UsersRound, Vote, X, ShieldCheck} from "@/lib/theme-icons";
+import { Activity, ArrowLeft, Banknote, Building2, ClipboardList, FileText, HeartHandshake, Pencil, Settings, TrendingUp, UserCog, UsersRound, Vote, X, ShieldCheck} from "@/lib/theme-icons";
 import { apiFetch, formatKes, humanizeEnum } from "../../../../lib/api";
 import { DataTable } from "../../../../components/dashboard/data-table";
 import type { AgentRow, LedgerEntry, MeetingRow, Member, ProgrammeRow, User, VoteRow } from "../../../../components/dashboard/types";
@@ -259,10 +259,22 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/payment-providers`}>
                 <Banknote size={16} />
                 Payment Providers
+              </Link>
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/visit-pin`}>
                 <ShieldCheck size={16} />
                 Visit PIN
               </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/documents`}>
+                <ClipboardList size={16} />
+                Documents
+              </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/business`}>
+                <Building2 size={16} />
+                Business
+              </Link>
+              <Link className="button secondary" href={`/dashboard/groups/${group.id}/visit-trend`}>
+                <TrendingUp size={16} />
+                Visit Trend
               </Link>
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/policy`}>
                 <Settings size={16} />

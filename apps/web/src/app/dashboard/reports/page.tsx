@@ -1975,6 +1975,13 @@ export default function ReportsPage() {
             <em>Per group, member and agent</em>
           </span>
         </Link>
+        <Link className="dashboard-module-link" href="/dashboard/reports/visits">
+          <BarChart3 size={18} />
+          <span>
+            <strong>Field Visits</strong>
+            <em>Coverage, scores, overdue actions</em>
+          </span>
+        </Link>
       </div>
 
       <section className="stat-grid">

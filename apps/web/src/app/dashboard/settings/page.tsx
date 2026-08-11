@@ -124,6 +124,14 @@ export default function SettingsPage() {
             <h3>Routes</h3>
           </header>
           <div className="list">
+            <Link className="list-row route-row" href="/dashboard/settings/coaching">
+              <strong>Coaching topics</strong>
+              <span>What agents record, and what groups rate it against</span>
+            </Link>
+            <Link className="list-row route-row" href="/dashboard/reports/visits">
+              <strong>Field visit coverage</strong>
+              <span>/dashboard/reports/visits</span>
+            </Link>
             <Link className="list-row route-row" href="/dashboard/groups">
               <strong>Groups</strong>
               <span>/dashboard/groups</span>
