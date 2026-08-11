@@ -23,7 +23,11 @@ const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
  */
 const permissionBackfills: readonly (readonly Permission[])[] = [
   ["api-keys:read", "api-keys:write"],
-  ["visits:read", "visits:write", "visits:amend", "group-pin:write"],
+  // `group-pin:write` was in this batch until the visit PIN was removed. It
+  // stays out rather than being deleted from history: the batch is keyed on
+  // whether any of its permissions is already present, so shortening it does
+  // not re-deliver it to a deployment that already took it.
+  ["visits:read", "visits:write", "visits:amend"],
   ["assessment-templates:write"],
   ["documents:read", "documents:write"]
 ];

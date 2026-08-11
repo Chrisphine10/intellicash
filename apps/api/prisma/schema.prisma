@@ -46,7 +46,6 @@ model User {
   externalLoanApplications ExternalLoanApplication[] @relation("ExternalLoanRequester")
   groupJoinRequests        GroupJoinRequest[]
   memberships              UserMembership[]
-  visitPinsSet             GroupVisitPin[]           @relation("GroupVisitPinSetter")
   visitsSubmitted          GroupVisit[]              @relation("GroupVisitSubmitter")
   visitsAmended            GroupVisitRevision[]      @relation("GroupVisitAmender")
   templatesPublished       AssessmentTemplate[]      @relation("AssessmentTemplatePublisher")
@@ -573,43 +572,11 @@ model Group {
   welfareExpenses          WelfareExpense[]
   groupPolicies            GroupPolicy[]
   memberRoleAssignments    MemberRoleAssignment[]
-  visitPin                 GroupVisitPin?
   visits                   GroupVisit[]
   attachments              Attachment[]
   documents                GroupDocument[]
   actionItems              VisitActionItem[]
   businessProfile          GroupBusinessProfile?
-}
-
-/// The 4-digit PIN a group uses to attest that a field visit really happened.
-///
-/// Its own table, not a column on Group, for two reasons. The secret then
-/// cannot leak through any of the several places a Group is serialized — the
-/// agent's caseload list among them, which is read by the very people the PIN
-/// is meant to keep honest. And lockout state belongs with the secret rather
-/// than widening the group row.
-///
-/// Deliberately separate from `Member.pinHash` (6 digits, identifies one
-/// person, unlocks a meeting) and from the 3-key meeting unlock. This one
-/// identifies the *place and occasion*: it says a representative of this group
-/// was present when the agent opened the visit.
-model GroupVisitPin {
-  id           String    @id @default(cuid())
-  groupId      String    @unique
-  /// bcrypt, same cost as member PINs. Never returned by any endpoint.
-  pinHash      String
-  setByUserId  String?
-  setAt        DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  /// Consecutive failures since the last success. Reset on success.
-  failedCount  Int       @default(0)
-  /// Set when failedCount crosses the threshold; verification refuses until
-  /// it passes. Stored rather than derived so a restart cannot clear it.
-  lockedUntil  DateTime?
-  lastFailedAt DateTime?
-
-  group  Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  setBy  User? @relation("GroupVisitPinSetter", fields: [setByUserId], references: [id])
 }
 
 /// One field visit: one agent, one group, one occasion.

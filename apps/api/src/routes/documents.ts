@@ -20,7 +20,7 @@ export const documentsRouter = Router();
  * certificate can say it exists and photograph it. Whether the copy on file is
  * accepted as genuine is a back-office judgement, and letting the person who
  * collected the evidence also bless it removes the only check on it — the same
- * reasoning that keeps the visit PIN out of an agent's hands.
+ * separation the whole register depends on.
  */
 
 async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: string) {

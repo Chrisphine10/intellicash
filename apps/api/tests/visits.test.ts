@@ -4,7 +4,6 @@ import { demoAccounts, demoPassword } from "@intellicash/shared";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { seedDatabase } from "../prisma/seed";
-import { PIN_LOCKOUT_THRESHOLD } from "../src/services/visit-service";
 
 const app = createApp();
 
@@ -82,126 +81,7 @@ describe("group visits", () => {
       data: { gpsLatitude: -0.5389, gpsLongitude: 37.4575, gpsRadiusMeters: 50 }
     });
     await prisma.groupVisit.deleteMany({});
-    await prisma.groupVisitPin.deleteMany({});
   }, 120000);
-
-  describe("the visit PIN belongs to the group, not the visitor", () => {
-    it("lets the group's own account set it", async () => {
-      await request(app)
-        .put(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", adminCookies)
-        .send({ pin: "8317" })
-        .expect(200);
-
-      const status = await request(app)
-        .get(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", adminCookies)
-        .expect(200);
-      expect(status.body.data.configured).toBe(true);
-    });
-
-    it("refuses to let the visiting agent set it", async () => {
-      // The one rule that makes the attestation mean anything: an agent who
-      // could set the PIN could confirm a visit they never made.
-      const response = await request(app)
-        .put(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", agentCookies)
-        .send({ pin: "4821" })
-        .expect(403);
-      expect(response.body.error.code).toBe("AGENT_CANNOT_SET_VISIT_PIN");
-    });
-
-    it("never returns the PIN or its hash", async () => {
-      const response = await request(app)
-        .get(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", agentCookies)
-        .expect(200);
-      const body = JSON.stringify(response.body);
-      expect(body).not.toContain("8317");
-      expect(body).not.toContain("pinHash");
-      expect(body).not.toContain("$2");
-    });
-
-    it("rejects a guessable PIN", async () => {
-      // A group talked through this on the phone reaches for 1234 every time.
-      const response = await request(app)
-        .put(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", adminCookies)
-        .send({ pin: "1234" })
-        .expect(400);
-      expect(response.body.error.code).toBe("GUESSABLE_VISIT_PIN");
-    });
-
-    it("rejects anything that is not four digits", async () => {
-      for (const pin of ["123", "12345", "abcd", ""]) {
-        await request(app)
-          .put(`/api/v1/groups/${agentGroupId}/visit-pin`)
-          .set("Cookie", adminCookies)
-          .send({ pin })
-          .expect(400);
-      }
-    });
-  });
-
-  describe("verifying the PIN", () => {
-    it("accepts the right PIN", async () => {
-      const response = await request(app)
-        .post(`/api/v1/groups/${agentGroupId}/visit-pin/verify`)
-        .set("Cookie", agentCookies)
-        .send({ pin: "8317" })
-        .expect(200);
-      expect(response.body.data.verified).toBe(true);
-    });
-
-    it("locks after repeated wrong attempts, then unlocks on a new PIN", async () => {
-      // Four digits is ten thousand combinations — walkable unattended without
-      // a lockout. The counter lives in the database so a restart cannot clear
-      // it.
-      for (let attempt = 0; attempt < PIN_LOCKOUT_THRESHOLD - 1; attempt += 1) {
-        await request(app)
-          .post(`/api/v1/groups/${agentGroupId}/visit-pin/verify`)
-          .set("Cookie", agentCookies)
-          .send({ pin: "0001" })
-          .expect(401);
-      }
-
-      const locked = await request(app)
-        .post(`/api/v1/groups/${agentGroupId}/visit-pin/verify`)
-        .set("Cookie", agentCookies)
-        .send({ pin: "0001" })
-        .expect(423);
-      expect(locked.body.error.code).toBe("VISIT_PIN_LOCKED");
-
-      // Even the right PIN is refused while locked.
-      await request(app)
-        .post(`/api/v1/groups/${agentGroupId}/visit-pin/verify`)
-        .set("Cookie", agentCookies)
-        .send({ pin: "8317" })
-        .expect(423);
-
-      // Setting a new PIN clears it: the group has demonstrably regained
-      // control, so continuing to punish the earlier guessing helps nobody.
-      await request(app)
-        .put(`/api/v1/groups/${agentGroupId}/visit-pin`)
-        .set("Cookie", adminCookies)
-        .send({ pin: "8317" })
-        .expect(200);
-      await request(app)
-        .post(`/api/v1/groups/${agentGroupId}/visit-pin/verify`)
-        .set("Cookie", agentCookies)
-        .send({ pin: "8317" })
-        .expect(200);
-    });
-
-    it("says so when no PIN has been set rather than just failing", async () => {
-      const response = await request(app)
-        .post(`/api/v1/groups/${otherGroupId}/visit-pin/verify`)
-        .set("Cookie", adminCookies)
-        .send({ pin: "8317" })
-        .expect(409);
-      expect(response.body.error.code).toBe("VISIT_PIN_NOT_SET");
-    });
-  });
 
   describe("submitting a visit is idempotent", () => {
     const clientRequestId = "visit-11111111-2222-3333-4444-555555555555";

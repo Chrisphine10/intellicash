@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -6,158 +5,20 @@ import { adjudicateVisitLocation } from "../domain/visit-location";
 import { appendAuditEvent } from "./audit-service";
 
 /**
- * Group visit PINs and visit submission.
+ * Visit submission.
  *
  * The rules that matter live here rather than in the route handler so the
- * route stays a thin translation of HTTP to domain, and so idempotency and
- * lockout can be tested without going through Express.
- */
-
-/** Same cost as member PINs — see member-pin-service.ts. */
-const PIN_COST = 12;
-
-/** Consecutive failures before the group's PIN locks. */
-export const PIN_LOCKOUT_THRESHOLD = 5;
-
-/** How long a lockout lasts. Long enough to defeat a script, short enough that
- * a genuine visit is not abandoned. */
-export const PIN_LOCKOUT_MINUTES = 15;
-
-export const VISIT_PIN_PATTERN = /^\d{4}$/;
-
-export function isValidVisitPin(pin: string) {
-  return VISIT_PIN_PATTERN.test(pin);
-}
-
-/**
- * PINs a keypad produces but nobody should be able to set.
+ * route stays a thin translation of HTTP to domain, and so idempotency can be
+ * tested without going through Express.
  *
- * A group talked through setting a PIN over the phone will otherwise reach for
- * 1234 every time, and the PIN is the only thing standing between a real visit
- * and one typed up at home.
+ * A visit used to open with a 4-digit PIN held by the group — their attestation
+ * that the agent was standing in front of them. That was removed on the owner's
+ * instruction; PINs in this system belong to meetings. What remains as evidence
+ * is the agent's authenticated session, the server-adjudicated GPS fix, the
+ * device id and the timestamp. All four are the agent's own, so they establish
+ * where and when, not that the group agreed — worth knowing when reading a
+ * disputed visit.
  */
-const FORBIDDEN_PINS = new Set([
-  "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
-  "1234", "2345", "3456", "4567", "5678", "6789", "0123", "9876", "4321"
-]);
-
-export function isGuessableVisitPin(pin: string) {
-  return FORBIDDEN_PINS.has(pin);
-}
-
-export async function setGroupVisitPin(options: {
-  groupId: string;
-  pin: string;
-  actorUserId?: string | null;
-}) {
-  const { groupId, pin, actorUserId } = options;
-
-  if (!isValidVisitPin(pin)) {
-    throw new ApiHttpError(400, "INVALID_VISIT_PIN", "The visit PIN must be exactly 4 digits.");
-  }
-  if (isGuessableVisitPin(pin)) {
-    throw new ApiHttpError(
-      400,
-      "GUESSABLE_VISIT_PIN",
-      "Choose a less obvious PIN — not repeated digits or a simple run."
-    );
-  }
-
-  const pinHash = await bcrypt.hash(pin, PIN_COST);
-  const row = await prisma.groupVisitPin.upsert({
-    where: { groupId },
-    create: { groupId, pinHash, setByUserId: actorUserId ?? null },
-    // Setting a new PIN clears any lockout: the group has demonstrably regained
-    // control of it, so continuing to punish the previous guessing is pointless.
-    update: {
-      pinHash,
-      setByUserId: actorUserId ?? null,
-      setAt: new Date(),
-      failedCount: 0,
-      lockedUntil: null,
-      lastFailedAt: null
-    }
-  });
-
-  await appendAuditEvent({
-    actorUserId: actorUserId ?? undefined,
-    entityType: "GROUP",
-    entityId: groupId,
-    type: "GROUP_VISIT_PIN_SET",
-    // Never the PIN, and never the hash.
-    payload: { groupId, setAt: row.setAt.toISOString() }
-  });
-
-  return { groupId, setAt: row.setAt.toISOString(), configured: true };
-}
-
-export type VisitPinVerification =
-  | { ok: true }
-  | { ok: false; reason: "NOT_SET" | "LOCKED"; retryAfterSeconds?: number }
-  | { ok: false; reason: "WRONG"; attemptsRemaining: number };
-
-/**
- * Checks a group's visit PIN and maintains the lockout counter.
- *
- * The counter lives in the database rather than in memory so a restart — or a
- * second instance — cannot be used to reset it.
- */
-export async function verifyGroupVisitPin(options: {
-  groupId: string;
-  pin: string;
-  actorUserId?: string | null;
-  now?: Date;
-}): Promise<VisitPinVerification> {
-  const { groupId, pin, actorUserId } = options;
-  const now = options.now ?? new Date();
-
-  const row = await prisma.groupVisitPin.findUnique({ where: { groupId } });
-  if (!row) return { ok: false, reason: "NOT_SET" };
-
-  if (row.lockedUntil && row.lockedUntil > now) {
-    return {
-      ok: false,
-      reason: "LOCKED",
-      retryAfterSeconds: Math.ceil((row.lockedUntil.getTime() - now.getTime()) / 1000)
-    };
-  }
-
-  const matches = isValidVisitPin(pin) && (await bcrypt.compare(pin, row.pinHash));
-
-  if (matches) {
-    if (row.failedCount > 0 || row.lockedUntil) {
-      await prisma.groupVisitPin.update({
-        where: { groupId },
-        data: { failedCount: 0, lockedUntil: null }
-      });
-    }
-    return { ok: true };
-  }
-
-  const failedCount = row.failedCount + 1;
-  const locks = failedCount >= PIN_LOCKOUT_THRESHOLD;
-  await prisma.groupVisitPin.update({
-    where: { groupId },
-    data: {
-      failedCount: locks ? 0 : failedCount,
-      lastFailedAt: now,
-      lockedUntil: locks ? new Date(now.getTime() + PIN_LOCKOUT_MINUTES * 60_000) : null
-    }
-  });
-
-  await appendAuditEvent({
-    actorUserId: actorUserId ?? undefined,
-    entityType: "GROUP",
-    entityId: groupId,
-    type: "GROUP_VISIT_PIN_VERIFY_FAILED",
-    payload: { groupId, failedCount, locked: locks }
-  });
-
-  if (locks) {
-    return { ok: false, reason: "LOCKED", retryAfterSeconds: PIN_LOCKOUT_MINUTES * 60 };
-  }
-  return { ok: false, reason: "WRONG", attemptsRemaining: PIN_LOCKOUT_THRESHOLD - failedCount };
-}
 
 export type SubmitVisitInput = {
   groupId: string;
@@ -344,7 +205,7 @@ export async function amendGroupVisit(options: {
   return updated;
 }
 
-/** The wire shape. Note the absence of anything derived from the PIN. */
+/** The wire shape. */
 export function serializeVisit(visit: {
   id: string;
   groupId: string;

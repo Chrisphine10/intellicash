@@ -206,19 +206,15 @@ export default function VisitsReportPage() {
               <tr>
                 <th>Group</th>
                 <th>Code</th>
-                <th />
               </tr>
             </thead>
             <tbody>
               {data.neverVisited.map((group) => (
                 <tr key={group.id}>
-                  <td>{group.name}</td>
-                  <td>{group.code}</td>
                   <td>
-                    <Link className="button subtle" href={`/dashboard/groups/${group.id}/visit-pin`}>
-                      Set visit PIN
-                    </Link>
+                    <Link href={`/dashboard/groups/${group.id}`}>{group.name}</Link>
                   </td>
+                  <td>{group.code}</td>
                 </tr>
               ))}
             </tbody>

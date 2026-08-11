@@ -104,27 +104,3 @@ export const joinRequestRateLimit = rateLimit(
   })
 );
 
-/**
- * Guessing a group's 4-digit visit PIN.
- *
- * Four digits is ten thousand combinations — trivial to walk through unattended,
- * and the whole point of the PIN is that a visit cannot be filed without someone
- * from the group present. There is a per-group lockout in the database as well;
- * this is the cheap layer that stops the attempts before they reach it.
- *
- * Keyed on the group being tried, not the agent: an agent legitimately visits
- * several groups in a day, while a single group being hammered is the abuse.
- */
-export const visitPinRateLimit = rateLimit(
-  baseOptions({
-    windowMs: 15 * 60 * 1000,
-    limit: 12,
-    keyGenerator: (req) => `visit-pin:${req.params.groupId ?? req.params.id ?? "unknown"}`,
-    message: {
-      error: {
-        code: "TOO_MANY_REQUESTS",
-        message: "Too many PIN attempts for this group. Wait a few minutes and try again."
-      }
-    }
-  })
-);

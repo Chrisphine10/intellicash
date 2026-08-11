@@ -1,0 +1,16 @@
+-- Drops the group visit PIN.
+--
+-- The 4-digit PIN was the group's attestation that an agent really stood in
+-- front of them. It is being removed on the owner's instruction: PINs in this
+-- system belong to meetings (an official proves themselves with their own
+-- 6-digit member PIN when opening and closing one), and a second, group-wide
+-- secret was one more thing for a group to remember and lose.
+--
+-- What a visit now rests on: the agent's authenticated session, the
+-- server-adjudicated GPS fix against the group's registered location, the
+-- device id, and the timestamp. Consent is no longer part of the record.
+--
+-- Dropping the table also discards the lockout counters, which is correct —
+-- there is nothing left to lock. Recorded visits are untouched: GroupVisit
+-- never held a foreign key to this table.
+DROP TABLE IF EXISTS "GroupVisitPin";

@@ -160,7 +160,7 @@ describe("group documents API", () => {
   });
 
   it("refuses to let the agent verify their own evidence", async () => {
-    // The same separation as the visit PIN: the person who collected the
+    // Separation of duties: the person who collected the
     // evidence cannot also sign it off.
     const response = await request(app)
       .post(`/api/v1/groups/${groupId}/documents/REGISTRATION_CERTIFICATE/verify`)

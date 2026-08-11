@@ -78,17 +78,13 @@ describe("role permission backfill", () => {
     expect(granted).toContain("visits:read");
   });
 
-  it("keeps the agent away from the PIN that attests to their own visit", async () => {
-    // The whole point of the group PIN is that the visited party holds it. An
-    // agent who could set it could attest to a visit they never made.
+  it("keeps the agent away from rewriting a visit they submitted", async () => {
     const granted = await permissionsForRoleFromStore("VILLAGE_AGENT");
-    expect(granted).not.toContain("group-pin:write");
     expect(granted).not.toContain("visits:amend");
   });
 
-  it("gives the group its own PIN write and visit read", async () => {
+  it("lets a group read visits made to it but not conduct them", async () => {
     const granted = await permissionsForRoleFromStore("GROUP_ACCOUNT");
-    expect(granted).toContain("group-pin:write");
     expect(granted).toContain("visits:read");
     expect(granted).not.toContain("visits:write");
   });

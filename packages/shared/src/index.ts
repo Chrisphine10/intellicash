@@ -121,18 +121,12 @@ export const permissions = [
   /**
    * Field-agent group visits.
    *
-   * `group-pin:write` sets the 4-digit PIN a group uses to attest that a visit
-   * really happened on its premises. It is deliberately NOT granted to
-   * VILLAGE_AGENT: an agent who could set the PIN could attest to their own
-   * visit, which is the one thing the PIN exists to prevent.
-   *
    * `visits:amend` is admin-only. A submitted visit is immutable; amending
    * snapshots the previous revision rather than overwriting it.
    */
   "visits:read",
   "visits:write",
   "visits:amend",
-  "group-pin:write",
   /**
    * Authoring the assessment scorecard — creating, editing and publishing a
    * template version. Deliberately narrower than `visits:write`: an agent fills
@@ -208,11 +202,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:write",
     "votes:read",
     "votes:write",
-    // The group reads visits made to it, and owns the 4-digit PIN it uses to
-    // attest that a visit happened. The visiting agent must never hold that
-    // secret — see the note on `group-pin:write`.
+    // The group reads visits made to it, but does not conduct them.
     "visits:read",
-    "group-pin:write",
     // A group sees which of its own documents are on file and what is missing.
     // It cannot mark its own certificate verified — that judgement is not the
     // subject's to make about itself.
@@ -265,14 +256,13 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read",
     "store:write",
     // Conducting and reading visits is the agent's core job. Note the absence
-    // of `group-pin:write` and `visits:amend`: the agent cannot mint the PIN
-    // that attests to their own visit, and cannot rewrite a submitted one.
+    // of `visits:amend`: an agent cannot rewrite a visit they have submitted.
     "visits:read",
     "visits:write",
     // An agent records what they can see in front of them: that a certificate
     // exists, and a photograph of it. The route refuses to let them set the
-    // VERIFICATION on the role, the same way it refuses the visit PIN — an
-    // agent attesting to their own evidence defeats the point of collecting it.
+    // VERIFICATION on the role — an agent attesting to their own evidence
+    // defeats the point of collecting it.
     "documents:read",
     "documents:write",
     "analytics:read"
@@ -516,8 +506,6 @@ export const auditEventTypes = [
   "INTELLIAUDIT_REQUEST_REJECTED",
   "INTELLIAUDIT_RECONCILIATION_STAGED",
   "INTELLIAUDIT_RECONCILIATION_APPROVED",
-  "GROUP_VISIT_PIN_SET",
-  "GROUP_VISIT_PIN_VERIFY_FAILED",
   "GROUP_VISIT_SUBMITTED",
   "GROUP_VISIT_AMENDED",
   "GROUP_VISIT_ASSESSED",

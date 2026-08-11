@@ -3,33 +3,23 @@ import { z } from "zod";
 import { groupVisitTypes } from "@intellicash/shared";
 import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
-import { visitPinRateLimit } from "../middleware/rate-limit";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
-import {
-  PIN_LOCKOUT_MINUTES,
-  amendGroupVisit,
-  serializeVisit,
-  setGroupVisitPin,
-  submitGroupVisit,
-  verifyGroupVisitPin
-} from "../services/visit-service";
+import { amendGroupVisit, serializeVisit, submitGroupVisit } from "../services/visit-service";
 
 export const visitsRouter = Router();
 
 /**
  * Field-agent visits to a group.
  *
- * Two rules shape every handler here:
+ * **Scope before anything else.** `scopeGroupWhere` already restricts an agent
+ * to their own caseload, so a group outside it is a 404 rather than a 403 — the
+ * house convention, and the right one: "forbidden" confirms the group exists to
+ * someone who should not know that.
  *
- * 1. **Scope before anything else.** `scopeGroupWhere` already restricts an
- *    agent to their own caseload, so a group outside it is a 404 rather than a
- *    403 — the house convention, and the right one: "forbidden" confirms the
- *    group exists to someone who should not know that.
- * 2. **The visited party owns the PIN.** An agent can verify it and cannot set
- *    it. An agent who could set it could attest to a visit they never made,
- *    which is the single thing this mechanism exists to prevent.
+ * A visit used to open with a PIN held by the group. That is gone; see
+ * `visit-service.ts` for what is left standing behind a visit record.
  */
 
 async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: string) {
@@ -43,128 +33,8 @@ async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: st
   return group;
 }
 
-/**
- * Who may set a group's visit PIN.
- *
- * Explicitly refuses VILLAGE_AGENT even if a deployment has granted the
- * permission through the role-permission templates — the check is on the role,
- * not only on the permission string, because this particular separation is
- * what makes the whole attestation meaningful.
- */
-function assertMaySetPin(user: AuthenticatedUser | undefined, groupId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
-
-  if (user.role === "VILLAGE_AGENT") {
-    throw new ApiHttpError(
-      403,
-      "AGENT_CANNOT_SET_VISIT_PIN",
-      "A field agent cannot set the PIN that confirms their own visit. Ask the group or an administrator."
-    );
-  }
-
-  if (user.permissions.includes("groups:write")) return;
-  if (
-    user.role === "GROUP_ACCOUNT" &&
-    user.groupId === groupId &&
-    user.permissions.includes("group-pin:write")
-  ) {
-    return;
-  }
-
-  throw new ApiHttpError(
-    403,
-    "FORBIDDEN",
-    "Only the group's own account or a platform admin may set the visit PIN."
-  );
-}
-
-const pinSchema = z.object({
-  // Four digits, entered on a numeric keypad. A string, not a number, because
-  // 0042 is a valid PIN and JSON would hand us 42.
-  pin: z.string().regex(/^\d{4}$/, "The visit PIN must be exactly 4 digits.")
-});
-
-visitsRouter.get(
-  "/groups/:groupId/visit-pin",
-  requireAuth("visits:read"),
-  async (req, res, next) => {
-    try {
-      const group = await loadGroupInScope(req.user, req.params.groupId as string);
-      const row = await prisma.groupVisitPin.findUnique({ where: { groupId: group.id } });
-      // Status only. The hash never leaves the database.
-      ok(res, {
-        group: { id: group.id, name: group.name, code: group.code },
-        configured: Boolean(row),
-        setAt: row?.setAt.toISOString() ?? null,
-        locked: Boolean(row?.lockedUntil && row.lockedUntil > new Date()),
-        canSet:
-          req.user?.role !== "VILLAGE_AGENT" &&
-          (Boolean(req.user?.permissions.includes("groups:write")) ||
-            (req.user?.role === "GROUP_ACCOUNT" && req.user?.groupId === group.id))
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-visitsRouter.put(
-  "/groups/:groupId/visit-pin",
-  requireAuth("visits:read"),
-  async (req, res, next) => {
-    try {
-      const group = await loadGroupInScope(req.user, req.params.groupId as string);
-      assertMaySetPin(req.user, group.id);
-      const payload = pinSchema.parse(req.body);
-      ok(res, await setGroupVisitPin({ groupId: group.id, pin: payload.pin, actorUserId: req.user?.id }));
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-visitsRouter.post(
-  "/groups/:groupId/visit-pin/verify",
-  requireAuth("visits:write"),
-  visitPinRateLimit,
-  async (req, res, next) => {
-    try {
-      const group = await loadGroupInScope(req.user, req.params.groupId as string);
-      const payload = pinSchema.parse(req.body);
-      const result = await verifyGroupVisitPin({
-        groupId: group.id,
-        pin: payload.pin,
-        actorUserId: req.user?.id
-      });
-
-      if (result.ok) {
-        ok(res, { verified: true });
-        return;
-      }
-
-      if (result.reason === "NOT_SET") {
-        throw new ApiHttpError(
-          409,
-          "VISIT_PIN_NOT_SET",
-          "This group has not set a visit PIN yet. Ask an official or an administrator to set one."
-        );
-      }
-      if (result.reason === "LOCKED") {
-        throw new ApiHttpError(
-          423,
-          "VISIT_PIN_LOCKED",
-          `Too many wrong attempts. Try again in about ${PIN_LOCKOUT_MINUTES} minutes.`
-        );
-      }
-      throw new ApiHttpError(401, "VISIT_PIN_INCORRECT", "That PIN is not correct.");
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
 const submitSchema = z.object({
-  // Minted on the phone when the opening PIN passes and never regenerated.
+  // Minted on the phone when the visit is opened and never regenerated.
   clientRequestId: z.string().min(8).max(120),
   visitType: z.enum(groupVisitTypes).default("FOLLOW_UP"),
   startedAt: z.string().datetime(),
