@@ -29,6 +29,25 @@
   --shadow-theme-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
   --shadow: var(--shadow-theme-xs);
   --focus-ring: 0 0 0 4px rgba(0, 200, 83, 0.12);
+  /*
+   * Semantic surfaces and inks.
+   *
+   * These exist because the same handful of literals — a pale green selected
+   * row, a warm warning panel, a neutral chip — were written out by hand in
+   * dozens of rules. A literal cannot change with the theme, so every one of
+   * them stayed light when the app went dark: white chips on a near-black
+   * surface, and warning text at #7b4d0d that all but disappeared.
+   */
+  --tint-positive: #f1fff6;
+  --tint-positive-strong: #ecfff3;
+  --tint-warning: #fff7e2;
+  --ink-warning: #7b4d0d;
+  --tint-danger: #fff2f0;
+  --ink-danger: #8c2f2f;
+  --chip-bg: #eef2f3;
+  --surface-media: #eef5f0;
+  /* Ink for text sitting ON the green accent, not on a page surface. */
+  --on-accent: #031109;
   --font-sans: var(--font-outfit), Outfit, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -54,6 +73,24 @@ html[data-theme="dark"] {
   --blue: #e7f4ed;
   --gold: #f2b94d;
   --red: #ff8585;
+  /*
+   * `--green-700` had NO dark value, and it is used as a text colour in five
+   * places. In dark mode it rendered #027a48 on #101915 — a contrast ratio of
+   * 3.31, below the 4.5 minimum for body text. The focus ring was invisible
+   * for the same reason: tuned for a white page, never restated for a dark one.
+   */
+  --green-700: #5fe08d;
+  --focus-ring: 0 0 0 4px rgba(66, 233, 121, 0.24);
+  --tint-positive: #12291c;
+  --tint-positive-strong: #16351f;
+  --tint-warning: #322512;
+  --ink-warning: #f2c268;
+  --tint-danger: #33191a;
+  --ink-danger: #ff9b9b;
+  --chip-bg: #1b2a23;
+  --surface-media: #16241d;
+  /* Unchanged: the accent stays green in both themes, so its ink stays dark. */
+  --on-accent: #031109;
   --shadow-theme-xs: 0 1px 2px rgba(0, 0, 0, 0.34);
   --shadow-theme-sm: 0 8px 20px rgba(0, 0, 0, 0.26);
   --shadow-theme-md: 0 14px 34px rgba(0, 0, 0, 0.34);
@@ -781,7 +818,7 @@ button {
   overflow: hidden;
   border: 1px solid #dbeee4;
   border-radius: 8px;
-  background: #f1fff6;
+  background: var(--tint-positive);
   color: var(--green-dark);
   object-fit: cover;
 }
@@ -884,7 +921,7 @@ button {
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f7fbf8;
+  background: var(--surface-muted);
   padding: 14px;
 }
 
@@ -1028,7 +1065,7 @@ button {
   place-items: center;
   border: 1px solid #cfe7d8;
   border-radius: 999px;
-  background: #f6fff9;
+  background: var(--tint-positive);
   color: var(--green-dark);
   font-size: 11px;
   font-weight: 900;
@@ -1144,7 +1181,7 @@ button {
 
 .access-profile dl div {
   border-radius: 8px;
-  background: #f8fbf9;
+  background: var(--surface-muted);
   padding: 7px;
 }
 
@@ -1302,7 +1339,7 @@ button {
 }
 
 .ledger-debit {
-  color: #9a5a00;
+  color: var(--ink-warning);
 }
 
 .table-wrap {
@@ -1327,7 +1364,7 @@ button {
   gap: 8px;
   overflow-x: auto;
   border-bottom: 1px solid var(--line);
-  background: #fbfbfa;
+  background: var(--surface-muted);
   padding: 8px 10px;
   scrollbar-width: thin;
 }
@@ -1534,8 +1571,8 @@ tr:last-child td {
   align-items: center;
   min-height: 22px;
   border-radius: 999px;
-  background: #eef3ee;
-  color: var(--green-dark);
+  background: var(--chip-bg);
+  color: var(--green-700);
   padding: 0 8px;
   font-size: 11px;
   font-weight: 700;
@@ -1543,17 +1580,17 @@ tr:last-child td {
 }
 
 .pill.blue {
-  background: #eef2f3;
+  background: var(--chip-bg);
   color: var(--blue);
 }
 
 .pill.gold {
   background: #f8efdc;
-  color: #7b4d0d;
+  color: var(--ink-warning);
 }
 
 .pill.red {
-  background: #fae9e7;
+  background: var(--tint-danger);
   color: var(--red);
 }
 
@@ -1567,7 +1604,7 @@ tr:last-child td {
   border: 1px solid var(--green-dark);
   border-radius: 8px;
   background: var(--green);
-  color: #031109;
+  color: var(--on-accent);
   padding: 0 11px;
   font-size: 12px;
   font-weight: 700;
@@ -1854,7 +1891,7 @@ tr:last-child td {
 }
 
 .passbook-table tr.selected > td {
-  background: #f6fff9;
+  background: var(--tint-positive);
 }
 
 .passbook-meeting-button {
@@ -1876,7 +1913,7 @@ tr:last-child td {
 }
 
 .passbook-detail-row > td {
-  background: #fbfbfa;
+  background: var(--surface-muted);
   padding: 0;
 }
 
@@ -1970,7 +2007,7 @@ tr:last-child td {
   min-height: 430px;
   overflow: hidden;
   border-right: 1px solid var(--line);
-  background: #eef5f0;
+  background: var(--surface-media);
 }
 
 .google-group-map,
@@ -2029,7 +2066,12 @@ tr:last-child td {
 .google-map-info {
   display: grid;
   gap: 4px;
-  color: #0b1f14;
+  /*
+   * Was a hardcoded #0b1f14. Google renders this inside its own info window,
+   * which is easy to forget when switching the app to a dark theme — the text
+   * came out at a contrast ratio of 1.11 against the dark page, i.e. invisible.
+   */
+  color: var(--ink);
   font-family: inherit;
   min-width: 180px;
 }
@@ -2045,7 +2087,7 @@ tr:last-child td {
 }
 
 .google-map-info span {
-  color: #52645a;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -2131,7 +2173,7 @@ tr:last-child td {
 
 .map-marker.live {
   background: var(--green);
-  color: #03210f;
+  color: var(--on-accent);
   animation: live-pin-pulse 1.8s ease-in-out infinite;
 }
 
@@ -2288,7 +2330,7 @@ tr:last-child td {
 }
 
 .meeting-calendar-weekday {
-  background: #fbfbfa;
+  background: var(--surface-muted);
   color: var(--muted);
   padding: 9px 10px;
   font-size: 11px;
@@ -2311,7 +2353,7 @@ tr:last-child td {
 }
 
 .meeting-calendar-day.muted {
-  background: #fafaf8;
+  background: var(--surface-muted);
   color: #a5ada8;
 }
 
@@ -2326,7 +2368,7 @@ tr:last-child td {
   place-items: center;
   border-radius: 999px;
   background: var(--green);
-  color: #031109;
+  color: var(--on-accent);
 }
 
 .meeting-calendar-date {
@@ -2380,8 +2422,8 @@ tr:last-child td {
   flex: 0 0 auto;
   border: 1px solid rgba(0, 138, 58, 0.22);
   border-radius: 999px;
-  background: #ecfff3;
-  color: var(--green-dark);
+  background: var(--tint-positive-strong);
+  color: var(--green-700);
   padding: 3px 7px;
   font-size: 10px;
   font-weight: 900;
@@ -2413,15 +2455,15 @@ tr:last-child td {
   min-width: 0;
   border: 1px solid rgba(0, 138, 58, 0.18);
   border-radius: 8px;
-  background: #f6fff9;
-  color: var(--green-dark);
+  background: var(--tint-positive);
+  color: var(--green-700);
   padding: 7px 8px;
   text-align: left;
 }
 
 .meeting-calendar-event.live {
   border-color: rgba(0, 200, 83, 0.38);
-  background: #e9fff1;
+  background: var(--tint-positive);
 }
 
 .meeting-calendar-event strong,
@@ -2937,7 +2979,7 @@ tr:last-child td {
 .error {
   border: 1px solid #efbeb7;
   border-radius: 8px;
-  background: #fff2f0;
+  background: var(--tint-danger);
   color: var(--red);
   padding: 12px;
   font-size: 13px;
@@ -3122,7 +3164,7 @@ tr:last-child td {
   align-content: start;
   gap: 8px;
   border-right: 1px solid var(--line);
-  background: #f8fbf9;
+  background: var(--surface-muted);
   padding: 14px;
 }
 
@@ -3139,7 +3181,7 @@ tr:last-child td {
 
 .role-picker-list button.active {
   border-color: var(--green);
-  background: #eefff4;
+  background: var(--tint-positive);
   box-shadow: 0 0 0 3px rgba(0, 200, 83, 0.1);
 }
 
@@ -3226,7 +3268,7 @@ tr:last-child td {
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f8fbf9;
+  background: var(--surface-muted);
   padding: 10px;
 }
 
@@ -3314,7 +3356,7 @@ tr:last-child td {
   height: 34px;
   place-items: center;
   border-radius: 8px;
-  background: #ecfff3;
+  background: var(--tint-positive-strong);
   color: var(--green-dark);
   padding: 8px;
 }
@@ -3555,7 +3597,7 @@ tr:last-child td {
 .segmented button.active {
   border-color: var(--green-dark);
   background: var(--green);
-  color: #031109;
+  color: var(--on-accent);
 }
 
 .segmented button svg {
@@ -3583,7 +3625,7 @@ tr:last-child td {
   max-width: 100%;
   gap: 12px;
   border-bottom: 1px solid var(--line);
-  background: #fbfbfa;
+  background: var(--surface-muted);
   padding: 8px 10px;
 }
 
@@ -3689,7 +3731,7 @@ tr:last-child td {
   overflow: hidden;
   border-bottom: 1px solid var(--line);
   border-radius: 8px 8px 0 0;
-  background: #eef5f0;
+  background: var(--surface-media);
   color: var(--green-dark);
 }
 
@@ -3921,7 +3963,7 @@ tr:last-child td {
 
 .credential-field em {
   border-radius: 999px;
-  background: #eafff2;
+  background: var(--tint-positive);
   color: var(--green-dark);
   padding: 3px 7px;
   font-style: normal;
@@ -3929,8 +3971,8 @@ tr:last-child td {
 }
 
 .credential-field em.warning {
-  background: #fff7e2;
-  color: #7b4d0d;
+  background: var(--tint-warning);
+  color: var(--ink-warning);
 }
 
 .credential-field input,
@@ -4022,7 +4064,7 @@ tr:last-child td {
 }
 
 .integration-value-item.is-missing code {
-  color: #7b4d0d;
+  color: var(--ink-warning);
 }
 
 .permission-list {
@@ -4062,7 +4104,7 @@ tr:last-child td {
 .permission-row code {
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #f8fbf9;
+  background: var(--surface-muted);
   color: var(--green-700);
   padding: 4px 7px;
   font-size: 11px;
@@ -4077,7 +4119,7 @@ tr:last-child td {
 .permission-summary span {
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #f8fbf9;
+  background: var(--surface-muted);
   color: var(--green-700);
   padding: 5px 8px;
   font-size: 11px;
@@ -4090,8 +4132,8 @@ tr:last-child td {
   gap: 10px;
   border: 1px solid #d9f2e1;
   border-radius: 8px;
-  background: #f4fff7;
-  color: var(--green-dark);
+  background: var(--tint-positive);
+  color: var(--green-700);
   padding: 12px;
 }
 
@@ -4105,7 +4147,7 @@ tr:last-child td {
 }
 
 .access-preview span {
-  color: #2f6f45;
+  color: var(--green-700);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -4139,7 +4181,7 @@ tr:last-child td {
 .env-list code {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f1fff6;
+  background: var(--tint-positive);
   color: var(--green-dark);
   padding: 7px 8px;
 }
@@ -4153,14 +4195,14 @@ tr:last-child td {
 
 .notice.success {
   border: 1px solid #a9e8bf;
-  background: #eefff4;
-  color: var(--green-dark);
+  background: var(--tint-positive);
+  color: var(--green-700);
 }
 
 .notice.warning {
   border: 1px solid #ead6a8;
-  background: #fff7e2;
-  color: #7b4d0d;
+  background: var(--tint-warning);
+  color: var(--ink-warning);
 }
 
 .notice-inline {
@@ -4173,13 +4215,13 @@ tr:last-child td {
 }
 
 .notice-inline.success {
-  background: #eefff4;
-  color: var(--green-dark);
+  background: var(--tint-positive);
+  color: var(--green-700);
 }
 
 .notice-inline.warning {
-  background: #fff7e2;
-  color: #7b4d0d;
+  background: var(--tint-warning);
+  color: var(--ink-warning);
 }
 
 .route-row {
@@ -4233,7 +4275,7 @@ tr:last-child td {
 .system-list-item:hover,
 .system-list-item.active {
   border-color: #b8d9c5;
-  background: #f6fff9;
+  background: var(--tint-positive);
   box-shadow: 0 18px 44px rgba(0, 138, 58, 0.12);
   transform: translateY(-1px);
 }
@@ -4273,7 +4315,7 @@ tr:last-child td {
 .system-list-meta small {
   min-height: 24px;
   border-radius: 999px;
-  background: #eef2f3;
+  background: var(--chip-bg);
   color: var(--blue);
   margin-top: 0;
   padding: 4px 8px;
@@ -4360,7 +4402,7 @@ tr:last-child td {
 }
 
 .report-tile.active {
-  background: #f6fff9;
+  background: var(--tint-positive);
   box-shadow:
     inset 3px 0 0 var(--green),
     0 18px 44px rgba(0, 138, 58, 0.12);
@@ -4372,7 +4414,7 @@ tr:last-child td {
   height: 42px;
   place-items: center;
   border-radius: 8px;
-  background: #eafff2;
+  background: var(--tint-positive);
   color: var(--green-dark);
 }
 
@@ -4397,7 +4439,7 @@ tr:last-child td {
 .report-tile-footer small {
   min-height: 24px;
   border-radius: 999px;
-  background: #eef2f3;
+  background: var(--chip-bg);
   color: var(--blue);
   padding: 4px 8px;
   font-size: 11px;
@@ -4551,7 +4593,7 @@ tr:last-child td {
   height: 86px;
   border: 1px solid #cfe7d8;
   border-radius: 999px;
-  background: #f1fff6;
+  background: var(--tint-positive);
   object-fit: cover;
 }
 
@@ -4685,7 +4727,7 @@ tr:last-child td {
 .avatar-upload-target:hover .avatar-upload-action,
 .avatar-upload-target:focus-within .avatar-upload-action {
   border-color: rgba(0, 138, 58, 0.42);
-  background: #ecfff3;
+  background: var(--tint-positive-strong);
 }
 
 .account-profile-fields {
@@ -4777,7 +4819,7 @@ tr:last-child td {
 
 .programme-gallery-item:hover {
   border-color: #b8d9c5;
-  background: #f6fff9;
+  background: var(--tint-positive);
 }
 
 .programme-gallery-item img {
@@ -4886,7 +4928,7 @@ tr:last-child td {
 
 .chat-bubble.user {
   justify-self: end;
-  background: #f6fff9;
+  background: var(--tint-positive);
 }
 
 .chat-bubble.assistant {
@@ -4918,14 +4960,15 @@ tr:last-child td {
 
 .notice.success {
   border-color: #b8d9c5;
-  background: #f1fff6;
-  color: var(--green-dark);
+  background: var(--tint-positive);
+  /* `--green-dark` measures 4.34 on this tint, under the 4.5 body minimum. */
+  color: var(--green-700);
 }
 
 .notice.warning {
   border-color: #f2d3a1;
-  background: #fff8ec;
-  color: #7b4d0d;
+  background: var(--tint-warning);
+  color: var(--ink-warning);
 }
 
 .inline-link {
@@ -5828,7 +5871,7 @@ tr:last-child td {
   }
 
   .bottom-tab-item.active {
-    background: #ecfff3;
+    background: var(--tint-positive-strong);
     color: var(--green-dark);
   }
 
