@@ -2467,6 +2467,13 @@ tr:last-child td {
   display: grid;
   grid-template-rows: min-content minmax(0, 1fr);
   width: min(960px, 100%);
+  /*
+   * Its own cap. It used to inherit one from `.credential-modal`, which no
+   * longer caps anything — and a grid that clips with no height limit gives its
+   * scrolling row the full content height, so the body never scrolls and the
+   * header never stays put.
+   */
+  max-height: min(760px, calc(100dvh - 48px));
   overflow: hidden;
 }
 
@@ -3817,18 +3824,21 @@ tr:last-child td {
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
   /*
-   * `safe` centring, and the overlay scrolls.
+   * The OVERLAY is the scroll container, and it centres with `margin: auto` on
+   * the child rather than with an alignment property.
    *
-   * A grid that centres an over-tall child overflows it in BOTH directions, so
-   * the top of a long dialog ends up above the viewport with no way to reach
-   * it — the heading and the first fields are simply gone. `safe` makes the
-   * child align to the start instead of centring once it no longer fits, and
-   * `overflow-y: auto` gives the overlay somewhere to scroll when a dialog is
-   * taller than the screen.
+   * Both details are load-bearing. Centring an over-tall child with
+   * `align-items: center` (or `place-items`) overflows it in BOTH directions,
+   * so the top of a long dialog ends up above the viewport with nothing able to
+   * scroll to it. `safe` alignment was meant to prevent that, but it is a newer
+   * keyword and a browser that does not understand it drops the whole
+   * declaration and centres unsafely — a silent failure that looks exactly like
+   * the bug it was added to fix. `margin: auto` on a flex item has no such
+   * caveat: it centres when there is room and never pushes content outside the
+   * scrollable area when there is not.
    */
-  place-items: safe center;
+  display: flex;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 24px;
@@ -3842,19 +3852,32 @@ tr:last-child td {
   cursor: default;
 }
 
+/*
+ * An ordinary dialog has NO height cap and does NOT scroll itself. It is as
+ * tall as its content, and the overlay above scrolls to reach all of it.
+ *
+ * This is a deliberate retreat from a cleverer arrangement that kept losing.
+ * A dialog that caps its own height only stays usable while its
+ * `overflow: auto` survives the cascade — and it did not: every dialog carries
+ * `class="data-card credential-modal"`, and `.app-shell .data-card` clips at
+ * higher specificity. The form was cut off at the fold and Save could not be
+ * clicked at all. Fixing that by out-specifying the card rule works, but it
+ * leaves the whole thing one stylesheet edit away from silently breaking
+ * again.
+ *
+ * With no cap, `overflow: hidden` winning here does nothing — there is no
+ * overflow to hide, because the box is exactly as tall as what is in it. The
+ * dialog cannot be clipped by any rule that might be added later.
+ *
+ * The three dialogs that DO want a fixed frame with a scrolling middle declare
+ * their own max-height; they are listed together further down.
+ */
 .credential-modal {
   position: relative;
   z-index: 1;
   width: min(920px, 100%);
-  /*
-   * dvh, not vh. On a phone `100vh` is the viewport with the browser chrome
-   * RETRACTED, so a dialog sized against it is taller than what is actually on
-   * screen and its last rows — which is where Save lives — sit under the
-   * address bar. `.group-editor-modal` already used dvh; every other dialog in
-   * the app went through this rule and did not.
-   */
-  max-height: min(760px, calc(100dvh - 48px));
-  overflow: auto;
+  /* Centres when it fits, and never lifts the top out of reach when it does not. */
+  margin: auto;
   box-shadow: 0 30px 80px rgba(0, 11, 5, 0.3);
 }
 
@@ -5310,36 +5333,19 @@ tr:last-child td {
 }
 
 /*
- * A card clips; a dialog scrolls.
- *
- * `.app-shell .data-card { overflow: hidden }` earlier in this file is right
- * for a card sitting in a page — it stops a wide table bleeding past the
- * rounded corner. But every dialog in the console is
- * `class="data-card credential-modal"`, so that rule ALSO won on specificity
- * (0,2,0 against 0,1,0) over `.credential-modal { overflow: auto }`. The
- * result: a form taller than the viewport was cut off at the fold with no way
- * to reach the rest of it, and Save — which lives at the bottom of every one of
- * these forms — could not be clicked. Creating a group was impossible.
- *
- * Re-asserted here at equal specificity but later in the cascade, so it applies
- * to dialogs and leaves ordinary cards clipping as before.
- */
-.app-shell .credential-modal {
-  overflow: auto;
-}
-
-/*
- * The three dialogs that scroll a CHILD instead.
+ * The three dialogs that keep a fixed frame and scroll their middle.
  *
  * They lay themselves out as a grid — fixed header, scrolling body, fixed
- * action bar — so the outer element must keep clipping or the header scrolls
- * away and two scrollbars appear. Listed here, after the rule above, rather
- * than by escalating each one's specificity: the decision about which dialogs
- * scroll themselves belongs in one place.
+ * action bar — so unlike an ordinary dialog they DO need a height cap and DO
+ * need to clip, or the header scrolls away and two scrollbars appear. Grouped
+ * here so that "which dialogs behave this way" is one decision in one place.
+ *
+ * Everything else has no cap and is scrolled by the overlay; see the note on
+ * `.credential-modal`.
  */
-.app-shell .group-editor-modal,
 .app-shell .meeting-entry-modal,
 .app-shell .meeting-detail-modal {
+  max-height: min(760px, calc(100dvh - 48px));
   overflow: hidden;
 }
 
@@ -7191,7 +7197,9 @@ tr:last-child td {
     justify-content: flex-start;
   }
 
-  .credential-modal {
+  .group-editor-modal,
+  .meeting-entry-modal,
+  .meeting-detail-modal {
     max-height: calc(100dvh - 16px);
   }
 
