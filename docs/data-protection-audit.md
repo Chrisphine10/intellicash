@@ -26,7 +26,14 @@ auditable — and what makes overstating one a liability rather than a nicety.
 
 ## Gaps found
 
-### 1. The offline meeting-PIN verifier is a fast hash — HIGH
+### 1. The offline meeting-PIN verifier is a fast hash — CLOSED 17 Aug 2026
+
+Both copies now use PBKDF2-HMAC-SHA256 at 30,000 iterations with a random
+per-value salt: the phone's stored hash (`meeting_unlock.dart`, upgraded on the
+next correct entry) and the verifier the server ships to devices
+(`derivePinVerifier` in `lib/crypto.ts`, reissued when a device refreshes its
+cache). The original finding follows.
+
 
 The notice says PINs are stored "only as strong one-way hashes". Server-side
 that is true (bcrypt). The **offline copy is not**:

@@ -45,7 +45,7 @@ import {
   scopeGroupWhere
 } from "../services/account-scope";
 import { ApiHttpError, ok } from "../lib/http";
-import { decryptJson, sha256 } from "../lib/crypto";
+import { decryptJson, derivePinVerifier, sha256 } from "../lib/crypto";
 import { canViewMemberContact, maskPhone } from "../lib/privacy";
 import { normalisePhone } from "../lib/phone";
 import { reconcileMembership } from "../services/membership-service";
@@ -1102,8 +1102,14 @@ async function shareOutLoanOffsets(
   return offsets;
 }
 
+/*
+ * A verifier is EMITTED to a device and checked there; nothing compares it
+ * here. That is why switching the algorithm needs no migration — a device
+ * refreshes its cache and gets the new format. Any consumer must parse the
+ * prefix rather than assume a bare hex digest.
+ */
 function buildOfflineVerifier(deviceId: string, memberId: string, pin: string) {
-  return sha256(`${deviceId}:${memberId}:${pin}`);
+  return derivePinVerifier(deviceId, memberId, pin);
 }
 
 function extractDefaultPinFromDelivery(ciphertext: string) {

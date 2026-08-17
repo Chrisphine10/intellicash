@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { demoAccounts, demoPassword, meetingSteps } from "@intellicash/shared";
 import { createApp } from "../src/app";
+import { verifyPinVerifier } from "../src/lib/crypto";
 import { decryptJson } from "../src/lib/crypto";
 import { prisma } from "../src/lib/prisma";
 import { seedDatabase } from "../prisma/seed";
@@ -1485,17 +1486,30 @@ describe("Intellicash API", () => {
       .post(`/api/v1/groups/${groupId}/offline-devices/refresh`)
       .send({ deviceId: "vitest-refresh" })
       .expect(200);
-    const expectedFaithVerifier = createHash("sha256")
-      .update(`vitest-refresh:${unlockPins[1]!.memberId}:222222`)
-      .digest("hex");
-    expect(refreshedOfflineCache.body.data.verifiers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          memberId: unlockPins[1]!.memberId,
-          verifier: expectedFaithVerifier
-        })
-      ])
+    /*
+     * Asserts the PROPERTY, not a specific digest.
+     *
+     * This used to recompute `sha256(device:member:pin)` and compare — which
+     * pinned the algorithm rather than the behaviour, and passed happily while
+     * a four-digit PIN sat behind a hash a laptop walks in milliseconds. What
+     * matters is that the emitted verifier checks this PIN, for this member, on
+     * this device, and nothing else.
+     */
+    const faithVerifier = refreshedOfflineCache.body.data.verifiers.find(
+      (row: { memberId: string }) => row.memberId === unlockPins[1]!.memberId
     );
+    expect(faithVerifier).toBeDefined();
+    expect(
+      verifyPinVerifier(faithVerifier.verifier, "vitest-refresh", unlockPins[1]!.memberId, "222222")
+    ).toBe(true);
+    // Bound to the device and the member, so a cache lifted off one handset is
+    // useless on another.
+    expect(
+      verifyPinVerifier(faithVerifier.verifier, "another-device", unlockPins[1]!.memberId, "222222")
+    ).toBe(false);
+    expect(
+      verifyPinVerifier(faithVerifier.verifier, "vitest-refresh", unlockPins[1]!.memberId, "222223")
+    ).toBe(false);
 
     const offlineSync = await groupAgent
       .post(`/api/v1/groups/${groupId}/meetings/${syncMeeting.body.data.id}/offline-sync`)
