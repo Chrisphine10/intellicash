@@ -8,11 +8,30 @@
  * their existing role checks.
  */
 
+/**
+ * Shows the last three digits and nothing else.
+ *
+ * It used to keep the leading four as well — `2547*****102` for a Kenyan
+ * number. Those four are the country code and the operator prefix, which are
+ * near-constant across a group's members, so what looked like a mask actually
+ * left roughly five unknown digits. Combined with a name and a county that is
+ * not anonymity, it is a lookup.
+ *
+ * Three digits is enough for the one job this serves: letting an operator
+ * confirm "yes, that is the number I expected" without the number being
+ * readable by everyone who can see the screen or the log line.
+ *
+ * The masked value keeps the original length so tables do not reflow and the
+ * value still reads as a phone number.
+ */
 export function maskPhone(phone: string) {
   const trimmed = phone.trim();
-  if (trimmed.length <= 6) return trimmed.replace(/\d(?=\d{2})/g, "*");
+  // Nothing to hide behind: reveal none of it rather than most of it.
+  if (trimmed.length <= 3) return "*".repeat(Math.max(trimmed.length, 1));
 
-  return `${trimmed.slice(0, 4)}${"*".repeat(Math.max(trimmed.length - 7, 3))}${trimmed.slice(-3)}`;
+  // At least four stars, so a short value never renders as almost-plaintext.
+  const stars = Math.max(trimmed.length - 3, 4);
+  return `${"*".repeat(stars)}${trimmed.slice(-3)}`;
 }
 
 /**
