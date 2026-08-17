@@ -13,7 +13,20 @@ import {
   type SmsProvider
 } from "./sms-service";
 
-const memberPinLength = 6;
+/**
+ * A meeting PIN is four digits, chosen by the member on their phone.
+ *
+ * A generated one is now only a fallback — for a member who has not set theirs
+ * yet — so it matches the length they will be asked to type.
+ */
+const memberPinLength = 4;
+
+/**
+ * One-time codes stay at six. They are single-use and time-boxed, so the
+ * reasoning that made four acceptable for a PIN (three keys, a quorum, a
+ * guessable-value guard) does not apply to them.
+ */
+const memberOtpLength = 6;
 const memberOtpTtlMinutes = 15;
 const memberPinDeliveryProvider = "AFRICAS_TALKING";
 const memberPinSmsProviders = ["BONGA_SMS", "AFRICAS_TALKING"] as const;
@@ -66,6 +79,10 @@ type MemberPinTarget = {
 
 export function generateMemberPin() {
   return randomInt(0, 10 ** memberPinLength).toString().padStart(memberPinLength, "0");
+}
+
+export function generateMemberOtp() {
+  return randomInt(0, 10 ** memberOtpLength).toString().padStart(memberOtpLength, "0");
 }
 
 export function otpExpiresAt(from: Date) {
@@ -271,7 +288,7 @@ export async function generateAndQueueMemberOtp<TSelect extends Prisma.MemberSel
     select: TSelect;
   }
 ) {
-  const otp = generateMemberPin();
+  const otp = generateMemberOtp();
   const now = new Date();
   const expiresAt = otpExpiresAt(now);
   const integration = await resolveMemberPinDeliveryIntegration(tx);

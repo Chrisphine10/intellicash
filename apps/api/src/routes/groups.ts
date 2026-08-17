@@ -113,7 +113,15 @@ const meetingUpdateSchema = z.object({
 
 const meetingKeySubmissionSchema = z.object({
   memberId: z.string().optional(),
-  pin: z.string().regex(/^\d{6}$/, "PIN must be 6 digits."),
+  /*
+   * Four OR six digits, deliberately.
+   *
+   * A meeting PIN is now four, chosen by the member. But this same field also
+   * carries a six-digit one-time code (`CURRENT_OTP`), and every member who set
+   * a PIN before the change is still holding six digits. Narrowing this to four
+   * would reject both and lock existing groups out of their own meetings.
+   */
+  pin: z.string().regex(/^\d{4}$|^\d{6}$/, "PIN must be 4 digits, or a 6-digit code."),
   credentialType: z.enum(["DEFAULT_PIN", "CURRENT_OTP"]).optional(),
   deviceId: z.string().trim().min(2).max(120).optional(),
   capturedOfflineAt: z.string().datetime().optional()
@@ -197,7 +205,8 @@ const offlineDevicePrepareSchema = z.object({
     .array(
       z.object({
         memberId: z.string(),
-        pin: z.string().regex(/^\d{6}$/)
+        // Same both-lengths reasoning as the submission schema above.
+        pin: z.string().regex(/^\d{4}$|^\d{6}$/)
       })
     )
     .min(1)
@@ -1100,8 +1109,13 @@ function buildOfflineVerifier(deviceId: string, memberId: string, pin: string) {
 function extractDefaultPinFromDelivery(ciphertext: string) {
   try {
     const payload = decryptJson<{ pin?: string; body?: string; purpose?: string }>(ciphertext);
-    const candidate = typeof payload.pin === "string" ? payload.pin : payload.body?.match(/\b\d{6}\b/)?.[0];
-    return candidate && /^\d{6}$/.test(candidate) ? candidate : null;
+    // Four or six: a generated PIN is now four digits, but a delivery sent
+    // before this change — or a one-time code — carries six.
+    const candidate =
+      typeof payload.pin === "string"
+        ? payload.pin
+        : payload.body?.match(/\b\d{4}\b|\b\d{6}\b/)?.[0];
+    return candidate && /^\d{4}$|^\d{6}$/.test(candidate) ? candidate : null;
   } catch {
     return null;
   }
