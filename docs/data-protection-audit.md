@@ -64,7 +64,17 @@ so the notice's "stored hashed, never in plain text" is literally accurate but
 implies a protection that is not there. Needs a salted slow KDF, or a keyed
 HMAC with the key held server-side.
 
-### 3. No data-subject-rights mechanism — HIGH
+### 3. Data-subject-rights mechanism — ADDRESSED 17 Aug 2026
+
+Access, portability and erasure are now endpoints, with the erasure decision in
+a pure module (`domain/data-subject.ts`) so what survives a request is readable
+rather than implicit in a delete statement. Both are audited.
+
+Still outstanding in this area: no self-service route for a member without a
+login (their group or an admin must act for them), no console UI, and no
+documented response deadline. The original finding follows.
+
+### 3a. Original finding — no data-subject-rights mechanism
 
 The notice grants five rights: access, rectification, erasure, withdrawal of
 consent, and complaint. There is **no endpoint, admin screen or documented

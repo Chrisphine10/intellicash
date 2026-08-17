@@ -15,6 +15,7 @@ import { groupPolicyRouter } from "./routes/group-policy";
 import { visitsRouter } from "./routes/visits";
 import { assessmentsRouter } from "./routes/assessments";
 import { attachmentsRouter } from "./routes/attachments";
+import { dataSubjectRouter } from "./routes/data-subject";
 import { documentsRouter } from "./routes/documents";
 import { mentorshipRouter } from "./routes/mentorship";
 import { visitReportsRouter } from "./routes/visit-reports";
@@ -132,6 +133,7 @@ export function createApp(
   // `/uploads/visit-photo` — which needs its own size limit, its own
   // date-sharded destination and the disk-fill guard. Express matches in
   // registration order, so the specific path has to be mounted first.
+  app.use("/api/v1", dataSubjectRouter);
   app.use("/api/v1", attachmentsRouter);
   app.use("/api/v1", uploadsRouter);
   app.use("/api/v1", apiKeysRouter);

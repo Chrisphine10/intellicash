@@ -492,6 +492,14 @@ export const auditEventTypes = [
   "WEBHOOK_SUBSCRIBED",
   "VA_UPDATED",
   "MEMBER_UPDATED",
+  /*
+   * Data subject rights (Kenya DPA 2019 ss. 26, 38, 40). Recorded because the
+   * Act expects a controller to be able to show it answered a request, and
+   * because an erasure is irreversible — if nobody logged who asked for it,
+   * there is no way to tell it apart from data loss.
+   */
+  "PERSONAL_DATA_EXPORTED",
+  "PERSONAL_DATA_ERASED",
   "MEETING_SCHEDULED",
   "MEETING_UPDATED",
   "ATTENDANCE_RECORDED",
