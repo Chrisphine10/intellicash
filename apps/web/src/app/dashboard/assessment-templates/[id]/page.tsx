@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ClipboardList } from "@/lib/theme-icons";
 import { apiFetch } from "../../../../lib/api";
+import { bandCoverage, coverageIsComplete } from "../../../../lib/band-coverage";
 
 /**
  * One version of the scorecard: its questions, its weights, and its bands.
@@ -159,6 +160,15 @@ export default function AssessmentTemplateDetailPage({
 
   const issues = template.validation.ok ? [] : template.validation.issues;
 
+  const coverage = bandCoverage(bands, computedMaxPoints);
+  const coverageOk = coverageIsComplete(coverage);
+  const coverageSummary = coverageOk
+    ? `Every score from 0 to ${computedMaxPoints} has exactly one band.`
+    : coverage
+        .filter((segment) => segment.kind !== "band")
+        .map((segment) => segment.label)
+        .join(" · ") || "Nothing to cover yet.";
+
   return (
     <section className="dashboard-section">
       <header className="page-heading">
@@ -213,6 +223,30 @@ export default function AssessmentTemplateDetailPage({
           no overlap. A gap means some achievable score has no band, and the first
           time anyone notices is when a real assessment lands in it.
         </p>
+
+        {/*
+          * The strip draws the whole 0..total range so a gap or an overlap is
+          * something you SEE rather than something you infer from a validation
+          * path. The commonest way to create one is to add a question: the
+          * total moves and the top band quietly stops short of it.
+          */}
+        {coverage.length ? (
+          <>
+            <div className="band-strip" role="img" aria-label={coverageSummary}>
+              {coverage.map((segment) => (
+                <span
+                  className={`band-strip-segment ${segment.kind}`}
+                  key={`${segment.kind}-${segment.from}`}
+                  style={{ width: `${segment.widthPercent}%` }}
+                  title={segment.label}
+                >
+                  <span className="band-strip-label">{segment.label}</span>
+                </span>
+              ))}
+            </div>
+            <p className={coverageOk ? "eyebrow" : "dashboard-notice error"}>{coverageSummary}</p>
+          </>
+        ) : null}
         <table className="data-table">
           <thead>
             <tr>

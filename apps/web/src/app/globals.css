@@ -8284,3 +8284,55 @@ html[data-theme="dark"] .pwa-splash-screen {
      truncating: the claim the photo answers is the point of showing it. */
   overflow-wrap: anywhere;
 }
+
+/*
+ * The scorecard band coverage strip.
+ *
+ * Draws 0..total end to end so a gap or an overlap is visible at a glance. A
+ * gap is the one that matters: the server refuses to publish it, but before
+ * this the author only saw a validation path, and a score landing in a gap
+ * comes back with no band at all.
+ */
+.band-strip {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  margin: 12px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.band-strip-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green-700);
+  background: var(--tint-positive);
+  border-right: 1px solid var(--line);
+}
+
+.band-strip-segment:last-child {
+  border-right: 0;
+}
+
+/* Red for a score with no band; gold for a score claimed twice. */
+.band-strip-segment.gap {
+  color: var(--ink-danger);
+  background: var(--tint-danger);
+}
+
+.band-strip-segment.overlap {
+  color: var(--ink-warning);
+  background: var(--tint-warning);
+}
+
+.band-strip-label {
+  overflow: hidden;
+  padding-inline: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
