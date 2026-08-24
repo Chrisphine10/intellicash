@@ -8374,3 +8374,39 @@ html[data-theme="dark"] .pwa-splash-screen {
   font-size: 13px;
   line-height: 1.55;
 }
+
+/* The guide's numbered meeting order and its explanatory paragraphs. */
+.docs-lead {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.docs-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 8px 20px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-steps li {
+  border-left: 3px solid var(--green);
+  padding: 6px 0 6px 12px;
+  font-size: 14px;
+}
+
+.docs-note {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--tint-positive);
+  padding: 14px 16px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.docs-steps li strong {
+  font-weight: 600;
+}
