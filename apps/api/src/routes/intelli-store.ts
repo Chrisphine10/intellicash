@@ -1160,7 +1160,9 @@ router.get("/public/intelli-store", async (_req, res, next) => {
           status: "ACTIVE",
           programmeLinks: {
             some: {
-              programme: { publicStatus: "ONGOING" }
+              // Same exclusion as the public programme list: a demo programme
+              // must not put its products on the public storefront.
+              programme: { publicStatus: "ONGOING", isDemo: false }
             }
           }
         },
@@ -1170,7 +1172,7 @@ router.get("/public/intelli-store", async (_req, res, next) => {
       prisma.villageAgent.findMany({
         where: {
           status: "ACTIVE",
-          programme: { publicStatus: "ONGOING" }
+          programme: { publicStatus: "ONGOING", isDemo: false }
         },
         orderBy: [{ county: "asc" }, { name: "asc" }],
         select: {

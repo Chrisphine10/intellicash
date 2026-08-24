@@ -141,6 +141,19 @@ model Programme {
   sourceReference  String?
   publicSlug       String?   @unique
   publicStatus     String    @default("DRAFT")
+
+  /// Sample data, kept out of every PUBLIC surface.
+  ///
+  /// The seeded partner and programme exist so the platform is explorable, and
+  /// `publicStatus: "ONGOING"` was the only thing the public endpoints filtered
+  /// on — so the demo project and its partner were listed on the landing page
+  /// to anyone who visited. Everything public hangs off a programme (its
+  /// partner, village agents, store products, the groups shown under an agent),
+  /// so one flag here removes all of them together.
+  ///
+  /// Signed-in surfaces are deliberately unaffected: a demo account still sees
+  /// demo data, which is the point of having it.
+  isDemo           Boolean   @default(false)
   fundingGoalCents Int       @default(0)
   fundingSummary   String?
   impactSummary    String?

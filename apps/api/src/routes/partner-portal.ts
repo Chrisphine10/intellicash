@@ -153,11 +153,23 @@ function serializeProgramme(programme: Awaited<ReturnType<typeof loadPublicProgr
   };
 }
 
+/**
+ * Programmes the PUBLIC site may show.
+ *
+ * `publicStatus: "ONGOING"` used to be the only condition, which meant the
+ * seeded sample programme — and, through it, its partner, its village agents
+ * and its groups — was listed on the landing page to anyone who visited. Demo
+ * data belongs behind a sign-in, not on the front page of a financial product.
+ *
+ * This is the one place the public list is built, so the exclusion lives here
+ * rather than at each of the three routes that call it.
+ */
 async function loadPublicProgrammes(where: { id?: string; publicSlug?: string } = {}) {
   return prisma.programme.findMany({
     where: {
       ...where,
-      publicStatus: "ONGOING"
+      publicStatus: "ONGOING",
+      isDemo: false
     },
     orderBy: { createdAt: "desc" },
     include: {

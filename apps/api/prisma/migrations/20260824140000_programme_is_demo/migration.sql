@@ -1,0 +1,12 @@
+-- Marks a programme as sample data.
+--
+-- The seeded partner and programme exist so the platform can be explored, but
+-- `publicStatus = 'ONGOING'` was the only thing the public endpoints filtered
+-- on, so the demo project and its partner appeared on the public landing page
+-- to anyone who visited.
+--
+-- Defaults to false, so every existing row is treated as real. That is the safe
+-- direction: a real programme wrongly hidden from the public site is a visible
+-- bug someone reports, whereas demo data wrongly shown is exactly the failure
+-- being fixed and nobody notices it from the inside.
+ALTER TABLE "Programme" ADD COLUMN "isDemo" BOOLEAN NOT NULL DEFAULT false;

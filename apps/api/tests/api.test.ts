@@ -11,6 +11,19 @@ import { seedDatabase } from "../prisma/seed";
 
 const app = createApp();
 
+
+/**
+ * Makes the seeded programme genuinely public for one test.
+ *
+ * The seed marks its sample programme `isDemo`, which keeps it off the public
+ * site — that is the point. But a test of the PUBLIC endpoints still needs
+ * something public to look at, so it opts in explicitly rather than relying on
+ * demo data being visible, which is the arrangement that was just removed.
+ */
+async function publishSeededProgramme() {
+  await prisma.programme.updateMany({ where: { isDemo: true }, data: { isDemo: false } });
+}
+
 describe("Intellicash API", () => {
   beforeAll(async () => {
     await seedDatabase();
@@ -1610,6 +1623,7 @@ describe("Intellicash API", () => {
   }, 60000);
 
   it("handles public partner signup requests and admin account approval", async () => {
+    await publishSeededProgramme();
     const agent = await authenticatedAgent();
     const publicProjects = await request(app).get("/api/v1/public/programmes").expect(200);
 
@@ -1801,6 +1815,7 @@ describe("Intellicash API", () => {
   }, 30000);
 
   it("supports public Intelli-Store credit and booking requests", async () => {
+    await publishSeededProgramme();
     const store = await request(app).get("/api/v1/public/intelli-store").expect(200);
     const product = store.body.data.products.find((row: { slug: string }) => row.slug === "solar-egg-incubator");
     const bookableAgent =

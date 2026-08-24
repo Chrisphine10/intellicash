@@ -199,6 +199,9 @@ export async function seedDatabase() {
       description: "Pilot programme for digitally managed IWL savings groups.",
       publicSlug: "agreement-sf-00112775",
       publicStatus: "ONGOING",
+      // Sample data. Keeps it off the public landing page while leaving it
+      // fully visible to anyone signed in — which is what it is for.
+      isDemo: true,
       fundingGoalCents: 750000000,
       fundingSummary: "Scale digital passbooks, secure meeting workflows, and credit-readiness reporting for Kiambu savings groups.",
       impactSummary: "Supports women-led VSLAs with transparent records, stronger governance, and responsible access to finance.",
