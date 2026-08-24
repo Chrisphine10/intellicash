@@ -811,7 +811,7 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                             )
                           )
                         }
-                        pattern="[0-9]{6}"
+                        pattern="[0-9]{4}|[0-9]{6}"
                         placeholder={unlockCredentialPlaceholder}
                         type="password"
                         value={row.pin}
