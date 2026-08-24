@@ -1,28 +1,21 @@
-import fs from "node:fs";
-import path from "node:path";
 import React from "react";
 
 /**
- * True when the file exists under `public/` at render time.
+ * One phone screen in the guide.
  *
- * The guide is written before every screen has been captured, and a role whose
- * screenshots are still outstanding must not render four broken-image icons —
- * a missing picture with its explanation still reads as documentation, a broken
- * frame reads as a broken site.
+ * Deliberately has no runtime check that the file exists. An earlier version
+ * called `fs.existsSync(process.cwd() + "/public" + src)` so a screen that had
+ * not been captured yet would show its caption instead of a broken frame. This
+ * page is server-rendered on demand, and on the VPS the process runs from the
+ * repo root rather than `apps/web` — so the check resolved nothing, returned
+ * false for all 29 screenshots, and replaced the entire guide with placeholders
+ * in production while every local check passed.
  *
- * This is a server component, so the check happens once at build time. If the
- * lookup itself fails we render the image: an unreadable filesystem is not
- * evidence that the screenshot is absent.
+ * The guarantee now lives where it can actually be verified:
+ * `tests/docs-screenshots.test.ts` fails CI if any `src` here points at a file
+ * that is not in `public/docs`, or if a file is shipped that nothing shows.
+ * A build-time assertion beats a request-time guess about the filesystem.
  */
-function shotExists(src: string): boolean {
-  try {
-    return fs.existsSync(path.join(process.cwd(), "public", src.replace(/^\//, "")));
-  } catch {
-    return true;
-  }
-}
-
-/** One phone screen in the guide. */
 export function DocsShot({
   src,
   alt,
@@ -32,22 +25,14 @@ export function DocsShot({
   alt: string;
   caption: string;
 }) {
-  const captured = shotExists(src);
-
   return (
-    <figure className={captured ? "docs-shot" : "docs-shot docs-shot-pending"}>
-      {captured ? (
-        /*
-         * A plain <img>, not next/image: these are fixed-size phone captures
-         * served straight from /public, so the optimiser has nothing to add and
-         * one more moving part could only break them.
-         */
-        <img alt={alt} className="docs-shot-image" loading="lazy" src={src} />
-      ) : (
-        <div aria-hidden="true" className="docs-shot-placeholder">
-          <span>Screenshot coming</span>
-        </div>
-      )}
+    <figure className="docs-shot">
+      {/*
+       * A plain <img>, not next/image: these are fixed-size phone captures
+       * served straight from /public, so the optimiser has nothing to add and
+       * one more moving part could only break them.
+       */}
+      <img alt={alt} className="docs-shot-image" loading="lazy" src={src} />
       <figcaption>{caption}</figcaption>
     </figure>
   );
