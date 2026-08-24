@@ -179,23 +179,53 @@ export default function DocsPage() {
         <div className="docs-shot-row" id="docs-group-shots">
           <DocsShot
             src="/docs/10-group-home.png"
-            alt="The group dashboard showing savings, loans and the current cycle"
-            caption="The group's money at a glance: what has been saved, what is out on loan, and where the cycle has reached."
+            alt="The group dashboard showing savings, members, meetings, fines and social fund"
+            caption="The dashboard: savings, active loans, members, meetings, fines and the social fund — with the sync state in the corner, so you always know whether the office has today's figures."
           />
           <DocsShot
-            src="/docs/11-meeting-hub.png"
-            alt="The meeting screen with actions for shares, loans, voting and welfare"
-            caption="A meeting in progress. Shares, loans, attendance, voting and welfare are all reached from here."
+            src="/docs/11-meetings.png"
+            alt="The meetings list showing one meeting in progress"
+            caption="Meetings. A closed meeting is locked — its records are the group's permanent audit trail — so the list says so rather than leaving you to find out."
           />
           <DocsShot
             src="/docs/12-unlock.png"
-            alt="The three-key unlock asking officials for their PINs"
-            caption="The three-key unlock. Each official enters their own PIN; the app counts the keys turned rather than trusting one person."
+            alt="The unlock screen counting officials and members who have turned their key"
+            caption="Turning the keys. It counts as it goes — 0 of 3 officials, 0 of 5 members — so the room can see how close the meeting is to opening and who still has to confirm."
+          />
+          <DocsShot
+            src="/docs/16-attendance.png"
+            alt="Marking attendance, showing 3 of 8 present"
+            caption="Attendance first, with a running count and percentage. Everything after this is recorded against the people who were actually there."
+          />
+          <DocsShot
+            src="/docs/11-meeting-hub.png"
+            alt="The open meeting with tiles for social fund, shares, fines, loans, voting and welfare"
+            caption="The meeting itself. Every action the group takes together is one tap away, and the running totals for this meeting sit underneath."
+          />
+          <DocsShot
+            src="/docs/18-voting.png"
+            alt="Group votes showing a passed motion and an open election"
+            caption="Votes and elections. A decision records the tally; an election can be secret. One member, one vote."
+          />
+          <DocsShot
+            src="/docs/17-welfare.png"
+            alt="The welfare fund screen"
+            caption="Welfare sits beside Voting, because a payout is agreed in the meeting the same way a motion is."
           />
           <DocsShot
             src="/docs/13-members.png"
-            alt="The member list for a group"
-            caption="Members, their roles and their standing. Savings and loan history follow the person, so correcting a name never loses their record."
+            alt="The member list showing savings and loan standing for each member"
+            caption="Members, searchable, each with their savings and whether they hold a loan."
+          />
+          <DocsShot
+            src="/docs/14-loans.png"
+            alt="The loans tab for the group"
+            caption="Loans the group has out, what is owed, and what has been repaid."
+          />
+          <DocsShot
+            src="/docs/15-more.png"
+            alt="The More tab with group settings and reports"
+            caption="Everything set up once rather than every meeting: the group's rules, cycles, reports and the account screen."
           />
         </div>
       </section>
