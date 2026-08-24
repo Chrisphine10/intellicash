@@ -61,6 +61,22 @@ export function ensureUploadDirectory(path = uploadRoot) {
   mkdirSync(path, { recursive: true });
 }
 
+/**
+ * The upload kinds served over `/uploads` with no session.
+ *
+ * These are the ones whose whole purpose is to be looked at by strangers:
+ * avatars, programme imagery, Intelli-Store product photos, and the documents
+ * a programme publishes. They are written by `routes/uploads.ts` into a folder
+ * named for the kind, directly under the upload root.
+ *
+ * Everything else in the upload root — visit photographs, group documents — is
+ * evidence about identifiable people and is served ONLY through
+ * `GET /api/v1/attachments/:id/file`, which checks the caller's scope. Listing
+ * the safe kinds rather than excluding the unsafe ones is deliberate: a kind
+ * added later is private until somebody decides otherwise.
+ */
+export const PUBLICLY_SERVED_UPLOAD_KINDS = ["avatar", "image", "file", "store-image"] as const;
+
 export function publicUploadUrl(pathname: string) {
   return `${env.API_PUBLIC_URL.replace(/\/$/, "")}/uploads/${pathname.replace(/^\/+/, "")}`;
 }

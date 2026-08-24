@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { join, normalize, sep } from "node:path";
-import { publicUploadUrl, uploadRoot } from "../lib/uploads";
+import { uploadRoot } from "../lib/uploads";
 
 /**
  * The one place that knows attachments are files on a disk.
@@ -52,8 +52,24 @@ export function resolveAttachmentPath(storagePath: string) {
   return absolute;
 }
 
-export function attachmentUrl(storagePath: string) {
-  return publicUploadUrl(storagePath);
+/**
+ * Where a client fetches an attachment's bytes.
+ *
+ * An attachment id, not a storage path. The path used to be handed out as a
+ * `/uploads/...` URL served by `express.static` with no session at all, which
+ * made every visit photograph readable by anyone who came by the link. Routing
+ * through the API means the same scope check that governs the metadata governs
+ * the image, and it also decouples the URL from where the bytes happen to sit.
+ *
+ * Relative on purpose, unlike `publicUploadUrl`. This URL only ever goes in an
+ * `<img>` in the console, and the console is served from the same host as the
+ * API in every deployment. An absolute one would be cross-origin during local
+ * development, where the session cookie is not sent on a subresource and the
+ * page's `img-src 'self'` would refuse it anyway — an image that silently fails
+ * on every developer machine and works only in production.
+ */
+export function attachmentUrl(attachmentId: string) {
+  return `/api/v1/attachments/${attachmentId}/file`;
 }
 
 /**

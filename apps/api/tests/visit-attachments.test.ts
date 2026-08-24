@@ -141,7 +141,10 @@ describe("visit attachments", () => {
       expect(response.body.data.visitId).toBe(visitId);
       expect(response.body.data.sectionKey).toBe("governance");
       expect(response.body.data.questionKey).toBe("constitution_written");
-      expect(response.body.data.url).toMatch(/visit-photo/);
+      // The url addresses the attachment, not the file. Where the bytes sit is
+      // the server's business — see "who can fetch the bytes" below.
+      expect(response.body.data.url).toContain(`/attachments/${response.body.data.id}/file`);
+      expect(uploaded.storagePath).toMatch(/^visit-photo\/\d{4}\/\d{2}\//);
     });
 
     it("refuses a photo that does not say what it is evidence of", async () => {
@@ -356,8 +359,132 @@ describe("visit attachments", () => {
       for (const attachment of response.body.data) {
         // Every stored photo says what it is evidence of.
         expect(attachment.sectionKey).toBeTruthy();
-        expect(attachment.url).toMatch(/^https?:\/\//);
+        // Same-origin and relative: see attachmentUrl for why.
+        expect(attachment.url).toMatch(/^\/api\/v1\/attachments\/[^/]+\/file$/);
       }
+    });
+  });
+
+  /**
+   * Serving the bytes.
+   *
+   * The whole upload root used to be mounted as static files, so a photograph
+   * of a group's premises or its books was fetchable by anyone holding the URL
+   * — no session, no scope check. The metadata was scoped and the image was
+   * not. These are the tests that keep it that way round.
+   */
+  describe("who can fetch the bytes", () => {
+    // Its own visit: the cap test above fills the shared one to the limit, and
+    // its own byte markers, because binding the same content hash twice is a
+    // deliberate no-op that returns 200 rather than 201.
+    let servingVisitId: string;
+    let marker = 0x40;
+
+    beforeAll(async () => {
+      const agentUser = await prisma.user.findFirst({
+        where: { role: "VILLAGE_AGENT" },
+        select: { id: true, villageAgentId: true }
+      });
+      const visit = await prisma.groupVisit.create({
+        data: {
+          groupId,
+          clientRequestId: "visit-attachment-serving-fixture",
+          visitType: "FOLLOW_UP",
+          startedAt: new Date(),
+          villageAgentId: agentUser!.villageAgentId!,
+          submittedByUserId: agentUser!.id
+        }
+      });
+      servingVisitId = visit.id;
+    }, 60000);
+
+    async function anAttachment() {
+      const uploaded = await upload(agentCookies, (marker += 1));
+      const created = await request(app)
+        .post(`/api/v1/visits/${servingVisitId}/attachments`)
+        .set("Cookie", agentCookies)
+        .send({
+          storagePath: uploaded.storagePath,
+          fileName: uploaded.fileName,
+          mimeType: uploaded.mimeType,
+          size: uploaded.size,
+          sha256: uploaded.sha256,
+          sectionKey: "governance",
+          questionKey: "constitution_written",
+          capturedAt: new Date().toISOString(),
+          clientRequestId: `att-serving-${marker}`
+        })
+        .expect(201);
+
+      return { id: created.body.data.id as string, url: created.body.data.url as string, uploaded };
+    }
+
+    it("hands out an API url, never a path under /uploads", async () => {
+      const { id, url } = await anAttachment();
+
+      expect(url).toContain(`/api/v1/attachments/${id}/file`);
+      expect(url).not.toContain("/uploads/");
+    });
+
+    it("no longer serves visit photographs as public static files", async () => {
+      const uploaded = await upload(agentCookies, (marker += 1));
+
+      // The path that used to work, verbatim.
+      await request(app).get(`/uploads/${uploaded.storagePath}`).expect(404);
+    });
+
+    it("refuses a caller with no session", async () => {
+      const { id } = await anAttachment();
+
+      await request(app).get(`/api/v1/attachments/${id}/file`).expect(401);
+    });
+
+    it("returns the exact bytes to an agent whose caseload covers the group", async () => {
+      const { id, uploaded } = await anAttachment();
+
+      const response = await request(app)
+        .get(`/api/v1/attachments/${id}/file`)
+        .set("Cookie", agentCookies)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => callback(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+
+      expect(response.headers["content-type"]).toContain("image/jpeg");
+      // A shared cache must not keep a copy of somebody's evidence.
+      expect(response.headers["cache-control"]).toContain("private");
+      expect(sha256Of(response.body as Buffer)).toBe(uploaded.sha256);
+    });
+
+    it("is a 404, not a 403, for a group that is not yours", async () => {
+      const { id } = await anAttachment();
+
+      const otherGroup = await prisma.group.findFirst({
+        where: { id: { not: groupId } },
+        select: { id: true }
+      });
+      const outsider = otherGroup
+        ? await prisma.user.findFirst({
+            where: { role: "GROUP_ACCOUNT", groupId: otherGroup.id },
+            select: { phone: true }
+          })
+        : null;
+
+      // The seed does not guarantee a second group with its own account; when
+      // there is none there is nothing to prove here, and inventing one would
+      // test the fixture rather than the scope rule.
+      if (!outsider?.phone) return;
+
+      const cookies = await signIn(outsider.phone);
+      const response = await request(app)
+        .get(`/api/v1/attachments/${id}/file`)
+        .set("Cookie", cookies);
+
+      // 404 rather than 403: confirming an id exists is itself a disclosure.
+      expect(response.status).toBe(404);
     });
   });
 });

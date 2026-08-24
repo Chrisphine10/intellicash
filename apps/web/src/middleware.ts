@@ -72,7 +72,12 @@ export function middleware(request: NextRequest) {
     // widening this directive costs far less than the alternative of proxying
     // every remote picture through the API. `http:` stays out, so a mixed
     // content URL still fails rather than downgrading the page.
-    "img-src 'self' https: data: blob:",
+    // The API origin is included for the same reason it is in `connect-src`:
+    // in a split setup the console renders visit evidence from
+    // `/api/v1/attachments/:id/file` on the API host, and a policy that forbids
+    // the origin the app is configured to use is a policy that breaks the app.
+    // Same-origin deployments add nothing here.
+    `img-src 'self' https: data: blob:${extraConnectSrc()}`,
     "font-src 'self' https: data:",
     // The API is same-origin (/api/v1 on this very host) in every deployment.
     // A split setup — API on its own port during development — has to declare

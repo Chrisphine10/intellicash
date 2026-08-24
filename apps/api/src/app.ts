@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -37,7 +38,7 @@ import { uploadsRouter } from "./routes/uploads";
 import { webhooksRouter } from "./routes/webhooks";
 import { welfareExpensesRouter } from "./routes/welfare-expenses";
 import { ApiHttpError, fail, ok } from "./lib/http";
-import { ensureUploadDirectory, uploadRoot } from "./lib/uploads";
+import { PUBLICLY_SERVED_UPLOAD_KINDS, ensureUploadDirectory, uploadRoot } from "./lib/uploads";
 import { requestTracingMiddleware } from "./middleware/request-tracing";
 
 function isAllowedCorsOrigin(origin: string) {
@@ -125,7 +126,20 @@ export function createApp(
     ok(res, { status: "ok", service: "intellicash-api" });
   });
 
-  app.use("/uploads", express.static(uploadRoot, { maxAge: "7d" }));
+  /*
+   * Only the kinds that are meant to be public. This used to be
+   * `app.use("/uploads", express.static(uploadRoot))` — the WHOLE upload root,
+   * unauthenticated. Field-visit photographs live under that root, so a
+   * photograph of a group's premises, its members or its books was readable by
+   * anyone holding the URL, with no session and no scope check. The filenames
+   * are UUIDs, which makes guessing impractical and is not access control:
+   * URLs travel in referrers, histories, and forwarded messages.
+   *
+   * Visit evidence is now served by GET /api/v1/attachments/:id/file.
+   */
+  for (const kind of PUBLICLY_SERVED_UPLOAD_KINDS) {
+    app.use(`/uploads/${kind}`, express.static(join(uploadRoot, kind), { maxAge: "7d" }));
+  }
 
   app.use("/api/v1/auth", authRouter);
   // BEFORE uploadsRouter, deliberately. That router owns `/uploads/:kind` and

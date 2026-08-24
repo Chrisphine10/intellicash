@@ -50,6 +50,20 @@ describe("content security policy", () => {
     expect(policy().get("img-src") ?? []).not.toContain("http:");
   });
 
+  /*
+   * Visit evidence is fetched from the API host, so img-src has to permit
+   * whatever connect-src permits. When they disagree the console loads the
+   * attachment's metadata and then renders an empty frame for the picture.
+   */
+  it("permits images from wherever it permits API calls", () => {
+    const current = policy();
+    const imgSrc = current.get("img-src") ?? [];
+
+    for (const source of current.get("connect-src") ?? []) {
+      expect(imgSrc).toContain(source);
+    }
+  });
+
   it("nonces scripts rather than allowing inline ones", () => {
     const scriptSrc = policy().get("script-src") ?? [];
 

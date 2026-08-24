@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPinned } from "@/lib/theme-icons";
-import { ApiClientError, apiFetch, humanizeEnum } from "../../../../lib/api";
+import { ApiClientError, apiFetch, evidenceSrc, humanizeEnum } from "../../../../lib/api";
 
 /**
  * One field visit, with the evidence collected during it.
@@ -374,10 +374,10 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="evidence-grid">
                   {items.map((attachment) => (
                     <figure key={attachment.id} className="evidence-item">
-                      <a href={attachment.url} target="_blank" rel="noreferrer">
+                      <a href={evidenceSrc(attachment.url)} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={attachment.url}
+                          src={evidenceSrc(attachment.url)}
                           alt={attachment.caption ?? attachment.questionKey ?? "Visit evidence"}
                           loading="lazy"
                         />

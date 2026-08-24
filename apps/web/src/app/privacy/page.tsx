@@ -38,6 +38,11 @@ const collectionRows: Array<[string, string, string]> = [
     "Platform users",
     "Login email, password (stored as a bcrypt hash), role, session records",
     "Authenticating you and scoping what your account can see"
+  ],
+  [
+    "Groups visited by a field agent",
+    "The agent's GPS coordinates and their accuracy at the moment a visit is opened, photographs taken as evidence for a specific scorecard question, assessment answers, coaching notes, action items, and details of the group's collective enterprise",
+    "Recording and supporting a field visit, and proving to the funder that it took place where and when it is claimed"
   ]
 ];
 
@@ -48,7 +53,9 @@ const protections = [
   "Access is role-scoped: members see their own records, group accounts see their group, partners see their programmes, and only platform administrators see cross-programme data.",
   "Public pages and public API responses never include member records, and staff contact details (agents, suppliers, partner contacts) are limited to names and coverage areas.",
   "Request logs carry trace IDs, not request bodies, and sensitive query values are redacted before logging.",
-  "Financial records are append-only with an audit trail, so changes are attributable and reviewable."
+  "Financial records are append-only with an audit trail, so changes are attributable and reviewable.",
+  "Location is read from the agent's phone only when a visit is opened, never in the background and never from a member's phone. The reading is the agent's own position; whether it matches the group's registered meeting point is worked out on the server, and a visit can still be recorded with no location at all.",
+  "A photograph can only be taken from the scorecard question it answers, so every picture is tied to the claim it is evidence for rather than sitting in an unlabelled gallery. A photograph is served only to an account already permitted to see that group's records — never as a public file, and never to somebody who merely holds the link."
 ];
 
 const rights = [
@@ -136,8 +143,8 @@ export default function PrivacyPage() {
           <a href={SUPPORT_EMAIL_HREF}>{SUPPORT_EMAIL}</a> or call{" "}
           <a href={SUPPORT_PHONE_HREF}>{SUPPORT_PHONE}</a>. We respond within 14 days. Retention:
           public store and booking requests are kept for 24 months after closure; group financial
-          records are kept for the life of the group plus statutory retention periods; server logs
-          are kept for 90 days.
+          records, field visit records and visit photographs are kept for the life of the group
+          plus statutory retention periods; server logs are kept for 90 days.
         </p>
       </section>
 

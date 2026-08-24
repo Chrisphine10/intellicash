@@ -15,7 +15,8 @@ import {
   attachmentDirectory,
   attachmentUrl,
   hashFile,
-  removeAttachmentFile
+  removeAttachmentFile,
+  resolveAttachmentPath
 } from "../services/attachment-storage";
 import { checkUploadStorage } from "../services/storage-guard";
 
@@ -289,6 +290,56 @@ attachmentsRouter.get(
 );
 
 /**
+ * The bytes of one attachment, for a caller already allowed to see the group.
+ *
+ * This exists because `/uploads` used to serve the entire upload root as static
+ * files. Visit photographs sat in there, so a picture of a group's premises,
+ * its books or its members was fetchable by anyone with the URL and no session
+ * at all. The metadata was scoped; the image was not.
+ *
+ * Scoped exactly like the listing above: `scopeGroupWhere` limits an agent to
+ * their caseload and a group account to itself, and anything outside is a 404
+ * rather than a 403 — telling a stranger that an id exists is itself a leak.
+ */
+attachmentsRouter.get(
+  "/attachments/:attachmentId/file",
+  requireAuth("visits:read"),
+  async (req, res, next) => {
+    try {
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          AND: [{ id: req.params.attachmentId as string }, { group: scopeGroupWhere(req.user) }]
+        },
+        select: { storagePath: true, fileName: true, mimeType: true }
+      });
+
+      if (!attachment) {
+        throw new ApiHttpError(
+          404,
+          "ATTACHMENT_NOT_FOUND",
+          "Attachment does not exist or is outside your access."
+        );
+      }
+
+      res.type(attachment.mimeType);
+      /*
+       * `inline`, with the stored name. Evidence is meant to be looked at in
+       * the console, not downloaded — and the filename comes from our own
+       * generator, never from the uploader, so it cannot carry a header break.
+       */
+      res.setHeader("Content-Disposition", `inline; filename="${attachment.fileName}"`);
+      // Personal data: no shared cache may keep a copy keyed only by the URL.
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.sendFile(resolveAttachmentPath(attachment.storagePath), (error) => {
+        if (error) next(error);
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * Removing evidence is admin-only and leaves an audit trail.
  *
  * `visits:amend` rather than `visits:write`: an agent who could delete their
@@ -363,7 +414,7 @@ function serializeAttachment(row: {
     visitId: row.visitId,
     sectionKey: row.sectionKey,
     questionKey: row.questionKey,
-    url: attachmentUrl(row.storagePath),
+    url: attachmentUrl(row.id),
     fileName: row.fileName,
     mimeType: row.mimeType,
     size: row.sizeBytes,

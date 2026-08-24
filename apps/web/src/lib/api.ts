@@ -33,6 +33,27 @@ export const API_BASE_URL = normalizeApiBaseUrl(
   process.env.NEXT_PUBLIC_API_BASE_URL ?? fallbackApiBaseUrl()
 );
 
+/**
+ * Resolves a server-relative API path (`/api/v1/attachments/x/file`) to
+ * something the browser can load.
+ *
+ * Visit evidence is served by the API behind a scope check, and the API returns
+ * the path relative so that a same-origin deployment — which is every real one
+ * — needs no configuration. A split development setup puts the API on another
+ * port, where a bare path would hit the Next server instead. Prefixing with the
+ * configured API origin covers both without the API having to know which it is.
+ */
+export function evidenceSrc(pathname: string) {
+  if (!pathname.startsWith("/")) return pathname;
+
+  try {
+    return new URL(pathname, new URL(API_BASE_URL).origin).toString();
+  } catch {
+    // A relative API_BASE_URL means same-origin, where the path already works.
+    return pathname;
+  }
+}
+
 export class ApiClientError extends Error {
   status: number;
   code: string;
