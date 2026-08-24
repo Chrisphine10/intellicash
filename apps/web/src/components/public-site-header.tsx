@@ -16,6 +16,7 @@ const platformLinks = [
   { label: "Services", href: "/#platform" },
   { label: "Group registration", href: "/#group-registration" },
   { label: "How it works", href: "/#how-it-works" },
+  { label: "Guide", href: "/docs" },
   { label: "Intelli-Store", href: "/intelli-store" },
   { label: "Trust", href: "/#governance" }
 ];

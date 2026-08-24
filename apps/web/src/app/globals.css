@@ -8336,3 +8336,41 @@ html[data-theme="dark"] .pwa-splash-screen {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * The guide's phone screenshots.
+ *
+ * A responsive grid rather than fixed columns: these are tall portrait captures
+ * and a row of four is unreadable on anything narrow. `minmax(0, …)` matters —
+ * without it a long caption widens its own column and the row stops lining up.
+ */
+.docs-shot-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 22px;
+  margin-top: 18px;
+}
+
+.docs-shot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+}
+
+.docs-shot-image {
+  width: 100%;
+  height: auto;
+  /* The frame, so a screenshot reads as a phone rather than a floating slab. */
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  box-shadow: var(--shadow-theme-md);
+}
+
+.docs-shot figcaption {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
