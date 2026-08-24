@@ -180,72 +180,89 @@ async function main() {
   // never see this one — it would sign in and find nothing. This group needs
   // an account of its own, and a member account to test the member's own view.
   const accountPassword = await bcrypt.hash(demoPassword, 12);
-  await prisma.user.deleteMany({
-    where: {
-      email: {
-        in: [
-          "demo.group@intellicash.co.ke",
-          "demo.member@intellicash.co.ke",
-          "demo.agent@intellicash.co.ke"
-        ]
+
+  /*
+   * All three demo sign-ins are rebuilt in ONE transaction.
+   *
+   * The block below deletes the three demo users and then recreates them one
+   * at a time, with a VillageAgent and a group update in between. Run outside a
+   * transaction, anything that throws part-way leaves accounts deleted and not
+   * restored — and because the agent is created last, it is the one that goes
+   * missing. Which is exactly the reported symptom: group and member sign in,
+   * the agent "does not exist yet".
+   *
+   * A transaction makes the rebuild all-or-nothing: either the three accounts
+   * are there, or the previous ones are still there. Never a half-seeded state
+   * that looks like a missing feature.
+   */
+  await prisma.$transaction(async (tx) => {
+    await tx.user.deleteMany({
+      where: {
+        email: {
+          in: [
+            "demo.group@intellicash.co.ke",
+            "demo.member@intellicash.co.ke",
+            "demo.agent@intellicash.co.ke"
+          ]
+        }
       }
-    }
-  });
-  await prisma.user.create({
-    data: {
-      name: "Demo Group Account",
-      email: "demo.group@intellicash.co.ke",
-      phone: "254720100100",
-      passwordHash: accountPassword,
-      role: "GROUP_ACCOUNT",
-      groupId: group.id,
-      status: "ACTIVE"
-    }
-  });
-  await prisma.user.create({
-    data: {
-      name: members[0]!.fullName,
-      email: "demo.member@intellicash.co.ke",
-      phone: "254720100101",
-      passwordHash: accountPassword,
-      role: "MEMBER",
-      groupId: group.id,
-      memberId: members[0]!.id,
-      status: "ACTIVE"
-    }
-  });
-  // A Village Agent / CBT sees exactly the groups whose `villageAgentId` is
-  // theirs (see account-scope.ts), so the login alone is not enough — without
-  // the VillageAgent record AND the group pointing at it, the agent signs in
-  // to an empty caseload, which looks identical to the app being broken.
-  const agent =
-    (await prisma.villageAgent.findFirst({
-      where: { email: "demo.agent@intellicash.co.ke" }
-    })) ??
-    (await prisma.villageAgent.create({
+    });
+    await tx.user.create({
       data: {
-        programmeId: programme.id,
-        name: "Grace Wanjiku",
-        phone: "254720100102",
-        email: "demo.agent@intellicash.co.ke",
-        county: "Bungoma",
+        name: "Demo Group Account",
+        email: "demo.group@intellicash.co.ke",
+        phone: "254720100100",
+        passwordHash: accountPassword,
+        role: "GROUP_ACCOUNT",
+        groupId: group.id,
         status: "ACTIVE"
       }
-    }));
-  await prisma.group.update({
-    where: { id: group.id },
-    data: { villageAgentId: agent.id }
-  });
-  await prisma.user.create({
-    data: {
-      name: agent.name,
-      email: "demo.agent@intellicash.co.ke",
-      phone: "254720100102",
-      passwordHash: accountPassword,
-      role: "VILLAGE_AGENT",
-      villageAgentId: agent.id,
-      status: "ACTIVE"
-    }
+    });
+    await tx.user.create({
+      data: {
+        name: members[0]!.fullName,
+        email: "demo.member@intellicash.co.ke",
+        phone: "254720100101",
+        passwordHash: accountPassword,
+        role: "MEMBER",
+        groupId: group.id,
+        memberId: members[0]!.id,
+        status: "ACTIVE"
+      }
+    });
+    // A Village Agent / CBT sees exactly the groups whose `villageAgentId` is
+    // theirs (see account-scope.ts), so the login alone is not enough — without
+    // the VillageAgent record AND the group pointing at it, the agent signs in
+    // to an empty caseload, which looks identical to the app being broken.
+    const agent =
+      (await tx.villageAgent.findFirst({
+        where: { email: "demo.agent@intellicash.co.ke" }
+      })) ??
+      (await tx.villageAgent.create({
+        data: {
+          programmeId: programme.id,
+          name: "Grace Wanjiku",
+          phone: "254720100102",
+          email: "demo.agent@intellicash.co.ke",
+          county: "Bungoma",
+          status: "ACTIVE"
+        }
+      }));
+    await tx.group.update({
+      where: { id: group.id },
+      data: { villageAgentId: agent.id }
+    });
+    await tx.user.create({
+      data: {
+        name: agent.name,
+        email: "demo.agent@intellicash.co.ke",
+        phone: "254720100102",
+        passwordHash: accountPassword,
+        role: "VILLAGE_AGENT",
+        villageAgentId: agent.id,
+        status: "ACTIVE"
+      }
+    });
   });
   log("sign-ins", "demo.group@, demo.member@ and demo.agent@intellicash.co.ke");
 
