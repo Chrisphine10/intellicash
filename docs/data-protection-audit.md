@@ -102,15 +102,41 @@ period. The only automatic deletion anywhere is the mobile outbox prune
 Visit photos, GPS fixes and free-text notes about named individuals accumulate
 with no expiry. Retention limitation is an obligation, not an aspiration.
 
-### 5. Visit records are wider than the notice describes — MEDIUM
+### 5. Visit records are wider than the notice describes — CLOSED 24 Aug 2026
 
-Field visits now capture GPS coordinates, device identifiers, photographs of
+Field visits capture GPS coordinates, device identifiers, photographs of
 premises, and free-text coaching notes naming individuals. The "What we
-collect" table pre-dates that work and does not mention location, photographs
-or device identifiers.
+collect" table pre-dated that work and mentioned none of it, while the app
+asked for precise location on the first screen of a visit.
 
-A notice that does not describe the processing is not valid notice. This one
-needs updating before the visits feature reaches real groups at scale.
+The notice now carries a row for groups visited by a field agent — coordinates
+and their accuracy at the moment a visit is opened, photographs bound to a
+specific scorecard question, assessment answers, coaching notes, action items,
+the group's enterprise — plus two control lines saying that location is read
+only when a visit is opened and never in the background, and that a photograph
+can only be taken from the question it answers.
+
+### 5a. Visit photographs were served to anyone with the link — CLOSED 24 Aug 2026
+
+Found while writing the notice above, by checking whether a sentence about
+photograph access was actually true. It was not.
+
+`app.use("/uploads", express.static(uploadRoot))` mounted the entire upload
+root with no session. Visit evidence is written under that root, so a
+photograph of a group's premises, its books or its members could be fetched by
+anyone holding the URL — no login, no scope check, no audit trail. The
+metadata beside it was properly scoped (`visits:read`, agent narrowed to their
+caseload); only the bytes were not. UUID filenames make guessing impractical
+and are not access control: URLs travel in referrers, browser histories, and
+anywhere a link is forwarded.
+
+Closed by serving only the four deliberately-public kinds over `/uploads`
+(avatar, image, file, store-image) and adding
+`GET /api/v1/attachments/:id/file`, which applies the same `scopeGroupWhere`
+check as the listing, answers 404 rather than 403 outside scope, and sets
+`Cache-Control: private`. `apps/api/tests/visit-attachments.test.ts` now covers
+the unauthenticated case, the out-of-scope case, and that the old static path
+is gone.
 
 ### 6. No breach-notification runbook — MEDIUM
 
@@ -134,6 +160,9 @@ contact route recorded. 72 hours is not long to invent a process in.
 1. Data-subject-rights endpoints (access + erasure) — the clearest legal exposure.
 2. Re-hash the offline PIN verifier with a slow KDF — the clearest technical one.
 3. Salt/HMAC the national ID hash, and re-hash existing rows.
-4. Update the notice to cover GPS, photographs and device identifiers.
+4. ~~Update the notice to cover GPS, photographs and device identifiers.~~ Done 24 Aug 2026.
 5. Write the retention schedule, then enforce it in a job.
 6. Breach runbook with a named owner.
+
+Remaining open: 2 (unsalted `nationalIdHash`), 4 (retention unenforced),
+6 (breach runbook), 7 (ODPC registration, DPIA, cross-border, shared hosting).
