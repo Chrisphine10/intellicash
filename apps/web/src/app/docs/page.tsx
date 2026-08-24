@@ -434,6 +434,17 @@ export default function DocsPage() {
               entered by hand.
             </strong>
           </div>
+          <div className="governance-row">
+            <span>Assessment band</span>
+            <strong>
+              A different thing from the credit rating, and the two can disagree.
+              This one comes from the scorecard an agent fills in with the
+              officials, scored as a percentage of whatever the current template is
+              worth: Weak below 40%, Fair from 40%, Good from 60%,
+              Excellent from 80%. The credit rating is machine-derived from the
+              ledger; the band is what a person saw on the day.
+            </strong>
+          </div>
         </div>
       </section>
 
