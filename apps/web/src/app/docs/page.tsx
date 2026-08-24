@@ -93,22 +93,22 @@ export default function DocsPage() {
         </div>
         <div className="docs-shot-row">
           <DocsShot
-            src="/docs/01-welcome.png"
+            src="/docs/01-welcome.webp"
             alt="The Intelli-Cash welcome screen with Create Account and Sign In"
             caption="The first screen. Change the language here before anything else if you would rather not work in English."
           />
           <DocsShot
-            src="/docs/02-account-types.png"
+            src="/docs/02-account-types.webp"
             alt="Choosing between Our Group, Just Me, and Field Agent"
             caption="The three account types, each with a line describing who it is for."
           />
           <DocsShot
-            src="/docs/03-sign-in.png"
+            src="/docs/03-sign-in.webp"
             alt="The sign-in screen asking which kind of account is signing in"
             caption="Signing in asks the same question, so a shared phone can move between accounts without confusion."
           />
           <DocsShot
-            src="/docs/05-signin-group.png"
+            src="/docs/05-signin-group.webp"
             alt="The group sign-in form asking for phone number and password"
             caption="Your phone number is your sign-in. A session lasts 8 hours; the record book keeps working offline once you are in."
           />
@@ -127,17 +127,17 @@ export default function DocsPage() {
         </div>
         <div className="docs-shot-row">
           <DocsShot
-            src="/docs/06-create-group.png"
+            src="/docs/06-create-group.webp"
             alt="Creating a group account, asking for a group name"
             caption="A group registers with its NAME, a phone number and a password. That phone number becomes the group's sign-in."
           />
           <DocsShot
-            src="/docs/07-create-agent.png"
+            src="/docs/07-create-agent.webp"
             alt="Creating a field agent account, asking for a county"
             caption="An agent registers with their own name and, optionally, the county they cover — which is how their caseload is organised."
           />
           <DocsShot
-            src="/docs/04-language.png"
+            src="/docs/04-language.webp"
             alt="The language picker showing English, Kiswahili, Gikuyu, Dholuo and Kiembu"
             caption="Five languages. The ones still being translated say so rather than silently falling back to English."
           />
@@ -178,52 +178,52 @@ export default function DocsPage() {
 
         <div className="docs-shot-row" id="docs-group-shots">
           <DocsShot
-            src="/docs/10-group-home.png"
+            src="/docs/10-group-home.webp"
             alt="The group dashboard showing savings, members, meetings, fines and social fund"
             caption="The dashboard: savings, active loans, members, meetings, fines and the social fund — with the sync state in the corner, so you always know whether the office has today's figures."
           />
           <DocsShot
-            src="/docs/11-meetings.png"
+            src="/docs/11-meetings.webp"
             alt="The meetings list showing one meeting in progress"
             caption="Meetings. A closed meeting is locked — its records are the group's permanent audit trail — so the list says so rather than leaving you to find out."
           />
           <DocsShot
-            src="/docs/12-unlock.png"
+            src="/docs/12-unlock.webp"
             alt="The unlock screen counting officials and members who have turned their key"
             caption="Turning the keys. It counts as it goes — 0 of 3 officials, 0 of 5 members — so the room can see how close the meeting is to opening and who still has to confirm."
           />
           <DocsShot
-            src="/docs/16-attendance.png"
+            src="/docs/16-attendance.webp"
             alt="Marking attendance, showing 3 of 8 present"
             caption="Attendance first, with a running count and percentage. Everything after this is recorded against the people who were actually there."
           />
           <DocsShot
-            src="/docs/11-meeting-hub.png"
+            src="/docs/11-meeting-hub.webp"
             alt="The open meeting with tiles for social fund, shares, fines, loans, voting and welfare"
             caption="The meeting itself. Every action the group takes together is one tap away, and the running totals for this meeting sit underneath."
           />
           <DocsShot
-            src="/docs/18-voting.png"
+            src="/docs/18-voting.webp"
             alt="Group votes showing a passed motion and an open election"
             caption="Votes and elections. A decision records the tally; an election can be secret. One member, one vote."
           />
           <DocsShot
-            src="/docs/17-welfare.png"
+            src="/docs/17-welfare.webp"
             alt="The welfare fund screen"
             caption="Welfare sits beside Voting, because a payout is agreed in the meeting the same way a motion is."
           />
           <DocsShot
-            src="/docs/13-members.png"
+            src="/docs/13-members.webp"
             alt="The member list showing savings and loan standing for each member"
             caption="Members, searchable, each with their savings and whether they hold a loan."
           />
           <DocsShot
-            src="/docs/14-loans.png"
+            src="/docs/14-loans.webp"
             alt="The loans tab for the group"
             caption="Loans the group has out, what is owed, and what has been repaid."
           />
           <DocsShot
-            src="/docs/15-more.png"
+            src="/docs/15-more.webp"
             alt="The More tab with group settings and reports"
             caption="Everything set up once rather than every meeting: the group's rules, cycles, reports and the account screen."
           />
@@ -237,24 +237,30 @@ export default function DocsPage() {
           <p>
             A personal account shows one person their own record — the same
             figures the group&rsquo;s book holds, not a separate copy that can
-            drift out of step.
+            drift out of step. If you save with more than one group, all of them
+            appear under the one account.
           </p>
         </div>
         <div className="docs-shot-row" id="docs-member-shots">
           <DocsShot
-            src="/docs/20-member-home.png"
-            alt="A member home screen showing their savings and shares"
-            caption="What you have saved, the shares you hold, and anything you owe."
+            src="/docs/21-member-passbook.webp"
+            alt="My Passbook showing shares bought, social fund, loans and recent transactions"
+            caption="Your passbook. Shares bought, social fund, what you have borrowed and what is still owing — then every transaction underneath, newest first."
           />
           <DocsShot
-            src="/docs/21-member-passbook.png"
-            alt="A member passbook listing contributions and repayments"
-            caption="Your passbook: every contribution and repayment in order, with the meeting each belongs to."
+            src="/docs/20-member-home.webp"
+            alt="My Savings totalling one member's savings across the groups they belong to"
+            caption="My Savings adds up every group you belong to, then breaks the same total down group by group. A member in three groups sees one figure, not three books."
           />
           <DocsShot
-            src="/docs/22-member-join.png"
-            alt="Joining a group using a code"
-            caption="Join a group with the code its officials give you. They approve the request before you appear in their book."
+            src="/docs/23-member-report.webp"
+            alt="My Report, a dated statement of savings, loans and recent transactions"
+            caption="My Report is a dated statement you can share or download — useful when a lender, a chief or a family member asks what you have saved."
+          />
+          <DocsShot
+            src="/docs/22-member-join.webp"
+            alt="Join a group by entering the group code"
+            caption="Join a group with the code its officials give you. Sending the request does not open the group’s books — an official has to accept you first."
           />
         </div>
       </section>
@@ -266,29 +272,51 @@ export default function DocsPage() {
           <p>
             An agent sees the groups they are responsible for, records visits,
             and scores each group against the assessment. What an agent writes is
-            evidence about a group — it never moves the group&rsquo;s money.
+            evidence about a group — it never moves the group&rsquo;s money, and
+            the whole visit is held on the phone until there is signal, because
+            the places that most need a visit are the ones with least coverage.
           </p>
         </div>
         <div className="docs-shot-row" id="docs-agent-shots">
           <DocsShot
-            src="/docs/30-agent-home.png"
-            alt="The agent caseload listing their groups with credit bands"
-            caption="Your caseload. Each group carries its credit rating, so the ones needing support are visible without opening them."
+            src="/docs/30-agent-home.webp"
+            alt="An agent caseload listing each group with its credit band"
+            caption="Your caseload, with a count of how many groups need support. Each group carries its rating, so the ones to visit first are visible without opening any of them."
           />
           <DocsShot
-            src="/docs/31-agent-group.png"
-            alt="A group detail screen as an agent sees it"
-            caption="A group's standing, with the rating explained factor by factor rather than as a single number."
+            src="/docs/31-agent-group.webp"
+            alt="A group's credit rating broken down factor by factor"
+            caption="A group's standing, explained factor by factor — leadership, 3-key security, loan repayment, attendance — and ending in a plain list of what would raise it. Not a single number you cannot argue with."
           />
           <DocsShot
-            src="/docs/32-visit.png"
-            alt="Recording a field visit"
-            caption="Recording a visit. Location is captured and checked against the group's registered meeting point by the server, not by the phone."
+            src="/docs/32-visit.webp"
+            alt="The visit form: visit type, GPS location and open actions from last time"
+            caption="Opening a visit. Your coordinates and their accuracy are recorded; whether they match the group's registered point is decided by the office, not by the phone. Anything the group still owes from last time is shown before you start."
           />
           <DocsShot
-            src="/docs/33-assessment.png"
-            alt="The group assessment scorecard, one section at a time"
-            caption="The scorecard, one section at a time, with the running score and band visible so you can tell the group how they did before you leave."
+            src="/docs/33-assessment.webp"
+            alt="The 92-point scorecard, one section at a time"
+            caption="The scorecard: 7 sections, 92 points, one section at a time. Yes, Partial, No or Not applicable, with the running score and band always on screen so you can tell the group how they did before you leave."
+          />
+          <DocsShot
+            src="/docs/35-mentorship.webp"
+            alt="Mentorship topics an agent can record having coached on"
+            caption="What you coached on, from a list the office maintains — so a quarter's coaching can be counted across every agent, not just described."
+          />
+          <DocsShot
+            src="/docs/36-rating.webp"
+            alt="The group rating the coaching session out of five"
+            caption="Then you hand the phone over. The group rates the session, not you — an agent scoring their own coaching would be uniformly high and worth nothing in aggregate."
+          />
+          <DocsShot
+            src="/docs/34-visit-parts.webp"
+            alt="The whole visit document with a Finish visit button"
+            caption="One visit is one document: scorecard, coaching, the group's enterprise and your notes. Finish saves it on the phone and sends it when there is signal."
+          />
+          <DocsShot
+            src="/docs/37-agent-report.webp"
+            alt="A caseload report an agent can share"
+            caption="A caseload report you can share from the phone — how many groups, how many rated, how many need support."
           />
         </div>
       </section>

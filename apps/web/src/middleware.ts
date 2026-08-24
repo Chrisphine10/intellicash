@@ -64,7 +64,15 @@ export function middleware(request: NextRequest) {
     // Next inlines critical CSS and the font loader emits style attributes;
     // there is no nonce hook for those, and inline CSS is not script execution.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // `https:` is deliberate. Programme covers, partner project covers and
+    // Intelli-Store product photos are all admin-supplied absolute URLs — the
+    // console has a field for exactly that — and `'self'` alone silently
+    // blocked every one of them, so a shipped feature rendered nothing while
+    // the console showed the URL saved and correct. An image cannot execute;
+    // widening this directive costs far less than the alternative of proxying
+    // every remote picture through the API. `http:` stays out, so a mixed
+    // content URL still fails rather than downgrading the page.
+    "img-src 'self' https: data: blob:",
     "font-src 'self' https: data:",
     // The API is same-origin (/api/v1 on this very host) in every deployment.
     // A split setup — API on its own port during development — has to declare

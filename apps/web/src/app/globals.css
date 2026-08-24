@@ -8375,6 +8375,24 @@ html[data-theme="dark"] .pwa-splash-screen {
   line-height: 1.55;
 }
 
+/*
+ * Stands in for a screen that has not been captured yet. Sized by aspect-ratio
+ * rather than a fixed height so a pending shot occupies the same space in the
+ * grid as a real 9:19.5 phone capture and the row does not jump when one lands.
+ */
+.docs-shot-placeholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 9 / 19.5;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* The guide's numbered meeting order and its explanatory paragraphs. */
 .docs-lead {
   margin-top: 6px;
