@@ -456,8 +456,9 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                       <span>PIN or OTP {index + 1}</span>
                       <input
                         inputMode="numeric"
+                        /* 4 for a PIN, 6 for a one-time code. */
                         maxLength={6}
-                        minLength={6}
+                        minLength={4}
                         onChange={(event) =>
                           setUnlockForm((current) => ({
                             ...current,
@@ -466,7 +467,7 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                             )
                           }))
                         }
-                        pattern="[0-9]{6}"
+                        pattern="[0-9]{4}|[0-9]{6}"
                         required
                         type="password"
                         value={submission.pin}
@@ -512,10 +513,11 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                 <span>My PIN or OTP</span>
                 <input
                   inputMode="numeric"
+                  /* 4 for a PIN, 6 for a one-time code. */
                   maxLength={6}
-                  minLength={6}
+                  minLength={4}
                   onChange={(event) => setMemberKeyForm((current) => ({ ...current, pin: event.target.value }))}
-                  pattern="[0-9]{6}"
+                  pattern="[0-9]{4}|[0-9]{6}"
                   required
                   type="password"
                   value={memberKeyForm.pin}

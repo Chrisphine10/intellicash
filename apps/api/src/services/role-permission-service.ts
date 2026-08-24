@@ -16,10 +16,19 @@ const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
  * 403s every existing deployment — which is exactly what happened to
  * `api-keys:*`, and is why that batch is here.
  *
- * Each batch is delivered once. If any stored row already mentions any
- * permission in a batch, that batch is treated as delivered and never applied
- * again — which is what stops a deliberate removal by an admin from being
- * silently reinstated on the next boot.
+ * Delivery is decided PER ROLE. A batch used to be skipped entirely if any
+ * stored row mentioned any of its permissions, which sounds conservative and is
+ * wrong: it lets one role's grants decide another role's. `votes:write` belongs
+ * to GROUP_ACCOUNT and MEMBER; group accounts have held it since the table
+ * shipped, so a batch containing it was always "already delivered" and members
+ * could never receive it. They could open a poll and were refused when they
+ * voted.
+ *
+ * The tradeoff, stated plainly: a permission an admin deliberately removed from
+ * a role that should hold it by default will come back once, the first time an
+ * undelivered batch containing it is applied to that role. The previous
+ * behaviour avoided that only by accident — via some unrelated role happening to
+ * hold the same permission — and paid for it by not delivering at all.
  */
 const permissionBackfills: readonly (readonly Permission[])[] = [
   ["api-keys:read", "api-keys:write"],
@@ -29,7 +38,18 @@ const permissionBackfills: readonly (readonly Permission[])[] = [
   // not re-deliver it to a deployment that already took it.
   ["visits:read", "visits:write", "visits:amend"],
   ["assessment-templates:write"],
-  ["documents:read", "documents:write"]
+  ["documents:read", "documents:write"],
+  /*
+   * A member casting their own ballot. `votes:write` has been in MEMBER's
+   * entry in `rolePermissions` for some time, but it was never in a backfill
+   * batch — so every deployment whose template row predates it kept a MEMBER
+   * list without it, and `permissionsForRoleFromStore` reads that row. Members
+   * could open a poll and were refused when they voted.
+   */
+  // ONLY the new permission. Including `votes:read` — which MEMBER already
+  // held — would make the batch look delivered for that very role and skip it.
+  // A batch names what is being introduced, not the area it belongs to.
+  ["votes:write"]
 ];
 const adminOnlyPermissions = new Set<Permission>([
   "audit:read",
@@ -146,12 +166,11 @@ async function deliverPermissionBatch(
   batch: readonly Permission[]
 ) {
   const batchSet = new Set<Permission>(batch);
-  const alreadyDelivered = rowsBeforeBootstrap.some((row) =>
-    (readPermissionValues(row.permissionsJson) ?? []).some((permission) =>
-      batchSet.has(permission as Permission)
-    )
+  // What each role held BEFORE bootstrap. A row created by the upsert carries
+  // current defaults, so judging delivery from it would mark every batch done.
+  const storedBefore = new Map<string, Permission[]>(
+    rowsBeforeBootstrap.map((row) => [row.role, (readPermissionValues(row.permissionsJson) ?? []) as Permission[]])
   );
-  if (alreadyDelivered) return;
 
   const rows = await prisma.rolePermissionTemplate.findMany();
   await Promise.all(
@@ -159,6 +178,11 @@ async function deliverPermissionBatch(
       if (!isRole(row.role)) return null;
       const defaultsToAdd = rolePermissions[row.role].filter((permission) => batchSet.has(permission));
       if (defaultsToAdd.length === 0) return null;
+
+      // Delivered for THIS role already? Then leave it alone — including any
+      // subset an admin has since curated.
+      const before = storedBefore.get(row.role);
+      if (before && before.some((permission) => batchSet.has(permission))) return null;
 
       const stored = readPermissionValues(row.permissionsJson) ?? [];
       const merged = permissionsForRoleWithAdminReserve(row.role, [...stored, ...defaultsToAdd]);

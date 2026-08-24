@@ -142,3 +142,55 @@ describe("role permission backfill", () => {
     expect([...granted].sort()).toEqual([...rolePermissions.VILLAGE_AGENT].sort());
   });
 });
+
+/**
+ * A member casting their own ballot.
+ *
+ * `votes:write` sat in MEMBER's entry in `rolePermissions` while being absent
+ * from every backfill batch, which is the exact shape this file exists to
+ * catch: correct in the constant, missing from the stored row, so it worked in
+ * development and 403'd in production.
+ */
+describe("members can vote on a database seeded before votes:write", () => {
+  beforeEach(async () => {
+    __resetRolePermissionBootstrapForTests();
+    await prisma.rolePermissionTemplate.deleteMany({});
+    await prisma.rolePermissionTemplate.create({
+      data: {
+        role: "MEMBER",
+        // The production shape: read but not write.
+        permissionsJson: JSON.stringify([
+          "programmes:read",
+          "groups:read",
+          "members:read",
+          "meetings:read",
+          "ledger:read",
+          "votes:read",
+          "store:read",
+          "analytics:read"
+        ])
+      }
+    });
+  });
+
+  it("backfills votes:write so a member can cast a ballot", async () => {
+    const granted = await permissionsForRoleFromStore("MEMBER");
+    expect(granted).toContain("votes:write");
+    expect(granted).toContain("votes:read");
+  });
+
+  it("leaves a role that already had it alone", async () => {
+    // GROUP_ACCOUNT has held votes:write since the table shipped. Its grants
+    // must not decide MEMBER's, which is the bug this batch exposed.
+    const granted = await permissionsForRoleFromStore("GROUP_ACCOUNT");
+    expect(granted).toContain("votes:write");
+  });
+
+  it("does not hand a member anything else while doing it", async () => {
+    // Backfill adds what `rolePermissions` says the role should hold, not an
+    // amnesty. A member must not gain the ability to move money.
+    const granted = await permissionsForRoleFromStore("MEMBER");
+    expect(granted).not.toContain("ledger:write");
+    expect(granted).not.toContain("groups:write");
+  });
+});
