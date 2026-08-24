@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env";
 import { ApiHttpError } from "../lib/http";
+import { releaseHold, settleHeldDebit } from "./wallet-service";
 import { prisma } from "../lib/prisma";
 import { decryptCredentials } from "./integration-credentials";
 
@@ -484,12 +485,12 @@ export async function completeWithdrawal(reference: string, metadata: Record<str
     if (transaction.status === "COMPLETED") return transaction;
     if (!["PENDING", "APPROVED"].includes(transaction.status) || !transaction.walletId) return transaction;
 
-    await tx.partnerWallet.update({
-      where: { id: transaction.walletId },
-      data: {
-        balanceCents: { decrement: transaction.amountCents },
-        heldCents: { decrement: transaction.amountCents }
-      }
+    // Spend the held funds. Same operation as before, named — so the one place
+    // that defines "settle a hold" is the one place that changes if it ever
+    // needs to do more.
+    await settleHeldDebit(tx, {
+      walletId: transaction.walletId,
+      amountCents: transaction.amountCents
     });
 
     return tx.partnerWalletTransaction.update({
@@ -516,9 +517,18 @@ export async function failWithdrawal(reference: string, reason: string, metadata
     if (!transaction) return null;
     if (!["PENDING", "APPROVED"].includes(transaction.status) || !transaction.walletId) return transaction;
 
-    await tx.partnerWallet.update({
-      where: { id: transaction.walletId },
-      data: { heldCents: { decrement: transaction.amountCents } }
+    /*
+     * `releaseHold`, not a bare decrement.
+     *
+     * It clamps at zero. A raw `{ decrement }` does not, and `walletAvailable`
+     * is `max(0, balance - held)` — so a held that went negative would make
+     * AVAILABLE exceed the real balance and let a partner commit money they do
+     * not have. The clamped version existed and was tested; these two sites
+     * hand-rolled the unclamped one.
+     */
+    await releaseHold(tx, {
+      walletId: transaction.walletId,
+      amountCents: transaction.amountCents
     });
 
     return tx.partnerWalletTransaction.update({
@@ -543,9 +553,18 @@ export async function rejectWithdrawal(transactionId: string, actorUserId: strin
       throw new ApiHttpError(400, "WITHDRAWAL_NOT_PENDING", "Only pending withdrawals can be rejected.");
     }
 
-    await tx.partnerWallet.update({
-      where: { id: transaction.walletId },
-      data: { heldCents: { decrement: transaction.amountCents } }
+    /*
+     * `releaseHold`, not a bare decrement.
+     *
+     * It clamps at zero. A raw `{ decrement }` does not, and `walletAvailable`
+     * is `max(0, balance - held)` — so a held that went negative would make
+     * AVAILABLE exceed the real balance and let a partner commit money they do
+     * not have. The clamped version existed and was tested; these two sites
+     * hand-rolled the unclamped one.
+     */
+    await releaseHold(tx, {
+      walletId: transaction.walletId,
+      amountCents: transaction.amountCents
     });
 
     return tx.partnerWalletTransaction.update({

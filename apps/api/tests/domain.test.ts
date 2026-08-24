@@ -70,7 +70,9 @@ describe("meeting workflow", () => {
 
 describe("ledger", () => {
   it("rejects update/delete operations", () => {
-    expect(() => assertAppendOnlyOperation("update")).toThrow(/append-only/);
+    // An update that does not say what it changes is refused outright: a guard
+    // that passes because an argument was forgotten protects nothing.
+    expect(() => assertAppendOnlyOperation("update")).toThrow(/must declare/i);
     expect(signLedgerEntry({ amountCents: 100 })).toHaveLength(64);
   });
 });

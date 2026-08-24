@@ -15,7 +15,7 @@ import {
   type MeetingStep
 } from "@intellicash/shared";
 import { assertMeetingStepOrder } from "../domain/meeting-workflow";
-import { signLedgerEntry } from "../domain/ledger";
+import { assertAppendOnlyOperation, signLedgerEntry } from "../domain/ledger";
 import {
   computeAndStoreCreditRating,
   computeCreditRating,
@@ -865,7 +865,12 @@ async function projectLoanFromEntry(
   // A repayment larger than the oldest loan stays whole on that loan rather
   // than being split: a ledger row points at one loan, and the member's TOTAL
   // outstanding — which is what every report shows — is unaffected either way.
-  await tx.ledgerEntry.update({ where: { id: entry.id }, data: { loanId: target.id } });
+  // Back-link only: the guard refuses this the moment it touches an amount, a
+  // direction or a party. Declaring the change rather than trusting the line
+  // below to keep being harmless.
+  const backLink = { loanId: target.id };
+  assertAppendOnlyOperation("update", Object.keys(backLink));
+  await tx.ledgerEntry.update({ where: { id: entry.id }, data: backLink });
 
   const settled = loans.find((loan) => loan.id === target.id)!;
   const repaidNow =
