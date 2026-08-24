@@ -1,0 +1,21 @@
+# Binary files git must never touch.
+#
+# Without this, core.autocrlf on Windows treats a PDF or an image as text and
+# rewrites every 0x0A byte in it on checkout. `git add` warned about exactly
+# that for the user manual: "LF will be replaced by CRLF". The file would have
+# been committed intact and come back corrupt on the next clone.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.aab   binary
+*.apk   binary
+*.keystore binary
+*.jks   binary
+*.db    binary
