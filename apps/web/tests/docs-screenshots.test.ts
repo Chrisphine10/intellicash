@@ -8,7 +8,9 @@ const SHOT_DIR = path.join(WEB_ROOT, "public/docs");
 
 function referencedShots(): string[] {
   const source = fs.readFileSync(GUIDE, "utf8");
-  return [...source.matchAll(/src="(\/docs\/[^"]+)"/g)].map((match) => match[1]);
+  return [...source.matchAll(/src="(\/docs\/[^"]+)"/g)]
+    .map((match) => match[1])
+    .filter((src): src is string => Boolean(src));
 }
 
 /**

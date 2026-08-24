@@ -15,12 +15,15 @@ function policy(): Map<string, string[]> {
 
   expect(header, "middleware must set a CSP header").toBeTruthy();
 
-  return new Map(
-    (header ?? "").split(";").map((directive) => {
-      const [name, ...sources] = directive.trim().split(/\s+/);
-      return [name, sources] as const;
-    })
-  );
+  const directives = new Map<string, string[]>();
+
+  for (const directive of (header ?? "").split(";")) {
+    const tokens = directive.trim().split(/\s+/).filter(Boolean);
+    const name = tokens.shift();
+    if (name) directives.set(name, tokens);
+  }
+
+  return directives;
 }
 
 describe("content security policy", () => {
