@@ -319,3 +319,49 @@ export async function assertGroupAccess(user: AuthenticatedUser | undefined, gro
     throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
   }
 }
+
+/**
+ * Whether the caller is themselves part of the demo data.
+ *
+ * Demo rows are excluded from cross-group totals so they cannot be mistaken for
+ * evidence — but a demo account looking at its own dashboard must still see its
+ * own figures, or the demo appears broken, which defeats the point of having
+ * one. The exclusion therefore depends on who is asking.
+ *
+ * Read from the database rather than the session: `isDemo` can be set on a row
+ * after a token was issued, and a stale session must not be a way back into the
+ * totals.
+ */
+export async function callerIsDemo(user?: AuthenticatedUser): Promise<boolean> {
+  if (!user) return false;
+
+  const [group, agent, partner] = await Promise.all([
+    user.groupId
+      ? prisma.group.findUnique({ where: { id: user.groupId }, select: { isDemo: true } })
+      : null,
+    user.villageAgentId
+      ? prisma.villageAgent.findUnique({
+          where: { id: user.villageAgentId },
+          select: { isDemo: true }
+        })
+      : null,
+    user.partnerId
+      ? prisma.partner.findUnique({ where: { id: user.partnerId }, select: { isDemo: true } })
+      : null
+  ]);
+
+  return Boolean(group?.isDemo || agent?.isDemo || partner?.isDemo);
+}
+
+/**
+ * The demo filter to apply to a cross-group total, for this caller.
+ *
+ * `{}` for a demo account — they see their own. `{ isDemo: false }` for
+ * everyone else, which is what keeps made-up savings out of a partner's impact
+ * numbers and off an auditor's desk.
+ */
+export async function demoExclusionForUser(
+  user?: AuthenticatedUser
+): Promise<Prisma.GroupWhereInput> {
+  return (await callerIsDemo(user)) ? {} : { isDemo: false };
+}

@@ -3,7 +3,11 @@ import { groupPhases, type GroupPhase, type PortfolioSummary } from "@intellicas
 import { getIntegrationHealth } from "../domain/integrations";
 import { getStoredCredentialContext } from "../services/integration-credentials";
 import { requireAuth } from "../middleware/auth";
-import { memberScopeForUser, scopeGroupWhere } from "../services/account-scope";
+import {
+  demoExclusionForUser,
+  memberScopeForUser,
+  scopeGroupWhere
+} from "../services/account-scope";
 import { ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 
@@ -11,7 +15,12 @@ const router = Router();
 
 router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, res, next) => {
   try {
-    const groupWhere = scopeGroupWhere(req.user);
+    // Demo groups are excluded from every total here. A portfolio that counts
+    // made-up savings next to real ones is worse than no portfolio: nobody
+    // looking at it can tell which is which. A demo account still sees its own.
+    const groupWhere = {
+      AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)]
+    };
     const [groups, members, activeMeetings, fundAccounts, creditScores, credentialContext] = await Promise.all([
       prisma.group.findMany({ where: groupWhere, select: { phase: true } }),
       prisma.member.count({ where: memberScopeForUser(req.user) }),

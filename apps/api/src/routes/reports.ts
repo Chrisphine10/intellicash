@@ -6,7 +6,8 @@ import {
   ledgerScopeForUser,
   memberScopeForUser,
   scopeGroupWhere,
-  villageAgentScopeForUser
+  villageAgentScopeForUser,
+  demoExclusionForUser
 } from "../services/account-scope";
 import { ok } from "../lib/http";
 import { latestCreditRating } from "../services/credit-rating-service";
@@ -101,7 +102,11 @@ function reportAccountScope(user?: AuthenticatedUser) {
 
 router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res, next) => {
   try {
-    const groupWhere = scopeGroupWhere(req.user);
+    // Same rule as the portfolio: this is the report a funder reads, so demo
+    // figures must not be inside it.
+    const groupWhere = {
+      AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)]
+    };
     const accessibleGroups = await prisma.group.findMany({
       where: groupWhere,
       select: { county: true }

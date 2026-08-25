@@ -183,6 +183,10 @@ async function loadPublicProgrammes(where: { id?: string; publicSlug?: string } 
         orderBy: [{ type: "asc" }, { createdAt: "desc" }]
       },
       groupLinks: {
+        // A public project page lists its groups and their member counts. A
+        // demo group in there is made-up evidence on a page written to
+        // persuade somebody to fund the real thing.
+        where: { group: { isDemo: false } },
         include: {
           group: {
             select: {

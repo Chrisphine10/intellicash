@@ -24,6 +24,8 @@ import { appendLedgerEntry } from "../src/routes/groups";
 import { encryptCredentials } from "../src/services/integration-credentials";
 
 const DEMO_CODE = "IWL-DEMO-0001";
+const DEMO_PROGRAMME_SLUG = "demo-programme";
+const DEMO_AGENT_EMAIL = "demo.agent@intellicash.co.ke";
 const DEMO_PIN = "112233";
 
 /**
@@ -98,14 +100,27 @@ async function main() {
    * password published in the repo. So the minimum scaffolding a group needs
    * is created here if it is missing, and reused if it is not.
    */
+  /*
+   * The demo scaffolding is always the demo scaffolding.
+   *
+   * This used to be `partner.findFirst()`, `programme.findFirst()` and
+   * `villageAgent.findFirst()` — take whatever the database happens to have.
+   * On an empty database that is harmless. On a production one it attaches the
+   * demo group to a REAL partner's programme and drops it into a REAL agent's
+   * caseload, where it shows up in their app as a group to visit and in that
+   * partner's numbers as savings that do not exist.
+   *
+   * Each row is now found by its own stable marker or created, and every one
+   * carries `isDemo` so it stays off the public surfaces and out of the totals.
+   */
   const partner =
-    (await prisma.partner.findFirst()) ??
+    (await prisma.partner.findFirst({ where: { isDemo: true } })) ??
     (await prisma.partner.create({
-      data: { name: "Demo Programme Partner", type: "NGO", status: "ACTIVE" }
+      data: { name: "Demo Programme Partner", type: "NGO", status: "ACTIVE", isDemo: true }
     }));
 
   const programme =
-    (await prisma.programme.findFirst()) ??
+    (await prisma.programme.findFirst({ where: { publicSlug: DEMO_PROGRAMME_SLUG } })) ??
     (await prisma.programme.create({
       data: {
         partnerId: partner.id,
@@ -115,13 +130,27 @@ async function main() {
         // ONGOING, not the DRAFT default: the public store only lists products
         // whose programme is ongoing, so a draft programme yields an empty
         // catalogue and the store looks broken rather than unconfigured.
+        // `isDemo` is what keeps it off the public list despite that.
         publicStatus: "ONGOING",
-        publicSlug: "demo-programme",
+        publicSlug: DEMO_PROGRAMME_SLUG,
+        isDemo: true,
         description: "Scaffolding for the demo group. Safe to delete once real programmes exist."
       }
     }));
 
-  const villageAgent = await prisma.villageAgent.findFirst();
+  const villageAgent =
+    (await prisma.villageAgent.findFirst({ where: { email: DEMO_AGENT_EMAIL } })) ??
+    (await prisma.villageAgent.create({
+      data: {
+        partnerId: partner.id,
+        name: "Grace Wanjiku",
+        phone: "254720100102",
+        email: DEMO_AGENT_EMAIL,
+        county: "Bungoma",
+        status: "ACTIVE",
+        isDemo: true
+      }
+    }));
 
   // ---- the group ---------------------------------------------------------
   const group = await prisma.group.create({
@@ -130,6 +159,7 @@ async function main() {
       villageAgentId: villageAgent?.id ?? null,
       name: "Demo Test VSLA",
       code: DEMO_CODE,
+      isDemo: true,
       phase: "INTENSIVE",
       county: "Embu",
       subCounty: "Manyatta",
@@ -234,20 +264,8 @@ async function main() {
     // theirs (see account-scope.ts), so the login alone is not enough — without
     // the VillageAgent record AND the group pointing at it, the agent signs in
     // to an empty caseload, which looks identical to the app being broken.
-    const agent =
-      (await tx.villageAgent.findFirst({
-        where: { email: "demo.agent@intellicash.co.ke" }
-      })) ??
-      (await tx.villageAgent.create({
-        data: {
-          partnerId: programme.partnerId,
-          name: "Grace Wanjiku",
-          phone: "254720100102",
-          email: "demo.agent@intellicash.co.ke",
-          county: "Bungoma",
-          status: "ACTIVE"
-        }
-      }));
+    // Created above, before the group, so the group could be handed to it.
+    const agent = villageAgent;
 
     // Idempotent like the rest of this seed: re-running must not fail on a
     // link that already exists.

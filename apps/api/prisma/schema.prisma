@@ -106,6 +106,18 @@ model Partner {
   name             String
   type             String
   status           String   @default("ACTIVE")
+  /// Sample data, kept off every public surface and out of every total.
+  ///
+  /// `Programme.isDemo` alone was not enough: a demo group, its partner and its
+  /// agent each reach the outside world by their own route — the landing page
+  /// lists partners, the public store lists agents, and the portfolio and
+  /// foundation reports count groups, members and savings. Demo figures mixed
+  /// into a partner's impact numbers are worse than demo data on a marketing
+  /// page, because nobody can see they are wrong.
+  ///
+  /// Signed-in demo accounts still see their own demo data. That is the point
+  /// of having it.
+  isDemo           Boolean  @default(false)
   apiScope         String   @default("PROGRAMME")
   county           String?
   contactName      String?
@@ -344,6 +356,19 @@ model VillageAgent {
   sourceSystem         String?
   sourceReference      String?
   status               String   @default("ACTIVE")
+
+  /// Sample data, kept off every public surface and out of every total.
+  ///
+  /// `Programme.isDemo` alone was not enough: a demo group, its partner and its
+  /// agent each reach the outside world by their own route — the landing page
+  /// lists partners, the public store lists agents, and the portfolio and
+  /// foundation reports count groups, members and savings. Demo figures mixed
+  /// into a partner's impact numbers are worse than demo data on a marketing
+  /// page, because nobody can see they are wrong.
+  ///
+  /// Signed-in demo accounts still see their own demo data. That is the point
+  /// of having it.
+  isDemo               Boolean  @default(false)
   digitalLiteracyScore Int      @default(80)
   caseloadLimit        Int      @default(25)
   createdAt            DateTime @default(now())
@@ -583,6 +608,14 @@ model Group {
   villageAgentId               String?
   name                         String
   code                         String   @unique
+
+  /// Sample data, kept out of every total.
+  ///
+  /// A demo group counted into the portfolio and foundation reports puts made-up
+  /// savings, members and credit scores next to real ones, where nobody can tell
+  /// them apart. Signed-in demo accounts still see their own group; it simply
+  /// stops being evidence about anything.
+  isDemo                       Boolean  @default(false)
   phase                        String
   county                       String
   subCounty                    String?

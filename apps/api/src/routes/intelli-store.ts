@@ -1175,6 +1175,11 @@ router.get("/public/intelli-store", async (_req, res, next) => {
       prisma.villageAgent.findMany({
         where: {
           status: "ACTIVE",
+          // The agent's own flag as well as the programme's. A demo agent
+          // attached to a real programme — which the old demo seed could
+          // produce — would otherwise be listed as somebody a member of the
+          // public could book.
+          isDemo: false,
           programmeLinks: {
             some: { programme: { publicStatus: "ONGOING", isDemo: false } }
           }
@@ -1193,6 +1198,8 @@ router.get("/public/intelli-store", async (_req, res, next) => {
             orderBy: { createdAt: "asc" }
           },
           groups: {
+            // A demo group must not be listed under a real agent's coverage.
+            where: { isDemo: false },
             select: {
               id: true,
               name: true,
