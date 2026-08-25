@@ -82,7 +82,22 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+        {/*
+          `suppressHydrationWarning` because the mismatch is guaranteed and
+          harmless: the HTML ships `nonce="<value>"`, but browsers deliberately
+          empty the `nonce` content attribute once the element has been
+          processed, so React reads "" back from the DOM and reports a
+          difference it can never reconcile.
+
+          It is not cosmetic. React abandons hydration of a subtree it cannot
+          match, and the warning also buries genuine hydration bugs in the
+          console — which is how a real one goes unnoticed.
+        */}
+        <script
+          dangerouslySetInnerHTML={{ __html: themeInitializer }}
+          nonce={nonce}
+          suppressHydrationWarning
+        />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Intelli-Cash" />
