@@ -70,10 +70,17 @@ SELECT
 -- 3. Rebuild VillageAgent without `programmeId`.
 --
 --    SQLite cannot drop a column that carries a foreign key, so the table is
---    recreated and copied — the standard rebuild, and what Prisma generates
---    for this itself. Foreign keys are already deferred inside a migration
---    transaction, so the referencing tables (Group, User, GroupVisit,
---    Attachment and the rest) survive the swap by name.
+--    recreated and copied — the standard rebuild, and the shape Prisma
+--    generates for this itself.
+--
+--    Both pragmas, in Prisma's order, and the pairing matters. Migrations run
+--    inside a transaction, and `PRAGMA foreign_keys` is a NO-OP there — set it
+--    alone and enforcement stays exactly as it was, so `DROP TABLE
+--    "VillageAgent"` would meet live foreign keys from Group, User, GroupVisit
+--    and Attachment. `defer_foreign_keys` is the one that works inside a
+--    transaction: it holds every check until commit, by which point the
+--    renamed table is back under the name they all point at.
+PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
 
 CREATE TABLE "new_VillageAgent" (
@@ -114,3 +121,4 @@ DROP TABLE "VillageAgent";
 ALTER TABLE "new_VillageAgent" RENAME TO "VillageAgent";
 
 PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;
