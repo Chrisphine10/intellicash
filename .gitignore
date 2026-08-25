@@ -31,3 +31,7 @@ apps/android/local.properties
 # alongside real work.
 shadow-*.db
 apps/api/shadow-*.db
+
+# Python bytecode from the scripts in this folder.
+__pycache__/
+*.pyc
