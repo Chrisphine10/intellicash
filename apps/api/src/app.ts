@@ -20,7 +20,7 @@ import { dataSubjectRouter } from "./routes/data-subject";
 import { documentsRouter } from "./routes/documents";
 import { mentorshipRouter } from "./routes/mentorship";
 import { visitReportsRouter } from "./routes/visit-reports";
-import { businessProfileRouter } from "./routes/business-profile";
+import { enterprisesRouter } from "./routes/enterprises";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
@@ -158,7 +158,7 @@ export function createApp(
   app.use("/api/v1", documentsRouter);
   app.use("/api/v1", mentorshipRouter);
   app.use("/api/v1", visitReportsRouter);
-  app.use("/api/v1", businessProfileRouter);
+  app.use("/api/v1", enterprisesRouter);
   app.use("/api/v1", analyticsRouter);
   app.use("/api/v1", reportsRouter);
   app.use("/api/v1", auditRouter);

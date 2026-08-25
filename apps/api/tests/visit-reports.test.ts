@@ -31,8 +31,9 @@ describe("visit reporting, topics and the business profile", () => {
   beforeAll(async () => {
     await seedDatabase();
     await seedMentorshipReferenceData(prisma);
-    await prisma.groupBusinessProfileVersion.deleteMany({});
-    await prisma.groupBusinessProfile.deleteMany({});
+    await prisma.groupEnterpriseVersion.deleteMany({});
+    await prisma.groupEnterpriseSupportNeed.deleteMany({});
+    await prisma.groupEnterprise.deleteMany({});
     await prisma.visitActionItem.deleteMany({});
     await prisma.groupVisit.deleteMany({});
 
@@ -158,34 +159,97 @@ describe("visit reporting, topics and the business profile", () => {
     });
   });
 
-  describe("the group business profile", () => {
+  describe("the group's enterprises", () => {
+    let enterpriseId: string;
+
     it("says the group has not been asked, rather than inventing an empty one", async () => {
       const response = await request(app)
-        .get(`/api/v1/groups/${groupId}/business-profile`)
+        .get(`/api/v1/groups/${groupId}/enterprises`)
         .set("Cookie", adminCookies)
         .expect(200);
 
       expect(response.body.data.recorded).toBe(false);
-      expect(response.body.data.profile).toBeNull();
+      expect(response.body.data.enterprises).toHaveLength(0);
     });
 
-    it("records the profile and computes the margin", async () => {
+    it("records an enterprise and computes the margin", async () => {
       const response = await request(app)
-        .put(`/api/v1/groups/${groupId}/business-profile`)
+        .post(`/api/v1/groups/${groupId}/enterprises`)
         .set("Cookie", agentCookies)
         .send({
+          name: "Poultry unit",
           enterpriseType: "Poultry",
           monthlyRevenueCents: 4500000,
           monthlyCostsCents: 1200000,
           employsPeople: 4,
           visitId
         })
-        .expect(200);
+        .expect(201);
 
-      expect(response.body.data.profile.enterpriseType).toBe("Poultry");
+      enterpriseId = response.body.data.enterprise.id;
+      expect(response.body.data.enterprise.name).toBe("Poultry unit");
       // Computed on read, never stored — a margin column goes stale the moment
       // either figure is edited without it.
-      expect(response.body.data.profile.monthlyMarginCents).toBe(3300000);
+      expect(response.body.data.enterprise.monthlyMarginCents).toBe(3300000);
+    });
+
+    it("holds a second enterprise alongside the first", async () => {
+      // The reason the single-profile model was replaced: a poultry unit and a
+      // cereal store have different margins and different buyers, and averaging
+      // them produces a figure describing neither.
+      await request(app)
+        .post(`/api/v1/groups/${groupId}/enterprises`)
+        .set("Cookie", agentCookies)
+        .send({ name: "Cereal store", monthlyRevenueCents: 900000 })
+        .expect(201);
+
+      const response = await request(app)
+        .get(`/api/v1/groups/${groupId}/enterprises`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+
+      expect(response.body.data.enterprises).toHaveLength(2);
+      expect(response.body.data.enterprises.map((e: { name: string }) => e.name).sort()).toEqual([
+        "Cereal store",
+        "Poultry unit"
+      ]);
+    });
+
+    it("captures market coverage as a rung on the ladder", async () => {
+      const response = await request(app)
+        .patch(`/api/v1/enterprises/${enterpriseId}`)
+        .set("Cookie", agentCookies)
+        .send({
+          name: "Poultry unit",
+          marketReach: "COUNTY",
+          buyerCount: 7,
+          marketChannels: ["TRADER", "LOCAL_MARKET"],
+          hasFormalBuyerAgreement: true,
+          salesMonths: [8, 6, 6, 7]
+        })
+        .expect(200);
+
+      const enterprise = response.body.data.enterprise;
+      // The step is what makes a widening market measurable rather than merely
+      // a changed string.
+      expect(enterprise.marketReachStep).toBe(5);
+      expect(enterprise.marketReachLabel).toBe("County");
+      expect(enterprise.marketChannels.map((c: { key: string }) => c.key)).toEqual([
+        "TRADER",
+        "LOCAL_MARKET"
+      ]);
+      // Sorted and de-duplicated, so two equal seasons compare equal.
+      expect(enterprise.salesMonths).toEqual([6, 7, 8]);
+    });
+
+    it("refuses a market reach that is not on the ladder", async () => {
+      // An unknown rung would be stored, score as null, and quietly drop the
+      // enterprise out of the market-reach indicator.
+      await request(app)
+        .patch(`/api/v1/enterprises/${enterpriseId}`)
+        .set("Cookie", agentCookies)
+        .send({ name: "Poultry unit", marketReach: "MOON" })
+        .expect(400);
     });
 
     it("keeps a snapshot per visit so growth between visits is a query", async () => {
@@ -199,18 +263,21 @@ describe("visit reporting, topics and the business profile", () => {
       });
 
       await request(app)
-        .put(`/api/v1/groups/${groupId}/business-profile`)
+        .patch(`/api/v1/enterprises/${enterpriseId}`)
         .set("Cookie", agentCookies)
-        .send({ enterpriseType: "Poultry", monthlyRevenueCents: 6000000, visitId: second.id })
+        .send({ name: "Poultry unit", monthlyRevenueCents: 6000000, visitId: second.id })
         .expect(200);
 
       const response = await request(app)
-        .get(`/api/v1/groups/${groupId}/business-profile`)
+        .get(`/api/v1/groups/${groupId}/enterprises`)
         .set("Cookie", adminCookies)
         .expect(200);
 
-      expect(response.body.data.history).toHaveLength(2);
-      const revenues = response.body.data.history.map(
+      const poultry = response.body.data.enterprises.find(
+        (e: { id: string }) => e.id === enterpriseId
+      );
+      expect(poultry.history).toHaveLength(2);
+      const revenues = poultry.history.map(
         (v: { monthlyRevenueCents: number }) => v.monthlyRevenueCents
       );
       expect(revenues).toContain(4500000);
@@ -221,13 +288,76 @@ describe("visit reporting, topics and the business profile", () => {
       // An agent revising a figure during one visit must not leave two
       // snapshots for that occasion.
       await request(app)
-        .put(`/api/v1/groups/${groupId}/business-profile`)
+        .patch(`/api/v1/enterprises/${enterpriseId}`)
         .set("Cookie", agentCookies)
-        .send({ enterpriseType: "Poultry", monthlyRevenueCents: 4900000, visitId })
+        .send({ name: "Poultry unit", monthlyRevenueCents: 4900000, visitId })
         .expect(200);
 
-      const versions = await prisma.groupBusinessProfileVersion.count({ where: { visitId } });
+      const versions = await prisma.groupEnterpriseVersion.count({
+        where: { visitId, enterpriseId }
+      });
       expect(versions).toBe(1);
+    });
+
+    it("records a support need against the taxonomy", async () => {
+      const response = await request(app)
+        .post(`/api/v1/enterprises/${enterpriseId}/support-needs`)
+        .set("Cookie", agentCookies)
+        .send({ needKey: "cold-chain", priority: "HIGH", detail: "Eggs spoil before market day" })
+        .expect(201);
+
+      // Snapshotted, so the record still reads if the type is later retired.
+      expect(response.body.data.need.needTitleSnapshot).toBe("Cold chain");
+      expect(response.body.data.need.needCategorySnapshot).toBe("INFRASTRUCTURE");
+      expect(response.body.data.need.status).toBe("OPEN");
+    });
+
+    it("refuses a support need that is not on the list", async () => {
+      // Free text is exactly what makes "twelve groups need cold storage"
+      // uncountable.
+      await request(app)
+        .post(`/api/v1/enterprises/${enterpriseId}/support-needs`)
+        .set("Cookie", agentCookies)
+        .send({ needKey: "a-helicopter" })
+        .expect(400);
+    });
+
+    it("stamps the met date on the server, and clears it if reopened", async () => {
+      const created = await request(app)
+        .post(`/api/v1/enterprises/${enterpriseId}/support-needs`)
+        .set("Cookie", agentCookies)
+        .send({ needKey: "buyer-linkage" })
+        .expect(201);
+      const needId = created.body.data.need.id;
+
+      const met = await request(app)
+        .patch(`/api/v1/support-needs/${needId}`)
+        .set("Cookie", agentCookies)
+        .send({ status: "MET" })
+        .expect(200);
+      expect(met.body.data.need.metAt).not.toBeNull();
+
+      // Days-to-meet is measured from this date. A need met, reopened and met
+      // again would otherwise keep the first date and report a negative
+      // duration.
+      const reopened = await request(app)
+        .patch(`/api/v1/support-needs/${needId}`)
+        .set("Cookie", agentCookies)
+        .send({ status: "OPEN" })
+        .expect(200);
+      expect(reopened.body.data.need.metAt).toBeNull();
+    });
+
+    it("serves the vocabularies a capture screen needs", async () => {
+      const response = await request(app)
+        .get("/api/v1/enterprise-reference")
+        .set("Cookie", agentCookies)
+        .expect(200);
+
+      // Served rather than hardcoded in each client, so the ladder cannot drift
+      // apart between web, mobile and the reports that read them.
+      expect(response.body.data.marketReach[0]).toMatchObject({ key: "WITHIN_GROUP", step: 1 });
+      expect(response.body.data.supportNeedTypes.length).toBeGreaterThan(10);
     });
   });
 

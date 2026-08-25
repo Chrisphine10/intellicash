@@ -143,17 +143,17 @@ model Partner {
 }
 
 model Programme {
-  id               String    @id @default(cuid())
-  partnerId        String
-  name             String
-  country          String    @default("Kenya")
-  county           String?
-  description      String?
-  coverImageUrl    String?
-  sourceSystem     String?
-  sourceReference  String?
-  publicSlug       String?   @unique
-  publicStatus     String    @default("DRAFT")
+  id              String  @id @default(cuid())
+  partnerId       String
+  name            String
+  country         String  @default("Kenya")
+  county          String?
+  description     String?
+  coverImageUrl   String?
+  sourceSystem    String?
+  sourceReference String?
+  publicSlug      String? @unique
+  publicStatus    String  @default("DRAFT")
 
   /// Sample data, kept out of every PUBLIC surface.
   ///
@@ -333,29 +333,27 @@ model VillageAgent {
 
   /**
    * The one partner this agent works for.
-   *
    * An agent is engaged by a partner and then assigned to that partner's
    * programmes — which is why the partner sits here and the programmes sit in
    * `programmeLinks`. It is what makes "the same partner" a rule the service
    * can check rather than a convention people remember.
-   *
    * Nullable: an agent can exist before being attached to a programme, and
    * agents that pre-date this column have it backfilled from whichever
    * programme they were on.
    */
   partnerId String?
 
-  name                 String
-  phone                String
-  email                String?
-  gender               String?
-  projectOfficer       String?
-  county               String?
-  location             String?
-  feedback             String?
-  sourceSystem         String?
-  sourceReference      String?
-  status               String   @default("ACTIVE")
+  name            String
+  phone           String
+  email           String?
+  gender          String?
+  projectOfficer  String?
+  county          String?
+  location        String?
+  feedback        String?
+  sourceSystem    String?
+  sourceReference String?
+  status          String  @default("ACTIVE")
 
   /// Sample data, kept off every public surface and out of every total.
   ///
@@ -397,7 +395,6 @@ model VillageAgent {
 
 /**
  * Which programmes a village agent serves.
- *
  * Every programme here must belong to the agent's `partnerId`. That is enforced
  * in `village-agent-service.ts` rather than by the database: SQLite can express
  * it only through composite foreign keys that would make every read of this
@@ -603,11 +600,11 @@ model AgentBookingRequest {
 }
 
 model Group {
-  id                           String   @id @default(cuid())
-  programmeId                  String?
-  villageAgentId               String?
-  name                         String
-  code                         String   @unique
+  id             String  @id @default(cuid())
+  programmeId    String?
+  villageAgentId String?
+  name           String
+  code           String  @unique
 
   /// Sample data, kept out of every total.
   ///
@@ -665,7 +662,7 @@ model Group {
   attachments              Attachment[]
   documents                GroupDocument[]
   actionItems              VisitActionItem[]
-  businessProfile          GroupBusinessProfile?
+  enterprises              GroupEnterprise[]
 }
 
 /// One field visit: one agent, one group, one occasion.
@@ -674,11 +671,11 @@ model Group {
 /// GroupVisitRevision holding the previous state and bumps `revision`, so the
 /// record of what was reported at the time survives the correction.
 model GroupVisit {
-  id      String @id @default(cuid())
-  groupId String
+  id                String  @id @default(cuid())
+  groupId           String
   /// The agent row, not the login. An agent may hold several logins over time
   /// and the visit belongs to the person, not the credential.
-  villageAgentId String?
+  villageAgentId    String?
   /// The login that submitted it, for the audit trail.
   submittedByUserId String?
 
@@ -698,10 +695,10 @@ model GroupVisit {
 
   /// Device reading. Nullable: a phone that never got a fix must still be able
   /// to file the visit.
-  deviceLatitude  Float?
-  deviceLongitude Float?
+  deviceLatitude     Float?
+  deviceLongitude    Float?
   /// Metres of uncertainty reported by the device.
-  locationAccuracyM Float?
+  locationAccuracyM  Float?
   locationCapturedAt DateTime?
 
   /// Server-computed distance to the group's registered point, and the verdict
@@ -726,15 +723,15 @@ model GroupVisit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  villageAgent VillageAgent?        @relation(fields: [villageAgentId], references: [id])
-  submittedBy  User?                @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
+  group        Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  villageAgent VillageAgent?            @relation(fields: [villageAgentId], references: [id])
+  submittedBy  User?                    @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
   revisions    GroupVisitRevision[]
   assessment   GroupVisitAssessment?
   attachments  Attachment[]
   mentorship   VisitMentorshipSession[]
   ratings      VisitMentorshipRating[]
-  actionItems  VisitActionItem[]       @relation("ActionItemRaisedAt")
+  actionItems  VisitActionItem[]        @relation("ActionItemRaisedAt")
 
   @@index([groupId, startedAt])
   @@index([villageAgentId, startedAt])
@@ -742,19 +739,19 @@ model GroupVisit {
 
 /// The state of a visit before an amendment. Append-only.
 model GroupVisitRevision {
-  id       String @id @default(cuid())
-  visitId  String
+  id              String   @id @default(cuid())
+  visitId         String
   /// The revision number this snapshot holds — i.e. the value before the bump.
-  revision Int
+  revision        Int
   /// Full serialized visit as it stood, so a reviewer can read what was
   /// originally reported without reconstructing it from field-level diffs.
-  snapshotJson  String
-  reason        String?
+  snapshotJson    String
+  reason          String?
   amendedByUserId String?
-  createdAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
 
-  visit      GroupVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  amendedBy  User?      @relation("GroupVisitAmender", fields: [amendedByUserId], references: [id])
+  visit     GroupVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  amendedBy User?      @relation("GroupVisitAmender", fields: [amendedByUserId], references: [id])
 
   @@unique([visitId, revision])
 }
@@ -789,7 +786,7 @@ model AssessmentTemplate {
   publishedByUserId String?
   createdByUserId   String?
   /// Set when this template was cloned from another, so the lineage is legible.
-  clonedFromId String?
+  clonedFromId      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -823,11 +820,11 @@ model AssessmentSection {
 }
 
 model AssessmentQuestion {
-  id        String  @id @default(cuid())
-  sectionId String
-  key       String
-  prompt    String
-  guidance  String?
+  id           String  @id @default(cuid())
+  sectionId    String
+  key          String
+  prompt       String
+  guidance     String?
   /// Points at full credit. Yes/Partial/No earn all/half/none of it.
   weight       Float
   position     Int
@@ -852,7 +849,7 @@ model AssessmentTemplateSnapshot {
   version    Int
 
   /// The full AssessmentTemplateSnapshot document from the contract.
-  snapshotJson String
+  snapshotJson           String
   /// sha256 over the canonical form. The phone sends the checksum of the
   /// snapshot it rendered; a mismatch means it scored against a stale copy and
   /// the server's re-score is authoritative.
@@ -886,10 +883,10 @@ model GroupVisitAssessment {
   applicablePoints Float
   maxPoints        Float
   /// Earned points rescaled onto the full range, which is what was banded.
-  scaledPoints Float
-  percentage   Float
-  bandKey      String?
-  bandLabel    String?
+  scaledPoints     Float
+  percentage       Float
+  bandKey          String?
+  bandLabel        String?
 
   /// False when questions were left unanswered — a partial assessment is
   /// recorded rather than refused, but it is never silently treated as whole.
@@ -916,10 +913,10 @@ model GroupVisitAnswer {
   /// Denormalized from the snapshot so a per-question or per-section query does
   /// not have to parse JSON, and so the answer stays readable if the question
   /// is dropped in a later template version.
-  sectionKey  String
-  questionKey String
-  choice      String
-  note        String?
+  sectionKey   String
+  questionKey  String
+  choice       String
+  note         String?
 
   assessment GroupVisitAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
@@ -943,7 +940,7 @@ model Attachment {
   groupId String
 
   /// Set for evidence captured during a visit; null for a standing document.
-  visitId String?
+  visitId     String?
   /// Which question the photograph answers. The reason capture is offered only
   /// from a question rather than a global "add photo" button — a picture with
   /// no claim attached to it is not evidence of anything.
@@ -960,7 +957,7 @@ model Attachment {
   mimeType    String
   sizeBytes   Int
   /// Content hash. What makes a retried upload safe.
-  sha256 String
+  sha256      String
 
   /// When the photograph was TAKEN on the device, which is not when it was
   /// received — often days apart in the field.
@@ -1005,7 +1002,7 @@ model GroupDocument {
 
   documentType String
   /// PRESENT | MISSING — does the group have it at all?
-  presence String @default("MISSING")
+  presence     String @default("MISSING")
   /// UNVERIFIED | VERIFIED | REJECTED — a human judgement about the copy held.
   verification String @default("UNVERIFIED")
 
@@ -1057,7 +1054,7 @@ model VisitMentorshipSession {
   topicTitleSnapshot String
 
   /// What was actually discussed and advised.
-  notes String?
+  notes           String?
   /// Minutes spent, when the agent records it.
   durationMinutes Int?
 
@@ -1122,13 +1119,13 @@ model VisitActionItem {
   visitId String
   groupId String
 
-  title       String
-  detail      String?
+  title   String
+  detail  String?
   /// Free text: "the treasurer", "the chairlady". Not a member FK, because the
   /// owner is often a role rather than a person on the register.
-  owner    String?
-  dueDate  DateTime?
-  status   String    @default("OPEN")
+  owner   String?
+  dueDate DateTime?
+  status  String    @default("OPEN")
 
   /// The visit at which it was closed, when it was.
   closedAtVisitId String?
@@ -1145,21 +1142,29 @@ model VisitActionItem {
   @@index([status, dueDate])
 }
 
-/// The group's collective enterprise, as it stands today.
+/// A collective enterprise the group runs.
 ///
-/// One current row per group, plus a snapshot per visit in
-/// GroupBusinessProfileVersion — so "did revenue grow between visits" is a
-/// query rather than an archaeology exercise. Keeping only the current row
-/// would make the question unanswerable the moment it is updated.
+/// A group may run several — a poultry unit and a cereal store are different
+/// businesses with different margins, buyers and support needs, and averaging
+/// them produces a figure describing neither. This used to be one row per group
+/// (`GroupBusinessProfile`, `groupId @unique`), which forced whoever was
+/// capturing a second enterprise to overwrite the first.
 ///
-/// Member-level enterprise profiles are deliberately NOT modelled. Surveying
-/// every member feeds no named decision, and the group profile carries the
-/// reporting value; adding it later is additive if a decision is ever named.
-model GroupBusinessProfile {
+/// Each enterprise keeps a snapshot per visit in `GroupEnterpriseVersion`, so
+/// "did this business grow between visits" is a query rather than an
+/// archaeology exercise. Keeping only the current row makes that question
+/// unanswerable the moment anyone edits it.
+///
+/// Member-level enterprise profiles remain deliberately unmodelled. Surveying
+/// every member feeds no named decision; the group's enterprises carry the
+/// reporting value.
+model GroupEnterprise {
   id      String @id @default(cuid())
-  groupId String @unique
+  groupId String
 
-  /// What the group does together, e.g. poultry, cereal aggregation.
+  /// What this business is called, so several are tellable apart in a list.
+  /// Required: "Enterprise 2" as a fallback label helps nobody in the field.
+  name           String
   enterpriseType String?
   description    String?
 
@@ -1171,38 +1176,148 @@ model GroupBusinessProfile {
   employsPeople Int?
   startedOn     DateTime?
 
-  /// Free text: "no reliable market", "needs cold storage".
+  // -- Market coverage ------------------------------------------------------
+  //
+  // How far what they produce actually travels, and to how many buyers. Reach
+  // is an ORDERED scale (see `MARKET_REACH_LADDER` in domain/enterprise-market)
+  // so a move from selling at the farm gate to selling into the county is
+  // measurable as a step up, not just a changed string. That ordering is what
+  // makes market coverage usable as an outcome indicator rather than a label.
+
+  /// One of MARKET_REACH_LADDER. Null means not asked yet.
+  marketReach             String?
+  /// Distinct buyers the group sold to in the reporting month.
+  buyerCount              Int?
+  /// Channel keys, JSON array. A group commonly uses more than one at once —
+  /// farm gate for surplus, a trader for volume — so this is not a single
+  /// choice.
+  marketChannelsJson      String   @default("[]")
+  /// A written offtake agreement, which is the difference between a buyer and
+  /// a hope. Null means not asked, and is not the same as false.
+  hasFormalBuyerAgreement Boolean?
+  /// Months of the year the enterprise actually sells, JSON array of 1-12.
+  /// A seasonal business compared month-on-month reads as collapsing.
+  salesMonthsJson         String   @default("[]")
+
   mainChallenge String?
+  /// Free text kept ALONGSIDE the structured needs below, not replaced by it.
+  /// The taxonomy makes needs countable across a programme; the sentence keeps
+  /// what the taxonomy could not hold.
   supportNeeded String?
 
-  updatedAt DateTime @updatedAt
+  /// ACTIVE | DORMANT | CLOSED. A closed enterprise stays on the record —
+  /// deleting it would erase the history that explains a fall in group income.
+  status String @default("ACTIVE")
+
+  updatedAt DateTime @default(now()) @updatedAt
   createdAt DateTime @default(now())
 
-  group    Group                         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  versions GroupBusinessProfileVersion[]
+  group        Group                        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  versions     GroupEnterpriseVersion[]
+  supportNeeds GroupEnterpriseSupportNeed[]
+
+  @@index([groupId, status])
 }
 
-/// What the profile said at one visit. Append-only.
-model GroupBusinessProfileVersion {
-  id        String @id @default(cuid())
-  profileId String
-  groupId   String
-  visitId   String?
+/// What one enterprise looked like at one visit. Append-only.
+model GroupEnterpriseVersion {
+  id           String  @id @default(cuid())
+  enterpriseId String
+  groupId      String
+  visitId      String?
 
+  name                String?
   enterpriseType      String?
   description         String?
   monthlyRevenueCents Int?
   monthlyCostsCents   Int?
   employsPeople       Int?
-  mainChallenge       String?
-  supportNeeded       String?
+
+  marketReach             String?
+  buyerCount              Int?
+  marketChannelsJson      String   @default("[]")
+  hasFormalBuyerAgreement Boolean?
+  salesMonthsJson         String   @default("[]")
+
+  mainChallenge String?
+  supportNeeded String?
+  status        String?
 
   recordedAt DateTime @default(now())
 
-  profile GroupBusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  enterprise GroupEnterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
 
-  @@unique([profileId, visitId])
+  @@unique([enterpriseId, visitId])
   @@index([groupId, recordedAt])
+  @@index([enterpriseId, recordedAt])
+}
+
+/// A kind of support a group can need. Configurable, like MentorshipTopic.
+///
+/// The point of a controlled list is that "twelve groups need cold storage" is
+/// a sentence somebody can act on, and "needs cold storage" typed twelve
+/// different ways is not. Programmes add their own without a deploy.
+model SupportNeedType {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  title       String
+  /// FINANCE | MARKET | SKILLS | INPUTS | INFRASTRUCTURE | GOVERNANCE |
+  /// TECHNOLOGY. Grouping keeps a long list navigable and lets a report say
+  /// which KIND of help is most asked for.
+  category    String
+  description String?
+  position    Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  needs GroupEnterpriseSupportNeed[]
+}
+
+/// One support need a group has named, against one enterprise.
+///
+/// Snapshots the key, title and category at write time for the same reason
+/// VisitMentorshipSession does: a record reading "needs <deleted>" is worthless
+/// as history, and forbidding deletion instead leaves a settings screen nobody
+/// can tidy.
+///
+/// Carries `groupId` denormalised so a programme-wide count does not have to
+/// walk through enterprises, and so the row survives as evidence of what was
+/// asked for even if the enterprise is later restructured.
+model GroupEnterpriseSupportNeed {
+  id           String @id @default(cuid())
+  enterpriseId String
+  groupId      String
+
+  typeId               String?
+  needKeySnapshot      String
+  needTitleSnapshot    String
+  needCategorySnapshot String
+
+  /// HIGH | MEDIUM | LOW, as the GROUP ranked it. An agent's ordering of
+  /// somebody else's problems is a different measurement.
+  priority String  @default("MEDIUM")
+  /// OPEN | IN_PROGRESS | MET | DECLINED. MET is what turns a list of requests
+  /// into a responsiveness indicator: needs raised versus needs met.
+  status   String  @default("OPEN")
+  detail   String?
+
+  /// The visits that bracket it, so "how long did this take to answer" is a
+  /// query and not a guess.
+  raisedAtVisitId String?
+  metAtVisitId    String?
+  raisedAt        DateTime  @default(now())
+  metAt           DateTime?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  enterprise GroupEnterprise  @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+  type       SupportNeedType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, status])
+  @@index([needKeySnapshot, status])
+  @@index([enterpriseId, status])
 }
 
 model Member {
@@ -1263,8 +1378,8 @@ model Meeting {
   /// have no such proof, and inventing one would be worse than admitting it.
   sealedByMemberId String?
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   group                    Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   cycle                    Cycle?                    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
