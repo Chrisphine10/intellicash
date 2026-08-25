@@ -101,8 +101,8 @@ export function IntelliStoreSection() {
   const storeSignals = useMemo(
     () => [
       { label: `${store?.products.length ?? 0} products`, icon: ShoppingBag },
-      { label: `${store?.agents.length ?? 0} bookable VAs / CBTs`, icon: UsersRound },
-      { label: "Credit from savings records and grants", icon: HandCoins }
+      { label: `${store?.agents.length ?? 0} field officers you can book`, icon: UsersRound },
+      { label: "Pay over time from your savings record", icon: HandCoins }
     ],
     [store]
   );
@@ -205,11 +205,12 @@ export function IntelliStoreSection() {
     <section className="landing-section intelli-store-section" id="intelli-store">
       <div className="landing-section-header wide">
         <p className="eyebrow">Intelli-Store</p>
-        <h2>Buy productive assets with credit access and book field support</h2>
+        <h2>Buy the equipment your group needs, and pay over time</h2>
         <p>
-          Groups can request assets like egg incubators using savings records
-          and green enterprise related grants while booking VAs and CBTs for
-          onboarding, coaching, and market-linkage visits.
+          An incubator, a milling machine, a water tank &mdash; things a group
+          could not buy outright. Your savings record is what qualifies you, so
+          the years of meeting and saving count for something. You can also book
+          a field officer to come and help you set it up.
         </p>
         <Link className="button secondary" href="/intelli-store">
           <ShoppingBag size={16} />

@@ -1536,22 +1536,39 @@ describe("web smoke helpers", () => {
 
     render(<LandingPage />);
 
-    expect(screen.getByText("Digital Championship Platform")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Intelli-Cash" })).toBeInTheDocument();
-    expect(screen.getByText("VSLAs, Chamas, credit unions")).toBeInTheDocument();
-    expect(screen.getByText("AI + digital marketing")).toBeInTheDocument();
-    expect(screen.getByText("Finance, Marketing, and AI Services")).toBeInTheDocument();
-    expect(screen.getAllByText("Digital marketing services").length).toBeGreaterThan(0);
-    expect(screen.getByText("AI service support")).toBeInTheDocument();
-    expect(screen.getAllByText("Green enterprise finance").length).toBeGreaterThan(0);
-    expect(screen.getByText("Paystack payments")).toBeInTheDocument();
-    expect(screen.getByText("M-Pesa and KCB Buni")).toBeInTheDocument();
-    expect(screen.getAllByText("BTC and Ethereum contracts").length).toBeGreaterThan(0);
-    expect(screen.getByText("Simple impact views for green enterprise support")).toBeInTheDocument();
-    expect(screen.getByText("Service reach")).toBeInTheDocument();
-    expect(screen.getByText("Enterprise growth")).toBeInTheDocument();
-    expect(screen.getByText("Field quality")).toBeInTheDocument();
-    expect(screen.getByText("Impact learning")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Your group.s book, in your pocket/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Three keys open a meeting")).toBeInTheDocument();
+    expect(screen.getByText("Works with no network")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Everything a savings group already does/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Where your groups are")).toBeInTheDocument();
+    expect(screen.getByText("Whether they are meeting")).toBeInTheDocument();
+    expect(screen.getByText("Whether loans come back")).toBeInTheDocument();
+    expect(screen.getByText("What your field team found")).toBeInTheDocument();
+
+    /*
+     * The landing page speaks to a group secretary, not to a donor deck. This
+     * page carried "Digital championship", "financial rails", "Web3 contract
+     * rails" and "offline-first PWA" in its headings — all of it meaningless
+     * to the person who actually holds the phone. These are the words that
+     * must not come back.
+     */
+    for (const jargon of [
+      /digital championship/i,
+      /prosperity toolkit/i,
+      /trust architecture/i,
+      /service stack/i,
+      /payment rails/i,
+      /Web3/i,
+      /PWA/i,
+      /offline-first/i,
+      /KYC/i
+    ]) {
+      expect(screen.queryByText(jargon)).not.toBeInTheDocument();
+    }
     expect(screen.queryByText(/repayment behaviour/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/payment movement/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Dashboard/i })).not.toBeInTheDocument();
@@ -1570,14 +1587,28 @@ describe("web smoke helpers", () => {
     expect(screen.getByAltText("Rainforest Alliance logo")).toHaveAttribute("src", "/partners/rainforest-alliance.png");
     expect(screen.getByAltText("Intelli-Wealth logo")).toHaveAttribute("src", "/partners/intelli-wealth.png");
     expect(await screen.findByText("Solar Egg Incubator")).toBeInTheDocument();
-    expect(screen.getByAltText(/Digital championship workspace with quick access modules/i)).toHaveAttribute("src", "/screenshots/member-dashboard.png");
-    expect(screen.getByAltText(/Meetings calendar:/i)).toHaveAttribute("src", "/screenshots/member-meetings.png");
-    expect(screen.getByAltText(/Transaction table:/i)).toHaveAttribute("src", "/screenshots/member-passbook.png");
+    /*
+     * The phone screens are the point of the page — a visitor should see the
+     * app before reading a word about it. They are the same captures the guide
+     * and the printed manual use, so a broken path here means all three are
+     * broken.
+     */
+    const phoneScreens = screen
+      .getAllByRole("img")
+      .map((img) => img.getAttribute("src") ?? "")
+      .filter((src) => src.startsWith("/docs/"));
+    expect(phoneScreens.length).toBeGreaterThanOrEqual(8);
+    expect(phoneScreens.every((src) => src.endsWith(".webp"))).toBe(true);
+    expect(screen.getByAltText(/Opening the meeting:/i)).toHaveAttribute("src", "/docs/12-unlock.webp");
+    expect(screen.getByAltText(/A member.s own passbook:/i)).toHaveAttribute(
+      "src",
+      "/docs/21-member-passbook.webp"
+    );
     expect(screen.getByText("Request on credit")).toBeInTheDocument();
     expect(screen.getByText("Grace Wanjiku")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Contact us/i }).some((link) => link.getAttribute("href") === "/contact")).toBe(true);
 
-    expect(screen.getByText("Register a VSLA, Chama, credit union, or cooperative")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Register your group" })).toBeInTheDocument();
     expect(screen.getByText("Champion owner details")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Group name"), { target: { value: "Kiritiri Smart Chama" } });
     fireEvent.change(screen.getByLabelText("County"), { target: { value: "Embu" } });

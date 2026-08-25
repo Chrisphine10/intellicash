@@ -20,9 +20,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Intelli Cash | VSLA Digitisation Platform",
+  title: "Intelli-Cash | Your savings group’s book, on a phone",
   description:
-    "Intelli Cash digitises savings groups with secure meetings, digital passbooks, partner reporting, audit trails, and credit-readiness intelligence.",
+    "Keep your savings group's meetings, savings, shares and loans on an ordinary phone — working with or without network. Every member sees their own money, and no one person can open the book alone.",
   applicationName: "Intelli-Cash Group Account",
   manifest: "/manifest.webmanifest",
   icons: {

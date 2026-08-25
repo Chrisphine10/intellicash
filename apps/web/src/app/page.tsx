@@ -17,7 +17,6 @@ import {
   CircleHelp,
   ClipboardList,
   Download,
-  FolderKanban,
   HandCoins,
   Landmark,
   Leaf,
@@ -30,9 +29,7 @@ import {
   RocketLaunchIcon,
   Send,
   ShieldCheck,
-  ShoppingBag,
   Smartphone,
-  Sprout,
   TrendingUpChartIcon,
   UsersRound
 } from "@/lib/theme-icons";
@@ -87,11 +84,11 @@ const illustrationIcons: Record<
 };
 
 const operatingSignals = [
-  { label: "Digital championship", illustration: "champions" },
-  { label: "Green enterprise finance", illustration: "enterprise" },
-  { label: "Digital marketing services", illustration: "marketing" },
-  { label: "AI business support", illustration: "ai" },
-  { label: "Impact partner reports", illustration: "reports" }
+  { label: "Works without internet", illustration: "champions" },
+  { label: "Savings, loans and shares", illustration: "finance" },
+  { label: "Three keys to open a meeting", illustration: "trust" },
+  { label: "Statements you can share", illustration: "reports" },
+  { label: "Five languages", illustration: "training" }
 ] as const satisfies ReadonlyArray<{ label: string; illustration: IllustrationKind }>;
 
 const partnerLogos = [
@@ -99,206 +96,253 @@ const partnerLogos = [
     name: "The Coca-Cola Foundation",
     href: "https://www.coca-colacompany.com/shared-future/coca-cola-foundation",
     src: "/partners/coca-cola-foundation.jpg",
-    programmes: ["Green enterprise grants", "Digital championship services"]
+    programmes: ["Grants for small enterprises", "Training and field support"]
   },
   {
     name: "County Government of Embu",
     href: "https://embu.go.ke/",
     src: "/partners/embu-county-government.png",
-    programmes: ["County group registration", "Agriculture enterprise support"]
+    programmes: ["Registering groups in the county", "Support for farming businesses"]
   },
   {
     name: "Rainforest Alliance",
     href: "https://www.rainforest-alliance.org/",
     src: "/partners/rainforest-alliance.png",
-    programmes: ["Climate-smart agriculture", "Green market readiness"]
+    programmes: ["Farming that works with the climate", "Getting produce to market"]
   },
   {
     name: "Intelli-Wealth",
     href: "https://intelliwealth.org/",
     src: "/partners/intelli-wealth.png",
-    programmes: ["Intelli-Cash platform", "AI and digital marketing support"]
+    programmes: ["The Intelli-Cash app", "Helping enterprises reach customers"]
   }
 ];
 
 const audienceCards = [
   {
-    title: "For digital championship teams",
-    text: "Coordinate enterprise onboarding, demand capture, campaigns, customer follow-up, and trusted digital records in one workflow.",
-    illustration: "champions"
-  },
-  {
-    title: "For green enterprises",
-    text: "Farmers, makers, suppliers, and climate-smart businesses get finance, market access, mobile payments, and simple digital operations.",
-    illustration: "enterprise"
-  },
-  {
-    title: "For VSLAs, Chamas, and credit unions",
-    text: "Savings groups, cooperatives, SACCOs, and agribusiness clusters can manage meetings, passbooks, stock requests, repayments, and records that support access to credit and green-enterprise grants.",
+    title: "Your meetings, written as they happen",
+    text: "Attendance, savings, shares, fines and loans are recorded in the room, in the order a meeting actually runs. Nothing is written up afterwards from memory.",
     illustration: "groups"
   },
   {
-    title: "For partners",
-    text: "NGOs, donors, government programmes, and accelerators get banking infrastructure, quality reports, and realistic impact evidence.",
-    illustration: "partners"
+    title: "Every member's savings, always to hand",
+    text: "Any member can see what they have saved, what they hold in shares, and what they still owe — without waiting for the book to be opened.",
+    illustration: "finance"
   },
   {
-    title: "For lenders and funds",
-    text: "Enterprise activity, service history, digital records, and field quality help identify green businesses ready for responsible capital.",
+    title: "Loans the group can follow",
+    text: "Who borrowed, how much, what has come back and what is still out. The figures update themselves as repayments are recorded.",
     illustration: "lenders"
   },
   {
-    title: "For coaches and trainers",
-    text: "Field teams can guide digital championship services for finance, digital marketing, AI support, customer follow-up, and reporting.",
-    illustration: "training"
+    title: "A share-out that adds up",
+    text: "At the end of a cycle the app works out what each member is owed, takes off what they still owe, and shows the arithmetic to the whole group.",
+    illustration: "growth"
+  },
+  {
+    title: "Decisions on the record",
+    text: "Loans, elections and rule changes are put to a vote and the tally is kept. An election can be secret. One member, one vote.",
+    illustration: "trust"
+  },
+  {
+    title: "Proof when you need it",
+    text: "A statement for the group or for one member, ready to share or print — for a lender, a partner, or a member who simply wants to see.",
+    illustration: "reports"
   }
 ] as const satisfies ReadonlyArray<{ title: string; text: string; illustration: IllustrationKind }>;
 
 const workflowSteps = [
   {
-    title: "Activate digital championship",
-    text: "Set up service coverage for VSLAs, Chamas, credit unions, cooperatives, and green enterprises that need growth support.",
-    illustration: "map"
+    title: "Set the group up once",
+    text: "Enter the group's name, add your members and say who holds which office. Ten minutes, once — and only this step needs internet.",
+    illustration: "groups"
   },
   {
-    title: "Package the offer",
-    text: "Capture the product, service, price, location, stock, story, and finance need so the enterprise is ready to sell.",
+    title: "Open the meeting with three keys",
+    text: "Three officials each enter their own 4-digit PIN before the book will open. No one person can open it alone.",
+    illustration: "trust"
+  },
+  {
+    title: "Record the evening as it happens",
+    text: "Attendance, the social fund, shares bought, repayments, new loan requests and any vote — in the order your meeting already follows.",
+    illustration: "reports"
+  },
+  {
+    title: "Close and lock",
+    text: "The same three keys seal the meeting. What is sealed becomes part of the group's permanent record and cannot be quietly changed.",
     illustration: "package"
   },
   {
-    title: "Launch digital marketing",
-    text: "Promote products, collect leads, coordinate orders, and keep the customer journey simple for groups and enterprises.",
-    illustration: "marketing"
-  },
-  {
-    title: "Move money safely",
-    text: "Use Paystack, M-Pesa, KCB Buni, partner wallets, and Web3 rails to support payments, payouts, and programme funding.",
+    title: "Send it up when you have signal",
+    text: "Back in network, the phone sends everything to the office by itself. Nothing waits for a connection during the meeting.",
     illustration: "payments"
   },
   {
-    title: "Guide with AI services",
-    text: "Use AI support for business prompts, product descriptions, customer messages, training guidance, and next-best actions.",
-    illustration: "ai"
-  },
-  {
-    title: "Report prosperity",
-    text: "Show enterprise activity, market reach, service quality, learning progress, and impact signals that partners can trust.",
+    title: "Share out, and start again",
+    text: "At the end of the cycle every member gets their savings plus their share of what the group earned, less anything they still owe.",
     illustration: "growth"
   }
 ] as const satisfies ReadonlyArray<{ title: string; text: string; illustration: IllustrationKind }>;
 
 const securityRows = [
-  ["Know your members", "IPRS KYC, member photos, and role assignment reduce impersonation risk."],
-  ["Protect every meeting", "Three independent key-holders approve the session before group money can move."],
-  ["Confirm transactions", "Member approvals, payment references, and fund accounts preserve visibility."],
-  ["Keep records permanent", "Ledger and audit events are appended, signed, and reviewed instead of overwritten."],
-  ["Respect group sovereignty", "General Assembly decisions stay central to loans, grants, elections, and constitution changes."]
+  [
+    "No one opens the book alone",
+    "Three officials must each enter their own PIN before a meeting will open — or five members, if the officials are not there. The phone is no easier to misuse than a cash box with three padlocks."
+  ],
+  [
+    "A PIN belongs to one person",
+    "Each member chooses their own four digits. Nobody can look one up, not the group, not us. If it is forgotten, an official clears it and the member picks a new one."
+  ],
+  [
+    "Figures are never quietly changed",
+    "Money is written once. A correction is a new entry that explains itself, so the history stays whole and anybody can read back what happened."
+  ],
+  [
+    "The group decides, not the app",
+    "Loans, grants, elections and rule changes go to a vote and the tally is kept. The app records the decision; it never makes one."
+  ],
+  [
+    "Members' details stay private",
+    "A member sees their own record and nobody else's. Outside the group, a phone number shows only its last three digits."
+  ]
 ];
 
 const partnerOutcomes = [
   {
-    title: "Service reach",
-    text: "See where digital championship, groups, and green enterprises are active.",
+    title: "Where your groups are",
+    text: "Which groups are running, in which county, and how many members they hold between them.",
     illustration: "map"
   },
   {
-    title: "Enterprise growth",
-    text: "Follow training, product support, customer interest, and campaign activity.",
-    illustration: "enterprise"
+    title: "Whether they are meeting",
+    text: "Meetings held and sealed, attendance kept up, and savings going in month after month.",
+    illustration: "training"
   },
   {
-    title: "Field quality",
-    text: "Review visits, onboarding, meeting discipline, and service delivery notes.",
+    title: "Whether loans come back",
+    text: "How much has been lent, how much repaid, and which groups are keeping to their own rules.",
+    illustration: "lenders"
+  },
+  {
+    title: "What your field team found",
+    text: "Visits made, groups scored against the assessment, and what each one was advised to do next.",
     illustration: "trust"
-  },
-  {
-    title: "Impact learning",
-    text: "Compare practical outcomes without exposing private financial records.",
-    illustration: "reports"
   }
 ] as const satisfies ReadonlyArray<{ title: string; text: string; illustration: IllustrationKind }>;
 
 const financialRailCards = [
   {
-    title: "Green enterprise finance",
-    text: "Help groups and green enterprises access credit from savings records, equipment support, enterprise services, and green enterprise related grants.",
-    illustration: "finance"
-  },
-  {
-    title: "Paystack payments",
-    text: "Card, Airtel Money, and mobile-money checkout for partner deposits, public contributions, and programme funding.",
+    title: "Money in, by phone",
+    text: "Members can pay their shares and repayments by M-Pesa or card, straight into the group's own account — not ours.",
     illustration: "payments"
   },
   {
-    title: "M-Pesa and KCB Buni",
-    text: "Mobile-money and banking rails for local payments, payouts, callback tracking, and partner finance workflows.",
+    title: "A welfare pot kept separate",
+    text: "The social fund sits apart from savings and is never lent out. What is left at the end of the cycle goes back to members.",
+    illustration: "finance"
+  },
+  {
+    title: "Buy stock on credit",
+    text: "Order goods through Intelli-Store against the group's own standing, and repay from the group's fund.",
+    illustration: "package"
+  },
+  {
+    title: "Borrow from outside",
+    text: "Money the group takes from a bank or a programme is held in its own pot, so borrowed money is never mistaken for savings.",
     illustration: "banking"
   },
   {
-    title: "Digital marketing services",
-    text: "Campaign support, product storytelling, lead capture, customer follow-up, and digital sales routines for groups and enterprises.",
-    illustration: "marketing"
+    title: "A rating you can show a lender",
+    text: "The app works out how the group is doing from its own record — meetings held, repayments made, savings kept up — and says plainly what would raise it.",
+    illustration: "growth"
   },
   {
-    title: "AI service support",
-    text: "AI-assisted prompts for business coaching, product copy, training messages, customer care, and field next steps.",
-    illustration: "ai"
-  },
-  {
-    title: "BTC and Ethereum contracts",
-    text: "Web3 contract rails for programmable value movement, contribution tracking, and transparent grant flows.",
-    illustration: "web3"
-  },
-  {
-    title: "Quality impact reports",
-    text: "Enterprise, portfolio, county, phase, ledger, audit, and programme reports that help partners assess realistic impact.",
+    title: "Statements for anyone who asks",
+    text: "A report for the group, or one for a single member, ready to share or print in seconds.",
     illustration: "reports"
   }
 ] as const satisfies ReadonlyArray<{ title: string; text: string; illustration: IllustrationKind }>;
 
-const featuredPlatformScreenshot = {
-  title: "Digital championship workspace",
-  text: "Fast access to meetings, store requests, passbook records, and member support.",
-  src: "/screenshots/member-dashboard.png"
-};
-
-const secondaryPlatformScreenshots = [
+/**
+ * The phone screens shown on the landing page.
+ *
+ * These are the same captures the guide and the printed manual use, read from
+ * `/docs`, so a visitor sees the app that actually ships rather than a mock-up
+ * — and all three surfaces are updated by recapturing one folder.
+ */
+const appScreens = [
   {
-    title: "Meetings calendar",
-    text: "Monthly, weekly, and daily visibility for group and enterprise sessions.",
-    src: "/screenshots/member-meetings.png"
+    src: "/docs/12-unlock.webp",
+    title: "Opening the meeting",
+    text: "Three officials turn their key, and the room can see the count as it goes."
   },
   {
-    title: "Transaction table",
-    text: "Simple meeting and activity records organized by date and context.",
-    src: "/screenshots/member-passbook.png"
+    src: "/docs/10-group-home.webp",
+    title: "The group at a glance",
+    text: "Savings, loans out, members, meetings, fines and the welfare pot."
+  },
+  {
+    src: "/docs/11-meeting-hub.webp",
+    title: "Everything the evening needs",
+    text: "Shares, repayments, fines, welfare and voting, in one place."
+  },
+  {
+    src: "/docs/13-members.webp",
+    title: "Your members",
+    text: "Where each member stands on savings and on what they owe."
+  },
+  {
+    src: "/docs/18-voting.webp",
+    title: "Decisions on the record",
+    text: "A vote keeps its tally. An election can be secret."
+  },
+  {
+    src: "/docs/21-member-passbook.webp",
+    title: "A member's own passbook",
+    text: "What they have paid in, what they owe, every entry in order."
+  },
+  {
+    src: "/docs/23-member-report.webp",
+    title: "A statement to share",
+    text: "A dated record a member can send to anyone who asks."
+  },
+  {
+    src: "/docs/17-welfare.webp",
+    title: "The welfare fund",
+    text: "What the pot holds, and what it has paid out this cycle."
   }
 ];
 
+/** The three screens fanned behind the hero headline. */
+const heroScreens = [
+  { src: "/docs/10-group-home.webp", alt: "The group dashboard: savings, loans, members and meetings" },
+  { src: "/docs/11-meeting-hub.webp", alt: "Inside an open meeting, with every action the group takes" },
+  { src: "/docs/21-member-passbook.webp", alt: "A member's passbook showing their savings and what they owe" }
+];
 
 // NOTE: Illustrative testimonials by role only (no named people/organizations).
 // TODO: Replace with real, attributed and consented quotes before public launch.
 const testimonials = [
   {
     quote:
-      "We unlock meetings and record savings even when the network is down, then everything syncs once we are back online.",
+      "We run the whole meeting on the phone even when there is no network, and it goes up on its own once we are back in town.",
     name: "Group Chairperson",
-    role: "VSLA, Kiambu County",
+    role: "Savings group, Kiambu County",
     illustration: "groups"
   },
   {
     quote:
-      "The impact reports give us trustworthy field quality and reach without exposing members' private financial records.",
-    name: "Partner Programme Lead",
-    role: "Green enterprise programme",
+      "I can see whether my groups are meeting and whether their loans come back, without ever opening a member's private record.",
+    name: "Programme Lead",
+    role: "Partner organisation",
     illustration: "partners"
   },
   {
     quote:
-      "Payments, stock requests, and customer follow-up now live in one place, so we spend more time growing the enterprise.",
-    name: "Green Enterprise Owner",
-    role: "Climate-smart agribusiness",
-    illustration: "enterprise"
+      "The members used to wait for the book to be opened to know what they had saved. Now each of them can look on their own phone.",
+    name: "Group Secretary",
+    role: "Savings group, Embu County",
+    illustration: "finance"
   }
 ] as const satisfies ReadonlyArray<{
   quote: string;
@@ -316,10 +360,10 @@ const pricingTiers = [
     cadence: "via partner programmes",
     text: "For VSLAs, Chamas, credit unions, and cooperatives onboarded through a partner.",
     features: [
-      "Offline-first meeting unlock & passbook",
-      "Member registration & roles",
-      "Store requests & repayments",
-      "Android app + installable PWA"
+      "The whole meeting, with or without network",
+      "Members, officials and their PINs",
+      "Loans, share-out and statements",
+      "The Android app, and the same thing in a browser"
     ],
     cta: { label: "Register a group", href: "#group-registration" },
     featured: false
@@ -330,10 +374,10 @@ const pricingTiers = [
     cadence: "tailored to programme",
     text: "For NGOs, donors, government programmes, and accelerators running field operations.",
     features: [
-      "Banking infrastructure & partner wallet",
-      "Quality & impact reports",
-      "SMS broadcasts & notifications",
-      "Programme funding rails"
+      "Your own account for programme money",
+      "Reports on reach, meetings and repayment",
+      "Text messages to your groups",
+      "Paying groups and being paid"
     ],
     cta: { label: "Talk to us", href: "/contact" },
     featured: true
@@ -344,10 +388,10 @@ const pricingTiers = [
     cadence: "tailored to portfolio",
     text: "For MFIs, SACCOs, and funds identifying green businesses ready for responsible capital.",
     features: [
-      "Credit & repayment signals",
-      "Portfolio & county reports",
-      "M-Pesa, Paystack & KCB Buni payouts",
-      "Audit & ledger visibility"
+      "How each group repays, in its own record",
+      "Reports by portfolio and by county",
+      "Payouts by M-Pesa, card or bank",
+      "A full history you can check"
     ],
     cta: { label: "Talk to us", href: "/contact" },
     featured: false
@@ -356,34 +400,44 @@ const pricingTiers = [
 
 const faqs = [
   {
-    question: "Does Intelli-Cash work offline?",
+    question: "Does it work where there is no network?",
     answer:
-      "Yes. Intelli-Cash is an offline-first Progressive Web App. Field teams can open the app, unlock meetings, and capture records without a connection; data syncs automatically when connectivity returns."
+      "Yes. The whole meeting runs on the phone — attendance, savings, shares, loans, fines, welfare and votes. When you are back in signal the phone sends everything up by itself. Only creating an account and signing in the first time need internet."
   },
   {
-    question: "Who is Intelli-Cash for?",
+    question: "What if the phone is lost or breaks?",
     answer:
-      "VSLAs, Chamas, credit unions, cooperatives, and green enterprises, plus the partners, donors, lenders, and field teams that support them."
+      "Everything already sent to the office is safe, and you carry on from a new phone by signing in and loading your group again. Sync after each meeting and there is nothing to lose."
+  },
+  {
+    question: "Can one person change the figures on their own?",
+    answer:
+      "No. A meeting only opens when three officials each enter their own PIN, and it takes the same three to close it. Money is written once — a correction is a new entry that says what it is, so the history stays whole."
+  },
+  {
+    question: "Can members see their own savings?",
+    answer:
+      "Yes. A member signs in with their own phone number and sees what they have saved, the shares they hold and anything they owe — in every group they belong to. They see nobody else's record."
   },
   {
     question: "How does a group get started?",
     answer:
-      "Groups register through a partner programme or the Register group section on this page. Members are then onboarded with roles, KYC, and meeting PINs."
+      "Register the group on this page or through a partner, add your members, and give each official a PIN. You can run your next meeting on it."
   },
   {
-    question: "Which payment rails are supported?",
+    question: "What does it cost?",
     answer:
-      "M-Pesa, Paystack, and KCB Buni for mobile money and banking, partner wallets for programme funding, and Web3 contract rails for transparent value movement."
+      "Groups joining through a partner programme use it free. Partners, lenders and funds are quoted for what they need — talk to us."
   },
   {
-    question: "How is group money protected?",
+    question: "Which languages does it speak?",
     answer:
-      "Three independent key-holders approve each meeting before money can move, transactions require member approval, and the ledger is append-only, signed, and auditable."
+      "Five, chosen on each phone. Members do not have to work in English."
   },
   {
-    question: "Is there a mobile app?",
+    question: "Is there an app to download?",
     answer:
-      "Yes. Intelli-Cash is available on the Google Play Store and can also be installed directly from the browser as a PWA."
+      "Yes, on the Google Play Store. It can also be opened straight from the browser on a phone."
   }
 ];
 
@@ -400,12 +454,13 @@ export default function LandingPage() {
         <HeroOrbitMotif />
 
         <div className="landing-hero-content">
-          <p className="eyebrow">Digital Championship Platform</p>
-          <h1>Intelli-Cash</h1>
+          <p className="eyebrow">The savings group record book, on a phone</p>
+          <h1>Your group&rsquo;s book, in your pocket</h1>
           <p>
-            Finance, digital marketing, and AI services for VSLAs, Chamas,
-            credit unions, cooperatives, and green enterprises growing with
-            agriculture, technology, and climate-smart enterprise.
+            Intelli-Cash keeps the meetings, savings, shares and loans of a
+            savings group on an ordinary Android phone &mdash; and keeps working
+            when the network does not. Every member can see their own money,
+            and nobody can open the book alone.
           </p>
           <div className="hero-actions">
             <a
@@ -415,59 +470,43 @@ export default function LandingPage() {
               target="_blank"
             >
               <Download size={18} />
-              Download on Play Store
+              Get it on Play Store
             </a>
-            <a className="button secondary light" href="#platform">
-              Explore services
+            <a className="button secondary light" href="#screens">
+              See the app
               <ArrowRight size={18} />
             </a>
             <a className="button secondary light" href="#group-registration">
-              Register group
+              Register your group
               <UsersRound size={18} />
             </a>
-            <Link className="button secondary light" href="/intelli-store">
-              Intelli-Store
-              <ShoppingBag size={18} />
-            </Link>
           </div>
-          <div className="hero-metrics" aria-label="Platform highlights">
+          <div className="hero-metrics" aria-label="What the app does">
             <span>
-              <RocketLaunchIcon size={15} />
-              Digital championship
+              <ShieldCheck size={15} />
+              Three keys open a meeting
+            </span>
+            <span>
+              <Smartphone size={15} />
+              Works with no network
             </span>
             <span>
               <UsersRound size={15} />
-              VSLAs, Chamas, credit unions
+              Every member sees their own savings
             </span>
             <span>
-              <Leaf size={15} />
-              Green enterprise finance
-            </span>
-            <span>
-              <Bot size={15} />
-              AI + digital marketing
+              <ClipboardList size={15} />
+              Statements you can share
             </span>
           </div>
         </div>
-        <div className="landing-hero-scene" aria-hidden="true">
-          <div className="hero-screen-stack">
-            <figure className="hero-screen hero-screen-main">
-              <img alt="" height={1100} src={featuredPlatformScreenshot.src} width={1440} />
-            </figure>
-            <figure className="hero-screen hero-screen-side">
-              <img alt="" height={1100} src="/screenshots/member-meetings.png" width={1440} />
-            </figure>
-            <div className="hero-icon-strip">
-              <span>
-                <BadgeCheck size={18} />
-              </span>
-              <span>
-                <FolderKanban size={18} />
-              </span>
-              <span>
-                <ShoppingBag size={18} />
-              </span>
-            </div>
+        <div className="landing-hero-scene">
+          <div className="hero-phone-fan">
+            {heroScreens.map((screen, index) => (
+              <figure className={`hero-phone hero-phone-${index + 1}`} key={screen.src}>
+                <img alt={screen.alt} loading={index === 0 ? "eager" : "lazy"} src={screen.src} />
+              </figure>
+            ))}
           </div>
         </div>
       </section>
@@ -483,8 +522,8 @@ export default function LandingPage() {
 
       <section className="partner-proof-row" id="partners" aria-labelledby="partner-proof-title">
         <div className="partner-proof-copy">
-          <p className="eyebrow">Our Partners</p>
-          <h2 id="partner-proof-title">Built with partners growing green enterprise opportunity</h2>
+          <p className="eyebrow">Who we work with</p>
+          <h2 id="partner-proof-title">Trusted by the programmes that support savings groups</h2>
         </div>
         <div className="partner-logo-grid">
           {partnerLogos.map((partner) => (
@@ -510,12 +549,13 @@ export default function LandingPage() {
 
       <section className="landing-section intro-section" id="platform">
         <div className="landing-section-header wide">
-          <p className="eyebrow">Prosperity Toolkit</p>
-          <h2>Digital championship for VSLAs, Chamas, credit unions, agriculture, technology, finance, marketing, and AI</h2>
+          <p className="eyebrow">What it does</p>
+          <h2>Everything a savings group already does, written down properly</h2>
           <p>
-            Intelli-Cash helps VSLAs, Chamas, credit unions, cooperatives,
-            farms, suppliers, shops, makers, and climate-smart businesses
-            organize customers, capital, records, and confidence.
+            Savings groups, chamas, credit unions and cooperatives have run on
+            paper books and a locked box for years. Intelli-Cash keeps the same
+            method &mdash; the same meeting, the same three keys, the same
+            share-out &mdash; and takes away the arithmetic and the lost pages.
           </p>
         </div>
         <div className="audience-grid">
@@ -531,12 +571,13 @@ export default function LandingPage() {
 
       <section className="landing-section financial-rails-section" aria-labelledby="financial-rails-title">
         <div className="landing-section-header wide">
-          <p className="eyebrow">Finance, Marketing, and AI Services</p>
-          <h2 id="financial-rails-title">A service stack for digital championship and green enterprise growth</h2>
+          <p className="eyebrow">Money coming in and going out</p>
+          <h2 id="financial-rails-title">The group&rsquo;s money stays the group&rsquo;s money</h2>
           <p>
-            Intelli-Cash connects field activity to payment rails, digital
-            campaigns, AI support, partner wallets, Web3 contracts, and quality
-            reports that show practical enterprise growth.
+            Members can pay by phone straight into the group&rsquo;s own
+            account. Savings, the welfare pot and anything borrowed from outside
+            are each kept apart, so no total ever flatters the group by counting
+            borrowed money as its own.
           </p>
         </div>
         <div className="financial-rails-grid">
@@ -550,54 +591,37 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section platform-preview-section" aria-labelledby="platform-preview-title">
+      <section className="landing-section app-screens-section" id="screens" aria-labelledby="app-screens-title">
         <div className="landing-section-header wide">
-          <p className="eyebrow">Digital Championship Workspace</p>
-          <h2 id="platform-preview-title">Simple records for meetings, enterprise requests, payments, and progress</h2>
+          <p className="eyebrow">See the app</p>
+          <h2 id="app-screens-title">This is what your secretary will be looking at</h2>
           <p>
-            Members and service teams can keep group records, store requests,
-            meetings, and transactions organized while partners focus on
-            service quality and impact.
+            Real screens from the app as it ships today &mdash; not drawings of
+            one. Big type, few words per screen, and the meeting laid out in the
+            order your group already follows.
           </p>
         </div>
-        <div className="platform-preview-layout">
-          <figure className="platform-shot platform-shot-main">
-            <img
-              alt="Digital championship workspace with quick access modules, summary metrics, upcoming meetings, transactions, and member details"
-              height={1100}
-              loading="lazy"
-              src={featuredPlatformScreenshot.src}
-              width={1440}
-            />
-            <figcaption>
-              <strong>{featuredPlatformScreenshot.title}</strong>
-              <span>{featuredPlatformScreenshot.text}</span>
-            </figcaption>
-          </figure>
-          <div className="platform-shot-stack">
-            {secondaryPlatformScreenshots.map((screenshot) => (
-              <figure className="platform-shot" key={screenshot.src}>
-                <img
-                  alt={`${screenshot.title}: ${screenshot.text}`}
-                  height={1100}
-                  loading="lazy"
-                  src={screenshot.src}
-                  width={1440}
-                />
-                <figcaption>
-                  <strong>{screenshot.title}</strong>
-                  <span>{screenshot.text}</span>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
+        <div className="app-screens-grid">
+          {appScreens.map((screen) => (
+            <figure className="app-screen" key={screen.src}>
+              <img alt={`${screen.title}: ${screen.text}`} loading="lazy" src={screen.src} />
+              <figcaption>
+                <strong>{screen.title}</strong>
+                <span>{screen.text}</span>
+              </figcaption>
+            </figure>
+          ))}
         </div>
+        <p className="app-screens-footnote">
+          Want the whole thing screen by screen?{" "}
+          <Link href="/docs">Read the guide</Link>.
+        </p>
       </section>
 
       <section className="landing-section works-section" id="how-it-works">
         <div className="landing-section-header">
-          <p className="eyebrow">How Intelli-Cash Works</p>
-          <h2>From digital championship to green enterprise growth</h2>
+          <p className="eyebrow">How it works</p>
+          <h2>From setting up to sharing out</h2>
         </div>
         <div className="workflow-grid">
           {workflowSteps.map((step, index) => (
@@ -617,12 +641,13 @@ export default function LandingPage() {
 
       <section className="landing-section governance-band" id="governance">
         <div className="governance-copy">
-          <p className="eyebrow">Trust Architecture</p>
-          <h2>Built to make finance, service delivery, and impact easier to trust</h2>
+          <p className="eyebrow">Keeping the money safe</p>
+          <h2>Built so that no one person can be trusted alone</h2>
           <p>
-            Intelli-Cash keeps the discipline of savings groups and partner
-            finance: members see records, payments are traceable, approvals are
-            controlled, and enterprise activity can be reviewed.
+            A savings group&rsquo;s cash box has three padlocks and three
+            different people holding the keys. Intelli-Cash keeps that idea
+            rather than replacing it &mdash; because the phone should be no
+            easier to misuse than the box was.
           </p>
         </div>
         <div className="governance-table">
@@ -637,12 +662,12 @@ export default function LandingPage() {
 
       <section className="landing-section partner-section">
         <div className="partner-copy">
-          <p className="eyebrow">For Partners, Donors, MFIs, and Government</p>
-          <h2>Simple impact views for green enterprise support</h2>
+          <p className="eyebrow">For partners and funders</p>
+          <h2>See how your groups are doing, without reading their books</h2>
           <p>
-            Partners can understand service reach, digital championship activity, enterprise
-            support, and field quality through simple public-facing reports.
-            Sensitive financial records stay out of this landing-page view.
+            Partners and funders see how the groups they support are doing
+            &mdash; whether they meet, whether they save, whether loans come
+            back &mdash; without reading any member&rsquo;s private record.
           </p>
         </div>
         <div className="partner-outcomes">
@@ -658,12 +683,12 @@ export default function LandingPage() {
 
       <section className="landing-section app-download-band">
         <div className="download-copy">
-          <p className="eyebrow">Android App</p>
-          <h2>Put green enterprise services in the hands of digital championship teams</h2>
+          <p className="eyebrow">The app</p>
+          <h2>One phone in the room is enough</h2>
           <p>
-            Download Intelli-Cash for field teams, VSLAs, Chamas, credit
-            unions, cooperatives, and savings-group users who want to grow
-            finance, customers, and technology adoption around real enterprises.
+            The secretary&rsquo;s phone holds the book. Everyone else can put
+            the app on their own phone to see their savings, but the meeting
+            only needs one.
           </p>
         </div>
         <div className="download-actions">
@@ -684,11 +709,11 @@ export default function LandingPage() {
       </section>
       <section className="landing-section testimonials-section" id="testimonials" aria-labelledby="testimonials-title">
         <div className="landing-section-header wide">
-          <p className="eyebrow">Voices From The Field</p>
+          <p className="eyebrow">From the field</p>
           <h2 id="testimonials-title">Built around the people doing the work</h2>
           <p>
-            How groups, partners, and green enterprises describe working with
-            Intelli-Cash in the field.
+            How the groups, partners and enterprises using Intelli-Cash
+            describe it.
           </p>
         </div>
         <div className="testimonial-grid">
@@ -710,11 +735,12 @@ export default function LandingPage() {
 
       <section className="landing-section pricing-section" id="pricing" aria-labelledby="pricing-title">
         <div className="landing-section-header wide">
-          <p className="eyebrow">Plans &amp; Access</p>
-          <h2 id="pricing-title">Access that matches how you work</h2>
+          <p className="eyebrow">What it costs</p>
+          <h2 id="pricing-title">Free for groups joining through a partner</h2>
           <p>
-            Groups join free through partner programmes. Partners, donors, and
-            lenders get tailored access for their operations.
+            A savings group pays nothing when it joins through one of our
+            partner programmes. Partners, funders and lenders are quoted for
+            what they actually need.
           </p>
         </div>
         <div className="pricing-grid">
@@ -754,7 +780,7 @@ export default function LandingPage() {
 
       <section className="landing-section faq-section" id="faq" aria-labelledby="faq-title">
         <div className="landing-section-header">
-          <p className="eyebrow">Frequently Asked Questions</p>
+          <p className="eyebrow">Common questions</p>
           <h2 id="faq-title">Answers before you start</h2>
         </div>
         <div className="faq-list">
@@ -776,8 +802,8 @@ export default function LandingPage() {
           <p className="eyebrow">Contact</p>
           <h2 id="contact-band-title">Talk to the Intelli-Cash team</h2>
           <p>
-            Reach us for group registration, partner and donor support, green
-            enterprise services, and platform help.
+            Registering a group, joining as a partner, or just a question
+            about how it works &mdash; we would rather you asked.
           </p>
           <div className="hero-actions">
             <Link className="button" href="/contact">

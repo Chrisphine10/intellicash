@@ -34,8 +34,7 @@ const championRoles = [
   { label: "Chairperson", value: "CHAIRPERSON" },
   { label: "Secretary", value: "SECRETARY" },
   { label: "Treasurer", value: "TREASURER" },
-  { label: "Key holder", value: "KEY_HOLDER" },
-  { label: "Digital championship lead", value: "CHAIRPERSON" }
+  { label: "Key holder", value: "KEY_HOLDER" }
 ];
 
 export function GroupRegistrationSection() {
@@ -83,11 +82,11 @@ export function GroupRegistrationSection() {
     <section className="landing-section group-registration-band" id="group-registration">
       <div className="landing-section-header wide">
         <p className="eyebrow">Group Registration</p>
-        <h2>Register a VSLA, Chama, credit union, or cooperative</h2>
+        <h2>Register your group</h2>
         <p>
-          The champion owns the group account after approval. Capture the group
-          profile and champion-owner details so the account is scoped to the
-          right group from the start.
+          Tell us about the group and who will hold the phone. We will be in
+          touch to set the account up, and that person becomes the one who
+          keeps the book &mdash; nobody else can open it for you.
         </p>
       </div>
 
