@@ -8605,3 +8605,210 @@ html[data-theme="dark"] .pwa-splash-screen {
   font-size: 11.5px;
   line-height: 1.5;
 }
+
+/* ---------------------------------------------------------------------------
+   Assessment detail, section by section
+   ---------------------------------------------------------------------------
+   A single total tells a field officer nothing about what to do next. The
+   section that scored 40% is the conversation to have at the next visit, so the
+   record is grouped by section and each one carries its own score.
+
+   Tokens only — no literal colours — so the block follows the console theme in
+   both light and dark. */
+
+.assessment-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.assessment-section:first-of-type {
+  border-top: 0;
+}
+
+.assessment-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.assessment-section-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* A long scorecard is wide on a laptop and much wider on a phone. The table
+   scrolls inside its own box rather than pushing the page sideways. */
+.assessment-section .data-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+   MEAL indicators
+   ---------------------------------------------------------------------------
+   Every figure is shown with its denominator and its caveats attached, because
+   a number that travels into a funder report should carry its limits with it. */
+
+.meal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.meal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--surface-raised);
+}
+
+.meal-card h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.meal-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.meal-baseline {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Movement is coloured by the indicator's own direction, never by the sign of
+   the number: days-to-meet falling is an improvement. */
+.meal-movement {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.meal-movement.improved {
+  color: var(--green-700);
+}
+
+.meal-movement.worsened {
+  color: var(--red);
+}
+
+.meal-movement.flat,
+.meal-movement.unknown {
+  color: var(--muted);
+}
+
+/* Caveats are part of the figure, so they sit inside the card rather than in a
+   footnote somebody can crop out of a screenshot. */
+.meal-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.meal-card .definition {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 6px;
+  margin: 2px 0 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Enterprises
+   --------------------------------------------------------------------------- */
+
+.enterprise-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--surface-raised);
+  margin-bottom: 12px;
+}
+
+.enterprise-card.is-closed {
+  opacity: 0.72;
+}
+
+.enterprise-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.enterprise-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.enterprise-figure .label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.enterprise-figure .value {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Checkbox chips: several answers at once, laid out as a wrap rather than a
+   column of rows. A group commonly sells through more than one channel, so a
+   single-choice control would force whoever captures it to pick a lie. */
+.chip-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.chip-fieldset legend {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.chip-check:has(input:checked) {
+  border-color: var(--green-dark);
+  color: var(--green-700);
+  font-weight: 700;
+}
+
+.chip-check input {
+  width: auto;
+  margin: 0;
+}

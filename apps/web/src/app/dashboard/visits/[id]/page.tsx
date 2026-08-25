@@ -4,6 +4,10 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPinned } from "@/lib/theme-icons";
 import { ApiClientError, apiFetch, evidenceSrc, humanizeEnum } from "../../../../lib/api";
+import {
+  AssessmentRecord,
+  type AssessmentRecordData
+} from "../../../../components/dashboard/assessment-record";
 
 /**
  * One field visit, with the evidence collected during it.
@@ -42,15 +46,6 @@ interface Attachment {
   size: number;
   capturedAt: string | null;
   caption: string | null;
-}
-
-interface AssessmentSummary {
-  earnedPoints: number;
-  maxPoints: number;
-  percentage: number;
-  bandLabel: string | null;
-  complete: boolean;
-  templateVersion: number;
 }
 
 interface Mentorship {
@@ -93,7 +88,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const [visit, setVisit] = useState<Visit | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [assessment, setAssessment] = useState<AssessmentSummary | null>(null);
+  const [assessment, setAssessment] = useState<AssessmentRecordData | null>(null);
   const [mentorship, setMentorship] = useState<Mentorship | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [busyItem, setBusyItem] = useState<string | null>(null);
@@ -112,7 +107,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
       // A visit without an assessment is ordinary — an agent may record a visit
       // without filling the scorecard in — so a 404 here is not an error.
       try {
-        setAssessment(await apiFetch<AssessmentSummary>(`/visits/${id}/assessment`));
+        setAssessment(await apiFetch<AssessmentRecordData>(`/visits/${id}/assessment`));
       } catch (e) {
         if (!(e instanceof ApiClientError && e.status === 404)) throw e;
       }
@@ -205,19 +200,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
         </article>
       ) : null}
 
-      {assessment ? (
-        <article className="data-card">
-          <h3>Assessment</h3>
-          <p className="metric-value">
-            {assessment.earnedPoints} / {assessment.maxPoints}
-            {assessment.bandLabel ? ` · ${assessment.bandLabel}` : ""}
-          </p>
-          <p className="eyebrow">
-            {assessment.percentage}% · scorecard v{assessment.templateVersion}
-            {assessment.complete ? "" : " · some questions were left unanswered"}
-          </p>
-        </article>
-      ) : null}
+      {assessment ? <AssessmentRecord assessment={assessment} /> : null}
 
       {mentorship && (mentorship.sessions.length > 0 || mentorship.ratings.length > 0) ? (
         <article className="data-card">
@@ -267,6 +250,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
                   <th>Question</th>
                   <th>Score</th>
                   <th>Answered by</th>
+                  <th>What they said</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,6 +264,11 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
                       ) : (
                         <span className="pill gold">The agent</span>
                       )}
+                    </td>
+                    <td>
+                      {/* The sentence is usually worth more than the score: a 3
+                          with a reason is actionable, a 3 alone is not. */}
+                      {rating.comment ?? <span className="eyebrow">No comment</span>}
                     </td>
                   </tr>
                 ))}

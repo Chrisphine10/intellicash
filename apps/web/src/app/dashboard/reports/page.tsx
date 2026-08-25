@@ -1984,6 +1984,13 @@ export default function ReportsPage() {
             <em>Coverage, scores, overdue actions</em>
           </span>
         </Link>
+        <Link className="dashboard-module-link" href="/dashboard/reports/meal">
+          <BarChart3 size={18} />
+          <span>
+            <strong>Impact</strong>
+            <em>Baseline against latest, with the method attached</em>
+          </span>
+        </Link>
       </div>
 
       <section className="stat-grid">
