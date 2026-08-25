@@ -1885,7 +1885,10 @@ describe("Intellicash API", () => {
       expect.objectContaining({
         status: "PENDING",
         villageAgentId: bookableAgent.id,
-        programmeId: bookableAgent.programme.id
+        // An agent now serves a set of programmes. Grace serves one, so the
+        // booking still resolves without being told which — the API only
+        // insists on a choice when there is more than one.
+        programmeId: bookableAgent.programmeLinks[0].programme.id
       })
     );
 

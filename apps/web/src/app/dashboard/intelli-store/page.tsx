@@ -70,6 +70,12 @@ import type {
   RequestActionForm
 } from "../../../features/intelli-store/model";
 
+
+/** The programme ids an agent serves. */
+function agentProgrammeIds(agent: AgentRow | undefined): string[] {
+  return (agent?.programmeLinks ?? []).map((link) => link.programme.id);
+}
+
 export default function DashboardIntelliStorePage() {
   const [user, setUser] = useState<User | null>(null);
   const [products, setProducts] = useState<StoreProduct[]>([]);
@@ -265,7 +271,13 @@ export default function DashboardIntelliStorePage() {
       programmeIds: values,
       defaultAgentIds: current.defaultAgentIds.filter((agentId) => {
         const agent = agents.find((candidate) => candidate.id === agentId);
-        return agent?.programme?.id ? values.includes(agent.programme.id) : values.length === 0;
+        // An agent stays selected while ANY programme they serve is still
+        // chosen for this product; an agent on no programme only survives an
+        // empty selection, as before.
+        const served = agentProgrammeIds(agent);
+        return served.length > 0
+          ? served.some((id) => values.includes(id))
+          : values.length === 0;
       })
     }));
   }
@@ -435,7 +447,7 @@ export default function DashboardIntelliStorePage() {
     const programmeSettings = productForm.programmeIds.map((programmeId) => {
       const programmeAgentIds = productForm.defaultAgentIds.filter((agentId) => {
         const agent = agents.find((candidate) => candidate.id === agentId);
-        return agent?.programme?.id === programmeId;
+        return agentProgrammeIds(agent).includes(programmeId);
       });
 
       return {
@@ -935,12 +947,24 @@ export default function DashboardIntelliStorePage() {
                     value={productForm.defaultAgentIds}
                   >
                     {agents
-                      .filter((agent) => !agent.programme?.id || productForm.programmeIds.includes(agent.programme.id))
-                      .map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name} {agent.programme?.name ? `- ${agent.programme.name}` : ""}
-                        </option>
-                      ))}
+                      .filter((agent) => {
+                        const served = agentProgrammeIds(agent);
+                        return (
+                          served.length === 0 ||
+                          served.some((id) => productForm.programmeIds.includes(id))
+                        );
+                      })
+                      .map((agent) => {
+                        const served = (agent.programmeLinks ?? []).map(
+                          (link) => link.programme.name
+                        );
+                        return (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                            {served.length > 0 ? ` - ${served.join(", ")}` : ""}
+                          </option>
+                        );
+                      })}
                   </select>
                 </label>
                 <label className="credential-field">

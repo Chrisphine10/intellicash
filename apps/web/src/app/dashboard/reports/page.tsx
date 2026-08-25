@@ -457,8 +457,10 @@ export default function ReportsPage() {
           return {
             id: agent.id,
             name: agent.name,
-            county: agent.county ?? agent.programme?.county ?? "Unassigned",
-            programme: agent.programme?.name ?? "Unassigned",
+            county: agent.county ?? agent.programmeLinks?.[0]?.programme.county ?? "Unassigned",
+            programme:
+              (agent.programmeLinks ?? []).map((link) => link.programme.name).join(", ") ||
+              "Unassigned",
             groups: agent._count.groups,
             caseloadLimit: agent.caseloadLimit,
             capacityUsed,

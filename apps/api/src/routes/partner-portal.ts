@@ -206,7 +206,7 @@ async function loadPublicProgrammes(where: { id?: string; publicSlug?: string } 
       _count: {
         select: {
           groups: true,
-          villageAgents: true,
+          villageAgentLinks: true,
           groupLinks: true,
           partnerLinks: true
         }

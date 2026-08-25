@@ -432,7 +432,7 @@ async function validateProgrammeSettings(
           AND: [
             {
               id: { in: defaultAgentIds },
-              programmeId: setting.programmeId,
+              programmeLinks: { some: { programmeId: setting.programmeId } },
               status: "ACTIVE"
             },
             villageAgentScopeForUser(user)
@@ -507,11 +507,13 @@ async function resolveDistributionAgentId({
   const where: Prisma.VillageAgentWhereInput = {
     AND: [
       {
-        programmeId,
+        programmeLinks: { some: { programmeId } },
         status: "ACTIVE",
         ...(requestedAgentId ? { id: requestedAgentId } : {})
       },
-      publicOnly ? { programme: { publicStatus: "ONGOING" } } : {},
+      publicOnly
+        ? { programmeLinks: { some: { programme: { publicStatus: "ONGOING" } } } }
+        : {},
       user ? villageAgentScopeForUser(user) : {}
     ]
   };
@@ -552,8 +554,10 @@ async function resolveProductDefaultAgentId({
           isPrimary: true,
           villageAgent: {
             status: "ACTIVE",
-            programmeId,
-            ...(publicOnly ? { programme: { publicStatus: "ONGOING" } } : {})
+            programmeLinks: { some: { programmeId } },
+            ...(publicOnly
+              ? { programmeLinks: { some: { programme: { publicStatus: "ONGOING" } } } }
+              : {})
           }
         },
         include: { villageAgent: true },
@@ -1106,8 +1110,7 @@ const publicAgentSelect = {
   name: true,
   county: true,
   location: true,
-  status: true,
-  programmeId: true
+  status: true
 } satisfies Prisma.VillageAgentSelect;
 
 function publicProductInclude(): Prisma.StoreProductInclude {
@@ -1137,7 +1140,7 @@ function publicProductInclude(): Prisma.StoreProductInclude {
               select: {
                 groups: true,
                 groupLinks: true,
-                villageAgents: true
+                villageAgentLinks: true
               }
             }
           }
@@ -1172,12 +1175,23 @@ router.get("/public/intelli-store", async (_req, res, next) => {
       prisma.villageAgent.findMany({
         where: {
           status: "ACTIVE",
-          programme: { publicStatus: "ONGOING", isDemo: false }
+          programmeLinks: {
+            some: { programme: { publicStatus: "ONGOING", isDemo: false } }
+          }
         },
         orderBy: [{ county: "asc" }, { name: "asc" }],
         select: {
           ...publicAgentSelect,
-          programme: { include: { partner: { select: publicPartnerSelect } } },
+          // Only the public programmes are listed. An agent who also serves a
+          // draft or demo programme must not have it surfaced here just
+          // because one of their other programmes is public.
+          programmeLinks: {
+            where: { programme: { publicStatus: "ONGOING", isDemo: false } },
+            select: {
+              programme: { include: { partner: { select: publicPartnerSelect } } }
+            },
+            orderBy: { createdAt: "asc" }
+          },
           groups: {
             select: {
               id: true,
@@ -1292,11 +1306,15 @@ router.post("/public/intelli-store/booking-requests", async (req, res, next) => 
           where: {
             id: body.villageAgentId,
             status: "ACTIVE",
-            programme: { publicStatus: "ONGOING" }
+            programmeLinks: { some: { programme: { publicStatus: "ONGOING" } } }
           },
           select: {
             id: true,
-            programmeId: true
+            programmeLinks: {
+              where: { programme: { publicStatus: "ONGOING" } },
+              select: { programmeId: true },
+              orderBy: { createdAt: "asc" }
+            }
           }
         })
       : null;
@@ -1305,13 +1323,27 @@ router.post("/public/intelli-store/booking-requests", async (req, res, next) => 
       throw new ApiHttpError(404, "VILLAGE_AGENT_NOT_FOUND", "Selected VA / CBT is not available for booking.");
     }
 
-    const programmeId = body.programmeId ?? agent?.programmeId;
-    if (!programmeId) {
-      throw new ApiHttpError(400, "PROGRAMME_REQUIRED", "Booking requests require a public program.");
+    // An agent can now serve several public programmes, so there is not always
+    // one to fall back to. One programme means no choice to make; more than one
+    // means the booking has to say which, because filing it against the wrong
+    // programme is not something the person booking would ever notice.
+    const agentProgrammeIds = agent?.programmeLinks.map((link) => link.programmeId) ?? [];
+
+    if (agent && body.programmeId && !agentProgrammeIds.includes(body.programmeId)) {
+      throw new ApiHttpError(400, "BOOKING_PROGRAM_MISMATCH", "Selected VA / CBT is not linked to the selected program.");
     }
 
-    if (agent?.programmeId && body.programmeId && agent.programmeId !== body.programmeId) {
-      throw new ApiHttpError(400, "BOOKING_PROGRAM_MISMATCH", "Selected VA / CBT is not linked to the selected program.");
+    if (!body.programmeId && agentProgrammeIds.length > 1) {
+      throw new ApiHttpError(
+        400,
+        "BOOKING_PROGRAM_REQUIRED",
+        "This VA / CBT works across several programs, so the booking has to say which one."
+      );
+    }
+
+    const programmeId = body.programmeId ?? agentProgrammeIds[0];
+    if (!programmeId) {
+      throw new ApiHttpError(400, "PROGRAMME_REQUIRED", "Booking requests require a public program.");
     }
 
     const programme = await prisma.programme.findFirst({

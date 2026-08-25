@@ -54,6 +54,18 @@ function publicStoreCopy(value?: string | null) {
     .replace(/program review/gi, "savings record review");
 }
 
+
+/**
+ * The first programme an agent serves, used to preselect a booking.
+ *
+ * An agent may serve several now. Preselecting the first is a starting point,
+ * not a decision — the booking form still shows the programme field, and the
+ * API refuses a booking that names none when the agent serves more than one.
+ */
+function firstProgrammeId(agent?: { programmeLinks?: Array<{ programme: { id: string } }> } | null) {
+  return agent?.programmeLinks?.[0]?.programme.id ?? "";
+}
+
 export function IntelliStoreSection() {
   const [store, setStore] = useState<IntelliStorePayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +89,7 @@ export function IntelliStoreSection() {
         setBookingForm((current) => ({
           ...current,
           serviceType: current.serviceType || response.serviceTypes[0] || "Group onboarding",
-          programmeId: current.programmeId || response.agents[0]?.programme?.id || ""
+          programmeId: current.programmeId || firstProgrammeId(response.agents[0])
         }));
       } catch (storeError) {
         if (mounted) setError(storeError instanceof Error ? storeError.message : "Intelli-Store failed to load");
@@ -122,7 +134,7 @@ export function IntelliStoreSection() {
     setBookingForm({
       ...defaultBookingForm,
       villageAgentId: agent?.id ?? "",
-      programmeId: agent?.programme?.id ?? store?.agents[0]?.programme?.id ?? "",
+      programmeId: firstProgrammeId(agent) || firstProgrammeId(store?.agents[0]),
       serviceType: store?.serviceTypes[0] ?? "Group onboarding"
     });
     setMessage(null);
@@ -284,7 +296,7 @@ export function IntelliStoreSection() {
               <button className="store-agent-row" key={agent.id} onClick={() => openBooking(agent)} type="button">
                 <span>
                   <strong>{agent.name}</strong>
-                  <em>{agent.county ?? agent.programme?.county ?? "Programme field team"}</em>
+                  <em>{agent.county ?? agent.programmeLinks?.[0]?.programme.county ?? "Programme field team"}</em>
                 </span>
                 <span className="pill">{agent._count.groups} groups</span>
               </button>

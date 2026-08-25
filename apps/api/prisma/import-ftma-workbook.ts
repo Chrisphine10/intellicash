@@ -348,7 +348,6 @@ async function importFscs(workbook: WorkbookSheets, programmeId: string) {
     const sourceReference = sourceCode("FTMA-FSC", sourceNo(cell(row, 2), rowNumber), rowNumber);
     const agent = await prisma.villageAgent.create({
       data: {
-        programmeId,
         name,
         phone: normalizePhone(cell(row, 10)) ?? "+254700000000",
         gender: cleanText(cell(row, 5)),
@@ -361,6 +360,12 @@ async function importFscs(workbook: WorkbookSheets, programmeId: string) {
         caseloadLimit: Math.max(1, toInt(cell(row, 8))),
         digitalLiteracyScore: 80
       }
+    });
+
+    // The workbook has one programme per sheet, so every imported agent is
+    // linked to that one. The join table takes more when there are more.
+    await prisma.villageAgentProgramme.create({
+      data: { villageAgentId: agent.id, programmeId }
     });
 
     countyAgents.set(county, [...(countyAgents.get(county) ?? []), agent.id]);

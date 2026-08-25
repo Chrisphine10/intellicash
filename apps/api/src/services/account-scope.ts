@@ -147,7 +147,7 @@ export function programmeScopeForUser(user?: AuthenticatedUser): Prisma.Programm
     return user.villageAgentId
       ? {
           OR: [
-            { villageAgents: { some: { id: user.villageAgentId } } },
+            { villageAgentLinks: { some: { villageAgentId: user.villageAgentId } } },
             { groups: { some: { villageAgentId: user.villageAgentId } } },
             { groupLinks: { some: { group: { villageAgentId: user.villageAgentId } } } }
           ]
@@ -214,11 +214,19 @@ export function villageAgentScopeForUser(user?: AuthenticatedUser): Prisma.Villa
   if (user.role === "PARTNER_OFFICER") {
     return user.partnerId
       ? {
-          programme: {
-            OR: [
-              { partnerId: user.partnerId },
-              { partnerLinks: { some: { partnerId: user.partnerId } } }
-            ]
+          // An agent is in a partner's scope when they serve at least one of
+          // that partner's programmes. `partnerId` on the agent says the same
+          // thing, but the link is the authority and this keeps working for
+          // rows whose partner has not been backfilled.
+          programmeLinks: {
+            some: {
+              programme: {
+                OR: [
+                  { partnerId: user.partnerId },
+                  { partnerLinks: { some: { partnerId: user.partnerId } } }
+                ]
+              }
+            }
           }
         }
       : { id: "__no_access__" };

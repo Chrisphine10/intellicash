@@ -222,7 +222,14 @@ export interface AgentRow {
   feedback?: string | null;
   sourceSystem?: string | null;
   sourceReference?: string | null;
-  programme?: ProgrammeRow | null;
+  /**
+   * Every programme this agent serves. An agent used to carry one; they
+   * commonly work across several of a partner's programmes, and the single
+   * field forced whoever set them up to pick one and lose the rest.
+   */
+  programmeLinks?: Array<{ programme: ProgrammeRow }>;
+  /** The partner all of those programmes belong to. */
+  partner?: { id: string; name: string } | null;
   groups?: Array<{ id: string; name: string; code: string; county: string; phase: string }>;
   _count: { groups: number };
 }

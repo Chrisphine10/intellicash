@@ -240,7 +240,7 @@ async function main() {
       })) ??
       (await tx.villageAgent.create({
         data: {
-          programmeId: programme.id,
+          partnerId: programme.partnerId,
           name: "Grace Wanjiku",
           phone: "254720100102",
           email: "demo.agent@intellicash.co.ke",
@@ -248,6 +248,16 @@ async function main() {
           status: "ACTIVE"
         }
       }));
+
+    // Idempotent like the rest of this seed: re-running must not fail on a
+    // link that already exists.
+    await tx.villageAgentProgramme.upsert({
+      where: {
+        villageAgentId_programmeId: { villageAgentId: agent.id, programmeId: programme.id }
+      },
+      update: {},
+      create: { villageAgentId: agent.id, programmeId: programme.id }
+    });
     await tx.group.update({
       where: { id: group.id },
       data: { villageAgentId: agent.id }

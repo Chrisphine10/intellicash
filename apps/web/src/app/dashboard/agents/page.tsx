@@ -7,6 +7,7 @@ import { GraduationCap, Pencil, Phone, Plus, ShieldCheck, UsersRound, X } from "
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
+import { ProgrammePicker } from "../../../components/dashboard/programme-picker";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { AgentRow, GroupRow, ProgrammeRow, User } from "../../../components/dashboard/types";
 
@@ -15,7 +16,7 @@ const defaultAgentForm = {
   phone: "",
   email: "",
   status: "ACTIVE",
-  programmeId: "",
+  programmeIds: [] as string[],
   gender: "",
   projectOfficer: "",
   county: "",
@@ -25,6 +26,20 @@ const defaultAgentForm = {
   caseloadLimit: "25",
   groupIds: [] as string[]
 };
+
+
+/** The programmes an agent serves, for a table cell or a card line. */
+function programmeNames(agent: AgentRow): string {
+  const names = (agent.programmeLinks ?? []).map((link) => link.programme.name);
+  if (names.length === 0) return "Unassigned";
+  // Two fit; beyond that the count is more use than a truncated list.
+  return names.length <= 2 ? names.join(", ") : `${names[0]} +${names.length - 1} more`;
+}
+
+/** Where an agent works: their own county, else the first programme's. */
+function agentCounty(agent: AgentRow): string {
+  return agent.county ?? agent.programmeLinks?.[0]?.programme.county ?? "Unassigned";
+}
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -68,7 +83,7 @@ export default function AgentsPage() {
         setUser(meResponse);
         setAgentForm((current) => ({
           ...current,
-          programmeId: current.programmeId || programmeResponse[0]?.id || ""
+          programmeIds: current.programmeIds
         }));
       } catch (agentsError) {
         if (mounted) setError(agentsError instanceof Error ? agentsError.message : "Agents failed");
@@ -110,7 +125,7 @@ export default function AgentsPage() {
       phone: agent.phone,
       email: agent.email ?? "",
       status: agent.status,
-      programmeId: agent.programme?.id ?? "",
+      programmeIds: (agent.programmeLinks ?? []).map((link) => link.programme.id),
       gender: agent.gender ?? "",
       projectOfficer: agent.projectOfficer ?? "",
       county: agent.county ?? "",
@@ -137,7 +152,7 @@ export default function AgentsPage() {
           phone: agentForm.phone,
           email: agentForm.email || undefined,
           status: agentForm.status,
-          programmeId: agentForm.programmeId || undefined,
+          programmeIds: agentForm.programmeIds,
           gender: agentForm.gender || undefined,
           projectOfficer: agentForm.projectOfficer || undefined,
           county: agentForm.county || undefined,
@@ -152,7 +167,7 @@ export default function AgentsPage() {
       await refreshWorkspace();
       setAgentForm({
         ...defaultAgentForm,
-        programmeId: programmes[0]?.id || ""
+        programmeIds: []
       });
       setIsCreateOpen(false);
       setMessage({ ok: true, text: `${created.name} created and assigned to ${created._count.groups} groups.` });
@@ -181,7 +196,7 @@ export default function AgentsPage() {
           phone: agentForm.phone,
           email: agentForm.email || null,
           status: agentForm.status,
-          programmeId: agentForm.programmeId || null,
+          programmeIds: agentForm.programmeIds,
           gender: agentForm.gender || null,
           projectOfficer: agentForm.projectOfficer || null,
           county: agentForm.county || null,
@@ -196,7 +211,7 @@ export default function AgentsPage() {
       setAssignmentTarget(null);
       setAgentForm({
         ...defaultAgentForm,
-        programmeId: programmes[0]?.id || ""
+        programmeIds: []
       });
       setMessage({ ok: true, text: `${updated.name} updated and covers ${updated._count.groups} groups.` });
     } catch (saveError) {
@@ -287,20 +302,14 @@ export default function AgentsPage() {
                     value={agentForm.email}
                   />
                 </label>
-                <label className="credential-field">
-                  <span>Program</span>
-                  <select
-                    onChange={(event) => setAgentForm((current) => ({ ...current, programmeId: event.target.value }))}
-                    value={agentForm.programmeId}
-                  >
-                    <option value="">Unassigned</option>
-                    {programmes.map((programme) => (
-                      <option key={programme.id} value={programme.id}>
-                        {programme.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="credential-field wide-field">
+                  <span>Programs</span>
+                  <ProgrammePicker
+                    onChange={(programmeIds) => setAgentForm((current) => ({ ...current, programmeIds }))}
+                    programmes={programmes}
+                    selectedIds={agentForm.programmeIds}
+                  />
+                </div>
                 <label className="credential-field">
                   <span>County</span>
                   <input
@@ -421,20 +430,14 @@ export default function AgentsPage() {
                     <option value="SUSPENDED">Suspended</option>
                   </select>
                 </label>
-                <label className="credential-field">
-                  <span>Program</span>
-                  <select
-                    onChange={(event) => setAgentForm((current) => ({ ...current, programmeId: event.target.value }))}
-                    value={agentForm.programmeId}
-                  >
-                    <option value="">Unassigned</option>
-                    {programmes.map((programme) => (
-                      <option key={programme.id} value={programme.id}>
-                        {programme.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="credential-field wide-field">
+                  <span>Programs</span>
+                  <ProgrammePicker
+                    onChange={(programmeIds) => setAgentForm((current) => ({ ...current, programmeIds }))}
+                    programmes={programmes}
+                    selectedIds={agentForm.programmeIds}
+                  />
+                </div>
                 <label className="credential-field">
                   <span>Project officer</span>
                   <input
@@ -548,11 +551,11 @@ export default function AgentsPage() {
                   <div className="record-card-meta">
                     <div>
                       <span>Program</span>
-                      <strong>{agent.programme?.name ?? "Unassigned"}</strong>
+                      <strong>{programmeNames(agent)}</strong>
                     </div>
                     <div>
                       <span>County</span>
-                      <strong>{agent.county ?? agent.programme?.county ?? "Unassigned"}</strong>
+                      <strong>{agentCounty(agent)}</strong>
                     </div>
                     <div>
                       <span>Groups</span>
@@ -596,12 +599,12 @@ export default function AgentsPage() {
             {
               key: "programme",
               header: "Programme",
-              value: (agent) => agent.programme?.name ?? "Unassigned"
+              value: (agent) => programmeNames(agent)
             },
             {
               key: "county",
               header: "County",
-              value: (agent) => agent.county ?? agent.programme?.county ?? "Unassigned"
+              value: (agent) => agentCounty(agent)
             },
             {
               key: "project-officer",
@@ -659,7 +662,7 @@ export default function AgentsPage() {
               key: "programme",
               label: "Programme",
               allLabel: "All programmes",
-              getValue: (agent) => agent.programme?.name ?? "Unassigned"
+              getValue: (agent) => programmeNames(agent)
             },
             {
               key: "status",

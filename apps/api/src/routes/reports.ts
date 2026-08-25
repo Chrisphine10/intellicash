@@ -419,7 +419,10 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
         county: true,
         status: true,
         caseloadLimit: true,
-        programme: { select: { id: true, name: true } }
+        programmeLinks: {
+          select: { programme: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "asc" }
+        }
       }
     });
     if (!agent) {

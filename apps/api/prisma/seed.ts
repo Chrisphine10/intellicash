@@ -432,7 +432,7 @@ export async function seedDatabase() {
 
   const va = await prisma.villageAgent.create({
     data: {
-      programmeId: programme.id,
+      partnerId: partner.id,
       name: "Grace Wanjiku",
       phone: "+254700000101",
       email: "grace.wanjiku@intellicash.co.ke",
@@ -444,6 +444,12 @@ export async function seedDatabase() {
       digitalLiteracyScore: 91,
       caseloadLimit: 20
     }
+  });
+
+  // Programmes hang off the join table now, so the seed links rather than
+  // setting a column. One programme here; the shape supports several.
+  await prisma.villageAgentProgramme.create({
+    data: { villageAgentId: va.id, programmeId: programme.id }
   });
 
   // Grace's own login. Created here rather than with the other demo users

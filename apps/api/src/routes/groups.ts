@@ -340,7 +340,7 @@ const groupInclude = {
         include: {
           partner: true,
           partnerLinks: { include: { partner: true } },
-          _count: { select: { groups: true, villageAgents: true, partnerLinks: true, groupLinks: true } }
+          _count: { select: { groups: true, villageAgentLinks: true, partnerLinks: true, groupLinks: true } }
         }
       }
     },

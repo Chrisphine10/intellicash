@@ -122,6 +122,7 @@ model Partner {
   wallet                      PartnerWallet?
   signupRequests              PartnerSignupRequest[]
   programmes                  Programme[]
+  villageAgents               VillageAgent[]
   programmeLinks              ProgrammePartner[]
   walletTransactions          PartnerWalletTransaction[]
   webhookSubscriptions        WebhookSubscription[]
@@ -167,7 +168,7 @@ model Programme {
   partnerLinks         ProgrammePartner[]
   groupLinks           ProgrammeGroup[]
   groups               Group[]
-  villageAgents        VillageAgent[]
+  villageAgentLinks    VillageAgentProgramme[]
   walletTransactions   PartnerWalletTransaction[]
   assets               ProgrammeAsset[]
   storeProductLinks    StoreProductProgramme[]
@@ -316,8 +317,22 @@ model ProgrammeGroup {
 }
 
 model VillageAgent {
-  id                   String   @id @default(cuid())
-  programmeId          String?
+  id String @id @default(cuid())
+
+  /**
+   * The one partner this agent works for.
+   *
+   * An agent is engaged by a partner and then assigned to that partner's
+   * programmes — which is why the partner sits here and the programmes sit in
+   * `programmeLinks`. It is what makes "the same partner" a rule the service
+   * can check rather than a convention people remember.
+   *
+   * Nullable: an agent can exist before being attached to a programme, and
+   * agents that pre-date this column have it backfilled from whichever
+   * programme they were on.
+   */
+  partnerId String?
+
   name                 String
   phone                String
   email                String?
@@ -334,7 +349,14 @@ model VillageAgent {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  programme                Programme?                   @relation(fields: [programmeId], references: [id])
+  partner                  Partner?                     @relation(fields: [partnerId], references: [id])
+  /**
+   * Every programme this agent serves. Replaces the single `programmeId` that
+   * used to live on this model: an agent commonly works across several of a
+   * partner's programmes, and the old shape forced somebody to pick one and
+   * lose the rest.
+   */
+  programmeLinks           VillageAgentProgramme[]
   groups                   Group[]
   /**
    * Login accounts that act as this agent (VILLAGE_AGENT role).
@@ -346,6 +368,27 @@ model VillageAgent {
   signupRequests           PartnerSignupRequest[]       @relation("SignupFieldAgent")
   storeCreditDistributions StoreCreditRequest[]         @relation("StoreCreditDistributor")
   storeProductProgrammes   StoreProductProgrammeAgent[]
+}
+
+/**
+ * Which programmes a village agent serves.
+ *
+ * Every programme here must belong to the agent's `partnerId`. That is enforced
+ * in `village-agent-service.ts` rather than by the database: SQLite can express
+ * it only through composite foreign keys that would make every read of this
+ * table more awkward than the rule is worth, and the check has one entry point.
+ */
+model VillageAgentProgramme {
+  id             String   @id @default(cuid())
+  villageAgentId String
+  programmeId    String
+  createdAt      DateTime @default(now())
+
+  villageAgent VillageAgent @relation(fields: [villageAgentId], references: [id], onDelete: Cascade)
+  programme    Programme    @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@unique([villageAgentId, programmeId])
+  @@index([programmeId])
 }
 
 model StoreSupplier {

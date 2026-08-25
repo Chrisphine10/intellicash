@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { languagePreferences, permissions, roles, type Role } from "@intellicash/shared";
 import { requireAuth } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
+import { setAgentProgrammes } from "../services/village-agent-service";
 import {
   partnerScopeForUser,
   programmeScopeForUser,
@@ -665,7 +666,7 @@ const programmeInclude = {
   _count: {
     select: {
       groups: true,
-      villageAgents: true,
+      villageAgentLinks: true,
       partnerLinks: true,
       groupLinks: true
     }
@@ -1083,10 +1084,10 @@ router.get(
         where: villageAgentScopeForUser(req.user),
         orderBy: { createdAt: "desc" },
         include: {
-          programme: {
-            include: {
-              partner: true
-            }
+          partner: true,
+          programmeLinks: {
+            include: { programme: { include: { partner: true } } },
+            orderBy: { createdAt: "asc" }
           },
           groups: {
             select: {
@@ -1112,6 +1113,11 @@ router.get(
 );
 
 const villageAgentSchema = z.object({
+  /**
+   * The programmes this agent serves. `programmeId` is still accepted so an
+   * existing caller is not broken by the change; it is folded into the list.
+   */
+  programmeIds: z.array(z.string()).optional(),
   programmeId: z.string().optional(),
   name: z.string().min(2),
   phone: z.string().min(7),
@@ -1127,6 +1133,7 @@ const villageAgentSchema = z.object({
 });
 
 const villageAgentUpdateSchema = z.object({
+  programmeIds: z.array(z.string()).optional(),
   programmeId: z.string().nullable().optional(),
   name: z.string().min(2).optional(),
   phone: z.string().min(7).optional(),
@@ -1143,10 +1150,16 @@ const villageAgentUpdateSchema = z.object({
 });
 
 const villageAgentInclude = {
-  programme: {
+  partner: true,
+  programmeLinks: {
     include: {
-      partner: true
-    }
+      programme: {
+        include: {
+          partner: true
+        }
+      }
+    },
+    orderBy: { createdAt: "asc" }
   },
   groups: {
     select: {
@@ -1232,8 +1245,13 @@ router.post(
   async (req, res, next) => {
     try {
       const body = villageAgentSchema.parse(req.body);
-      const { groupIds, programmeId, ...agentInput } = body;
-      const scopedProgrammeId = await assertProgrammeWriteScope(req.user, programmeId);
+      const { groupIds, programmeId, programmeIds, ...agentInput } = body;
+      // Both spellings land in one list, so an older caller sending a single
+      // `programmeId` keeps working while the console sends the set.
+      const wantedProgrammes = [...new Set([...(programmeIds ?? []), ...(programmeId ? [programmeId] : [])])];
+      for (const id of wantedProgrammes) {
+        await assertProgrammeWriteScope(req.user, id);
+      }
       const assignmentIds = await validateAgentGroupAssignment({
         user: req.user,
         groupIds,
@@ -1241,12 +1259,18 @@ router.post(
       });
 
       const agent = await prisma.$transaction(async (tx) => {
-        const created = await tx.villageAgent.create({
-          data: {
-            ...agentInput,
-            programmeId: scopedProgrammeId ?? undefined
-          }
+        const created = await tx.villageAgent.create({ data: agentInput });
+
+        // The partner comes back from the assignment rather than being sent:
+        // it is whichever partner owns the programmes, and the service refuses
+        // a set that spans more than one.
+        const { partnerId } = await setAgentProgrammes(tx, {
+          agentId: created.id,
+          programmeIds: wantedProgrammes
         });
+        if (partnerId) {
+          await tx.villageAgent.update({ where: { id: created.id }, data: { partnerId } });
+        }
 
         await setAgentGroups(tx, created.id, assignmentIds);
 
@@ -1292,10 +1316,19 @@ router.patch(
         throw new ApiHttpError(404, "VILLAGE_AGENT_NOT_FOUND", "VA / CBT does not exist or is outside this account.");
       }
 
-      const scopedProgrammeId =
-        body.programmeId === undefined
-          ? undefined
-          : await assertProgrammeWriteScope(req.user, body.programmeId);
+      // `undefined` means "leave the programmes alone"; a list (including an
+      // empty one) replaces them wholesale.
+      const wantedProgrammes =
+        body.programmeIds !== undefined
+          ? body.programmeIds
+          : body.programmeId !== undefined
+            ? body.programmeId
+              ? [body.programmeId]
+              : []
+            : undefined;
+      for (const id of wantedProgrammes ?? []) {
+        await assertProgrammeWriteScope(req.user, id);
+      }
       const nextCaseloadLimit = body.caseloadLimit ?? existing.caseloadLimit;
       const assignmentIds =
         body.groupIds === undefined
@@ -1310,7 +1343,6 @@ router.patch(
         await tx.villageAgent.update({
           where: { id: existing.id },
           data: {
-            programmeId: body.programmeId === undefined ? undefined : scopedProgrammeId,
             name: body.name,
             phone: body.phone,
             email: body.email === undefined ? undefined : body.email,
@@ -1324,6 +1356,19 @@ router.patch(
             caseloadLimit: body.caseloadLimit
           }
         });
+
+        if (wantedProgrammes !== undefined) {
+          const { partnerId } = await setAgentProgrammes(tx, {
+            agentId: existing.id,
+            programmeIds: wantedProgrammes
+          });
+          await tx.villageAgent.update({
+            where: { id: existing.id },
+            // Detaching every programme leaves the partner in place: an agent
+            // between assignments still works for whoever engaged them.
+            data: { partnerId: partnerId ?? undefined }
+          });
+        }
 
         if (assignmentIds) {
           await setAgentGroups(tx, existing.id, assignmentIds);
