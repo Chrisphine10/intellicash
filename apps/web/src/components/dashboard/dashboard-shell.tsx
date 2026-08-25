@@ -1,7 +1,7 @@
 "use client";
 
 import React, { type ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { languagePreferenceLabels, languagePreferences, type LanguagePreference } from "@intellicash/shared";
@@ -156,6 +156,25 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         .filter((section) => section.items.length > 0),
     [visibleNavigation]
   );
+  /*
+   * Bring the current page's navigation item into view.
+   *
+   * The list scrolls now, and it holds 27 items across five sections. Landing
+   * on a Setup or Resources page from a link or a bookmark otherwise leaves
+   * the highlighted item below the fold — the sidebar looks like nothing is
+   * selected, which is worse than the overflow bug it replaced because it
+   * looks deliberate.
+   *
+   * `nearest` rather than `center`: it does nothing when the item is already
+   * visible, so an ordinary click between two adjacent items does not make the
+   * whole list jump.
+   */
+  const navListRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const active = navListRef.current?.querySelector(".nav-item.active");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [pathname]);
+
   const unreadNotificationCount = useMemo(
     () => notifications.filter((notification) => !notification.readAt).length,
     [notifications]
@@ -416,7 +435,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <X size={18} />
           </button>
         </div>
-        <nav className="nav-list" aria-label="Primary navigation">
+        <nav className="nav-list" aria-label="Primary navigation" ref={navListRef}>
           {groupedNavigation.map((section) => (
             <div className="nav-section" key={section.key}>
               <span className="nav-section-label">{section.label}</span>

@@ -152,14 +152,29 @@ button {
   background: var(--bg);
 }
 
+/*
+ * The sidebar is exactly one viewport tall and never grows. With 27 navigation
+ * items across five sections it needs about 1220px; a laptop gives it roughly
+ * 940px. The remainder — the whole Setup and Resources sections — was simply
+ * unreachable, with no scrollbar to say so.
+ *
+ * A flex column rather than `overflow-y` on the aside itself, so the brand
+ * stays put and only the list moves. `100dvh` because mobile browser chrome
+ * makes `100vh` taller than the screen actually is.
+ */
 .sidebar {
   position: sticky;
   top: 0;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--surface-raised);
   padding: 16px 12px;
 }
+
 
 .brand {
   display: flex;
@@ -170,6 +185,7 @@ button {
 
 .sidebar-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -237,6 +253,40 @@ button {
 .nav-list {
   display: grid;
   gap: 2px;
+  /*
+   * `min-height: 0` is the load-bearing line. A flex child defaults to
+   * `min-height: auto`, which refuses to shrink below its content — so
+   * `overflow-y: auto` would never engage and the list would push the sidebar
+   * open again, which is the bug this rule exists to fix.
+   */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for the scrollbar so it never sits on top of a label. */
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.nav-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nav-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nav-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--line);
+  background-clip: content-box;
+}
+
+.nav-list:hover::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  background-clip: content-box;
 }
 
 .nav-item {
@@ -565,6 +615,30 @@ button {
 .profile-menu-list {
   display: grid;
   padding: 6px;
+}
+
+/*
+ * Every panel that hangs off the top bar is capped to the room actually below
+ * it, and scrolls once it runs out.
+ *
+ * `.notification-list` already did this for itself, which is why notifications
+ * behaved and the other two did not: an anchored panel with no height limit
+ * grows off the bottom of the window, and because it is positioned it takes
+ * nothing with it — no page scrollbar appears and the last few rows are
+ * simply unreachable. Same failure as the sidebar, in a smaller box.
+ *
+ * 96px is the top bar plus the popover's own offset and a little breathing
+ * room, so the bottom row never sits flush against the window edge.
+ */
+.profile-menu-popover,
+.notification-popover,
+.language-popover {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .profile-menu-item {
@@ -8409,4 +8483,125 @@ html[data-theme="dark"] .pwa-splash-screen {
 
 .docs-steps li strong {
   font-weight: 600;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Choosing the programmes a village agent serves.
+ *
+ * Grouped by partner because that is the shape of the rule: an agent may serve
+ * several programmes, all of one partner. The groups that are out of reach stay
+ * visible and go quiet rather than disappearing — a list that silently loses
+ * half its options leaves the person wondering where they went.
+ * ───────────────────────────────────────────────────────────────────────── */
+.programme-picker {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  padding: 10px;
+}
+
+.programme-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.programme-picker-list {
+  display: grid;
+  gap: 10px;
+  /* Caps at roughly six rows and scrolls: a partner with thirty programmes
+     must not push the form's buttons off the bottom of the dialog. */
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.programme-picker-group {
+  display: grid;
+  gap: 2px;
+}
+
+.programme-picker-partner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 2px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.programme-picker-note {
+  border-radius: 999px;
+  background: var(--surface-muted);
+  padding: 1px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.programme-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.programme-picker-option:hover {
+  background: var(--surface-hover);
+}
+
+.programme-picker-option.is-selected {
+  border-color: var(--green-700);
+  background: var(--surface-tint);
+}
+
+.programme-picker-option.is-blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.programme-picker-option.is-blocked:hover {
+  background: transparent;
+}
+
+.programme-picker-option input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--green-700);
+}
+
+.programme-picker-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.programme-picker-county {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.programme-picker-hint,
+.programme-picker-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
