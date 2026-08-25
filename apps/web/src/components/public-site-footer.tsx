@@ -1,6 +1,9 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { Download } from "@/lib/theme-icons";
+import { useStoreIsLive } from "@/lib/public-store-availability";
 
 interface PublicSiteFooterProps {
   playStoreUrl: string;
@@ -21,12 +24,20 @@ const footerLinks = [
   { label: "Privacy notice", href: "/privacy" }
 ];
 
+const STORE_HREF = "/intelli-store";
+
 const accessLinks = [
   { label: "Partner login", href: "/partner-login" },
   { label: "Admin login", href: "/admin-login" }
 ];
 
 export function PublicSiteFooter({ playStoreUrl, showAccessLinks = true }: PublicSiteFooterProps) {
+  // Same rule as the header: no link to an empty storefront.
+  const { isLive: storeIsLive } = useStoreIsLive();
+  const links = storeIsLive
+    ? footerLinks
+    : footerLinks.filter((link) => link.href !== STORE_HREF);
+
   return (
     <footer className="public-site-footer">
       <div className="footer-brand-block">
@@ -43,7 +54,7 @@ export function PublicSiteFooter({ playStoreUrl, showAccessLinks = true }: Publi
         </p>
       </div>
       <nav className="footer-link-grid" aria-label="Footer navigation">
-        {footerLinks.map((link) => (
+        {links.map((link) => (
           <Link href={link.href} key={link.href}>
             {link.label}
           </Link>

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Download, Menu, X } from "@/lib/theme-icons";
+import { useStoreIsLive } from "@/lib/public-store-availability";
 import { ThemeToggle } from "./theme-toggle";
 
 interface PublicSiteHeaderProps {
@@ -21,6 +22,8 @@ const platformLinks = [
   { label: "Trust", href: "/#governance" }
 ];
 
+const STORE_HREF = "/intelli-store";
+
 const partnerLinks = [
   { label: "Partners", href: "/partners" },
   { label: "Projects", href: "/partners#projects" },
@@ -37,6 +40,13 @@ export function PublicSiteHeader({
 }: PublicSiteHeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<NavMenuKey | null>(null);
+
+  // The storefront is only linked once it has products or bookable field
+  // officers. An empty catalogue behind a menu item is a dead end.
+  const { isLive: storeIsLive } = useStoreIsLive();
+  const servicesLinks = storeIsLive
+    ? platformLinks
+    : platformLinks.filter((link) => link.href !== STORE_HREF);
   const closeMenu = () => {
     setIsOpen(false);
     setOpenMenu(null);
@@ -90,7 +100,7 @@ export function PublicSiteHeader({
             <ChevronDown size={15} />
           </button>
           <div className="nav-submenu" id="public-services-menu">
-            {platformLinks.map((link) => (
+            {servicesLinks.map((link) => (
               <Link href={link.href} key={link.href} onClick={closeMenu}>
                 {link.label}
               </Link>

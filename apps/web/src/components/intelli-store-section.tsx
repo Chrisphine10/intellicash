@@ -67,9 +67,9 @@ function firstProgrammeId(agent?: { programmeLinks?: Array<{ programme: { id: st
 }
 
 export function IntelliStoreSection() {
+  // `store` doubles as the loading flag: null means "not answered yet", which
+  // is the same as "nothing to show" now that the section hides when empty.
   const [store, setStore] = useState<IntelliStorePayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentRow | null>(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -92,9 +92,10 @@ export function IntelliStoreSection() {
           programmeId: current.programmeId || firstProgrammeId(response.agents[0])
         }));
       } catch (storeError) {
-        if (mounted) setError(storeError instanceof Error ? storeError.message : "Intelli-Store failed to load");
-      } finally {
-        if (mounted) setLoading(false);
+        // Nowhere left to show this: a section that cannot load its own
+        // catalogue has nothing to advertise and stays hidden. The Intelli-Store
+        // page itself still reports the failure to anyone who goes there.
+        console.error("Intelli-Store section failed to load", storeError);
       }
     }
 
@@ -213,6 +214,20 @@ export function IntelliStoreSection() {
     }
   }
 
+  // Nothing to sell yet, so nothing to say.
+  //
+  // This section was rendering "0 products" and "0 field officers you can book"
+  // as though they were selling points, on a page whose whole job is to make the
+  // platform look worth using. An absent section reads as a part of the site
+  // that has not launched; a present one advertising zero reads as a failure.
+  //
+  // One rule covers loading, failure and genuinely-empty alike: show this only
+  // once there is something to show. Rendering it while the fetch is in flight
+  // would put "0 products" on screen for exactly as long as the request takes,
+  // which is the thing being removed.
+  const hasStoreContent = store !== null && (store.products.length > 0 || store.agents.length > 0);
+  if (!hasStoreContent) return null;
+
   return (
     <section className="landing-section intelli-store-section" id="intelli-store">
       <div className="landing-section-header wide">
@@ -230,8 +245,6 @@ export function IntelliStoreSection() {
         </Link>
       </div>
 
-      {loading ? <div className="loading-panel">Loading Intelli-Store...</div> : null}
-      {error ? <div className="notice warning">{error}</div> : null}
       {!selectedProduct && !isBookingOpen && message ? (
         <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
       ) : null}
@@ -281,7 +294,9 @@ export function IntelliStoreSection() {
               </article>
             );
           })}
-          {!loading && (store?.products.length ?? 0) === 0 ? (
+          {(store?.products.length ?? 0) === 0 ? (
+            // Still reachable, and still worth saying: the section also shows
+            // when there are bookable field officers but no catalogue yet.
             <div className="empty-state">No Intelli-Store products are live yet.</div>
           ) : null}
         </div>
