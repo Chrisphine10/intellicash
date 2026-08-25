@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
+import { ensureSupportNeedTypes } from "../services/support-need-service";
 import {
   ENTERPRISE_STATUSES,
   MARKET_CHANNELS,
@@ -199,6 +200,11 @@ enterprisesRouter.get(
   requireAuth("visits:read"),
   async (_req, res, next) => {
     try {
+      // The vocabulary is written by the migration, which does not run on a
+      // database built with `db push`. Ensured here so the screen is never
+      // offered an empty list.
+      await ensureSupportNeedTypes();
+
       const needTypes = await prisma.supportNeedType.findMany({
         where: { isActive: true },
         orderBy: [{ category: "asc" }, { position: "asc" }],
@@ -357,6 +363,7 @@ enterprisesRouter.post(
         req.params.enterpriseId as string
       );
       const payload = supportNeedSchema.parse(req.body);
+      await ensureSupportNeedTypes();
 
       const type = await prisma.supportNeedType.findUnique({
         where: { key: payload.needKey },

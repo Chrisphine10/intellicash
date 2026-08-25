@@ -352,6 +352,51 @@ export const SUPPORT_NEED_CATEGORIES = [
 
 export type SupportNeedCategory = (typeof SUPPORT_NEED_CATEGORIES)[number];
 
+/**
+ * The support-need vocabulary.
+ *
+ * Canonical here, and INSERTed by the migration that created the table, so a
+ * production database has the rows the moment it deploys. Both copies must
+ * agree — `support-need-taxonomy.test.ts` fails if they drift.
+ *
+ * Duplicated deliberately rather than generated: reference data that lives only
+ * in a migration is absent from every environment built with `prisma db push`,
+ * which is how CI builds its database and how the capture screen ended up with
+ * an empty list there. Reference data that lives only in code is absent until
+ * something boots. It needs both.
+ */
+export const SUPPORT_NEED_TYPES: ReadonlyArray<{
+  key: string;
+  title: string;
+  category: SupportNeedCategory;
+}> = [
+  { key: "working-capital", title: "Working capital or stock finance", category: "FINANCE" },
+  { key: "asset-finance", title: "Equipment or asset finance", category: "FINANCE" },
+  { key: "insurance", title: "Insurance cover", category: "FINANCE" },
+  { key: "buyer-linkage", title: "Linkage to a reliable buyer", category: "MARKET" },
+  { key: "price-information", title: "Market price information", category: "MARKET" },
+  { key: "aggregation", title: "Bulking and aggregation", category: "MARKET" },
+  { key: "certification", title: "Certification or quality standards", category: "MARKET" },
+  { key: "packaging-branding", title: "Packaging and branding", category: "MARKET" },
+  { key: "business-training", title: "Business and enterprise training", category: "SKILLS" },
+  { key: "record-keeping", title: "Record keeping", category: "SKILLS" },
+  { key: "production-technique", title: "Production or agronomy technique", category: "SKILLS" },
+  { key: "digital-skills", title: "Digital skills", category: "SKILLS" },
+  { key: "seed-stock", title: "Seed, stock or breeding material", category: "INPUTS" },
+  { key: "feed-fertiliser", title: "Feed or fertiliser", category: "INPUTS" },
+  { key: "tools-equipment", title: "Tools and equipment", category: "INPUTS" },
+  { key: "storage", title: "Storage", category: "INFRASTRUCTURE" },
+  { key: "cold-chain", title: "Cold chain", category: "INFRASTRUCTURE" },
+  { key: "water", title: "Water access", category: "INFRASTRUCTURE" },
+  { key: "power", title: "Power access", category: "INFRASTRUCTURE" },
+  { key: "transport", title: "Transport to market", category: "INFRASTRUCTURE" },
+  { key: "registration", title: "Registration or licensing", category: "GOVERNANCE" },
+  { key: "constitution", title: "Constitution and by-laws", category: "GOVERNANCE" },
+  { key: "leadership", title: "Leadership and governance", category: "GOVERNANCE" },
+  { key: "digital-records", title: "Digital record keeping", category: "TECHNOLOGY" },
+  { key: "mobile-money", title: "Mobile money and digital payments", category: "TECHNOLOGY" }
+];
+
 export const SUPPORT_NEED_PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const;
 export const SUPPORT_NEED_STATUSES = ["OPEN", "IN_PROGRESS", "MET", "DECLINED"] as const;
 export const ENTERPRISE_STATUSES = ["ACTIVE", "DORMANT", "CLOSED"] as const;
