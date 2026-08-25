@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
 import { actionItemState, actionPlanSummary } from "../domain/action-plan";
 import { documentStatus, registerSummary } from "../domain/group-document-state";
+import { buildGroupMeal, buildMealReport } from "../services/meal-report";
 
 export const visitReportsRouter = Router();
 
@@ -215,3 +216,55 @@ visitReportsRouter.get("/reports/visits", requireAuth("visits:read"), async (req
     next(error);
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// MEAL
+// ---------------------------------------------------------------------------
+
+/**
+ * Monitoring, evaluation, accountability and learning, over the caller's scope.
+ *
+ * Answers the question the coverage report above cannot: not "how much did we
+ * do", but "did any of it change anything". The arithmetic lives in
+ * `domain/meal-indicators.ts` and the gathering in `services/meal-report.ts`;
+ * this handler only resolves scope.
+ *
+ * The response carries its own methodology — every indicator's definition,
+ * denominator and direction — because a figure that travels into a funder
+ * report should carry its limits with it rather than depend on whoever pastes
+ * it remembering them.
+ */
+visitReportsRouter.get("/reports/meal", requireAuth("visits:read"), async (req, res, next) => {
+  try {
+    const groups = await prisma.group.findMany({
+      where: scopeGroupWhere(req.user),
+      select: { id: true }
+    });
+
+    ok(res, await buildMealReport(groups.map((group) => group.id)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** One group's own baseline and latest, for the group page. */
+visitReportsRouter.get(
+  "/groups/:groupId/meal",
+  requireAuth("visits:read"),
+  async (req, res, next) => {
+    try {
+      const group = await prisma.group.findFirst({
+        where: { AND: [{ id: req.params.groupId as string }, scopeGroupWhere(req.user)] },
+        select: { id: true, name: true, code: true }
+      });
+      if (!group) {
+        throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside your access.");
+      }
+
+      ok(res, { group, ...(await buildGroupMeal(group.id)) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
