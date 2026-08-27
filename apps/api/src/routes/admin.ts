@@ -24,6 +24,8 @@ import {
 import { ApiHttpError, ok } from "../lib/http";
 import { linkMembership, MemberAlreadyLinkedError } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
+import { normalisePhone } from "../lib/phone";
+import { planUserAccountClosure } from "../domain/data-subject";
 
 const router = Router();
 
@@ -31,6 +33,10 @@ const userSelect = {
   id: true,
   name: true,
   email: true,
+  // The sign-in identifier, and the one most likely to carry a typo that locks
+  // somebody out. It was not selected, so the console could not show it and an
+  // admin could not tell a wrong number from a missing one.
+  phone: true,
   role: true,
   status: true,
   avatarUrl: true,
@@ -306,6 +312,8 @@ router.patch("/access-control/roles/:role/permissions", requireAuth("users:write
 const userCreateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
+  /** Optional, but an account without one can only ever sign in by email. */
+  phone: z.string().min(6).max(32).optional(),
   password: z.string().min(12),
   role: z.enum(roles),
   avatarUrl: z.string().url().optional(),
@@ -327,6 +335,7 @@ router.post("/users", requireAuth("users:write"), async (req, res, next) => {
         data: {
           name: userInput.name,
           email: userInput.email,
+          phone: userInput.phone ? normalisePhone(userInput.phone) : null,
           role: userInput.role,
           avatarUrl: userInput.avatarUrl,
           languagePreference: userInput.languagePreference,
@@ -379,6 +388,14 @@ router.post("/users", requireAuth("users:write"), async (req, res, next) => {
 });
 
 const userUpdateSchema = z.object({
+  /**
+   * Name, email and phone were not editable at all, which meant a mistyped
+   * number — the thing people actually sign in with — could only be fixed by
+   * creating a second account for the same person.
+   */
+  name: z.string().trim().min(2).max(200).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().min(6).max(32).nullable().optional(),
   role: z.enum(roles).optional(),
   status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
   avatarUrl: z.string().url().nullable().optional(),
@@ -407,6 +424,19 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
     if (!existing) {
       throw new ApiHttpError(404, "USER_NOT_FOUND", "User account does not exist.");
     }
+
+    // A closed account has had its identity stripped on purpose. Editing it
+    // back into service would produce an account with no working credential
+    // and no owner, sitting inside whatever group it was re-bound to.
+    if (existing.status === "CLOSED") {
+      throw new ApiHttpError(
+        409,
+        "USER_ACCOUNT_CLOSED",
+        "That account has been closed. Create a new account instead of reopening it."
+      );
+    }
+
+    const identity = await resolveIdentityEdits(existing.id, body);
 
     const role = (body.role ?? existing.role) as Role;
     const status = body.status ?? existing.status;
@@ -441,6 +471,7 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
       const updatedUser = await tx.user.update({
         where: { id: existing.id },
         data: {
+          ...identity,
           role,
           status,
           avatarUrl: body.avatarUrl === undefined ? undefined : body.avatarUrl,
@@ -511,6 +542,186 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
     ok(res, user);
   } catch (error) {
     next(asBindingError(error));
+  }
+});
+
+/**
+ * Validates a change to the fields somebody signs in with.
+ *
+ * Both are UNIQUE, so a collision is a 500 from the database unless it is
+ * caught here — and the message an admin needs is "that number already belongs
+ * to another account", not "Unique constraint failed".
+ *
+ * The phone is canonicalised before both the check and the write. Kenyan
+ * numbers are written six different ways by the same person on different days;
+ * comparing raw strings is how one human ends up as two accounts.
+ */
+async function resolveIdentityEdits(
+  userId: string,
+  body: { name?: string; email?: string; phone?: string | null }
+) {
+  const edits: { name?: string; email?: string; phone?: string | null } = {};
+
+  if (body.name !== undefined) edits.name = body.name.trim();
+
+  if (body.email !== undefined) {
+    const email = body.email.trim().toLowerCase();
+    const clash = await prisma.user.findFirst({
+      where: { email, id: { not: userId } },
+      select: { id: true }
+    });
+    if (clash) {
+      throw new ApiHttpError(409, "EMAIL_TAKEN", "Another account already uses that email address.");
+    }
+    edits.email = email;
+  }
+
+  if (body.phone !== undefined) {
+    if (body.phone === null || body.phone.trim() === "") {
+      edits.phone = null;
+    } else {
+      const phone = normalisePhone(body.phone);
+      if (!phone) {
+        throw new ApiHttpError(400, "PHONE_INVALID", "That does not look like a phone number.");
+      }
+      const clash = await prisma.user.findFirst({
+        where: { phone, id: { not: userId } },
+        select: { id: true }
+      });
+      if (clash) {
+        throw new ApiHttpError(409, "PHONE_TAKEN", "Another account already uses that phone number.");
+      }
+      edits.phone = phone;
+    }
+  }
+
+  return edits;
+}
+
+const userCloseSchema = z.object({
+  /** The account's current email, typed back by whoever is closing it. */
+  confirmEmail: z.string().min(1),
+  reason: z.string().trim().min(3).max(500)
+});
+
+/**
+ * Closes an account: strips the identity, keeps the trail.
+ *
+ * DELETE, because that is what an administrator means and what the button says.
+ * What it must NOT do is `DELETE FROM User`. Every relation pointing at User is
+ * `onDelete: SetNull` — `AuditEvent.actor` included — so a real delete would
+ * silently blank the actor on every audit record that account ever produced.
+ * The trail would remain, readable, and no longer able to say who did any of
+ * it. In a system holding other people's savings, a routine admin action must
+ * not be able to do that.
+ *
+ * So the row stays as a pseudonymous key and everything identifying is removed
+ * from it, per `planUserAccountClosure`. Afterwards nothing in the record says
+ * who the person was or how to reach them, and every historical action is still
+ * attributable to a row.
+ *
+ * Not reversible, and deliberately not: an "undo" would have to restore the
+ * identity, which means keeping a copy of exactly what was supposed to be gone.
+ */
+router.delete("/users/:id", requireAuth("users:write"), async (req, res, next) => {
+  try {
+    const body = userCloseSchema.parse(req.body ?? {});
+    const userId = String(req.params.id ?? "");
+
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, status: true }
+    });
+    if (!existing) {
+      throw new ApiHttpError(404, "USER_NOT_FOUND", "User account does not exist.");
+    }
+    if (existing.status === "CLOSED") {
+      throw new ApiHttpError(409, "USER_ALREADY_CLOSED", "That account is already closed.");
+    }
+
+    // Closing the account you are signed in with ends the request doing it and
+    // leaves nobody holding the session that could undo a mistake.
+    if (req.user?.id === existing.id) {
+      throw new ApiHttpError(
+        400,
+        "CANNOT_CLOSE_OWN_ACCOUNT",
+        "You cannot close the account you are signed in with. Ask another admin to do it."
+      );
+    }
+
+    // Typed back rather than clicked once. The id in the URL is invisible to
+    // whoever pressed the button, and the row above the one they meant looks
+    // exactly the same.
+    if (body.confirmEmail.trim().toLowerCase() !== existing.email.trim().toLowerCase()) {
+      throw new ApiHttpError(
+        400,
+        "CONFIRMATION_MISMATCH",
+        "Type the account's email address exactly as it appears to confirm."
+      );
+    }
+
+    if (existing.role === "IWL_ADMIN") {
+      const remaining = await prisma.user.count({
+        where: { id: { not: existing.id }, role: "IWL_ADMIN", status: "ACTIVE" }
+      });
+      if (remaining === 0) {
+        throw new ApiHttpError(400, "LAST_ADMIN", "At least one active IWL admin account must remain.");
+      }
+    }
+
+    const plan = planUserAccountClosure(existing.id);
+    const replacement = (field: string) =>
+      plan.erase.find((entry) => entry.field === field)?.replacement ?? null;
+
+    const closed = await prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: existing.id } });
+
+      // The login's links to groups. The Member rows they point at — and every
+      // shilling recorded against them — belong to the group and stay put.
+      // Closing a login is not removing somebody from a roster.
+      await tx.userMembership.deleteMany({ where: { userId: existing.id } });
+
+      return tx.user.update({
+        where: { id: existing.id },
+        data: {
+          status: "CLOSED",
+          name: replacement("name") ?? "Closed account",
+          email: replacement("email") ?? `closed-${existing.id}@account.invalid`,
+          phone: null,
+          avatarUrl: null,
+          // Cleared rather than left. Status gates sign-in today, but a closed
+          // account whose credential still verifies is one mistaken status flip
+          // away from being live — and nobody would be watching that account.
+          passwordHash: "",
+          partnerId: null,
+          groupId: null,
+          memberId: null,
+          villageAgentId: null
+        },
+        select: userSelect
+      });
+    });
+
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "USER",
+      entityId: existing.id,
+      type: "USER_ACCOUNT_CLOSED",
+      payload: {
+        // Deliberately NOT the name, email or phone. Removing those is the
+        // point of the action; writing them into the audit payload would put
+        // them straight back, in a table nobody thinks to look in. The entity
+        // id identifies the row for anyone who has to follow it.
+        role: existing.role,
+        previousStatus: existing.status,
+        reason: body.reason,
+        retained: plan.retain.map((entry) => entry.entity)
+      }
+    });
+
+    ok(res, { user: closed, closed: true, retained: plan.retain });
+  } catch (error) {
+    next(error);
   }
 });
 

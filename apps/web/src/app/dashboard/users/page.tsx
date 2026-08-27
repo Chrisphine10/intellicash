@@ -29,6 +29,9 @@ interface UserFormState {
 }
 
 interface UserEditState {
+  name: string;
+  email: string;
+  phone: string;
   role: Role;
   status: string;
   avatarUrl: string;
@@ -180,6 +183,16 @@ export default function UsersPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UserEditState | null>(null);
+
+  /**
+   * Closing an account is irreversible, so the button does not do it — it opens
+   * a panel that makes you type the address back. The id is invisible on screen
+   * and the row above the one you meant looks identical.
+   */
+  const [closingUser, setClosingUser] = useState<User | null>(null);
+  const [closeConfirmEmail, setCloseConfirmEmail] = useState("");
+  const [closeReason, setCloseReason] = useState("");
+  const [closing, setClosing] = useState(false);
   const [editMembers, setEditMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -322,6 +335,9 @@ export default function UsersPage() {
     const role = roleValue(user.role);
     setEditingUser(user);
     setEditForm({
+      name: user.name ?? "",
+      email: user.email ?? "",
+      phone: user.phone ?? "",
       role,
       status: user.status ?? "ACTIVE",
       avatarUrl: user.avatarUrl ?? "",
@@ -337,6 +353,41 @@ export default function UsersPage() {
     setEditingUser(null);
     setEditForm(null);
     setEditMembers([]);
+  }
+
+  function startClosingUser(user: User) {
+    setClosingUser(user);
+    setCloseConfirmEmail("");
+    setCloseReason("");
+    setMessage(null);
+  }
+
+  async function confirmCloseUser() {
+    if (!closingUser) return;
+    setClosing(true);
+    try {
+      await apiFetch(`/users/${closingUser.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirmEmail: closeConfirmEmail, reason: closeReason })
+      });
+
+      // Reloaded rather than filtered out of local state: the row is still
+      // there, now anonymised, and pretending it vanished would misrepresent
+      // what just happened.
+      const refreshed = await apiFetch<User[]>("/users");
+      setUsers(refreshed);
+      setClosingUser(null);
+      setEditingUser(null);
+      setEditForm(null);
+      setMessage({ ok: true, text: "Account closed. The record stays, the identity does not." });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Could not close that account."
+      });
+    } finally {
+      setClosing(false);
+    }
   }
 
   async function uploadAvatar(file: File, target: "create" | "edit") {
@@ -369,6 +420,12 @@ export default function UsersPage() {
     setMessage(null);
 
     const payload: Record<string, string | null> = {
+      name: editForm.name.trim(),
+      email: editForm.email.trim(),
+      // Empty clears it. The server canonicalises whatever is typed, so a
+      // number read off a letterhead and one typed from memory land as the
+      // same account.
+      phone: editForm.phone.trim() === "" ? null : editForm.phone.trim(),
       role: editForm.role,
       status: editForm.status,
       avatarUrl: editForm.avatarUrl || null
@@ -955,8 +1012,101 @@ export default function UsersPage() {
                 </button>
               </div>
             </header>
+            {closingUser?.id === editingUser.id ? (
+              <div className="notice warning close-account-panel">
+                <h4>Close this account</h4>
+                <p>
+                  The sign-in stops working and the name, email and phone are removed. The
+                  record itself stays, so everything this account did remains attributable —
+                  that is what keeps the audit trail honest.
+                </p>
+                <p>
+                  Their place on the group roster, and the money recorded against it, are not
+                  touched. This cannot be undone.
+                </p>
+                <label className="credential-field">
+                  <span>Type {editingUser.email} to confirm</span>
+                  <input
+                    autoComplete="off"
+                    onChange={(event) => setCloseConfirmEmail(event.target.value)}
+                    value={closeConfirmEmail}
+                  />
+                </label>
+                <label className="credential-field">
+                  <span>Why is it being closed?</span>
+                  <input
+                    onChange={(event) => setCloseReason(event.target.value)}
+                    placeholder="Left the organisation"
+                    value={closeReason}
+                  />
+                </label>
+                <div className="form-actions">
+                  <button
+                    className="button danger"
+                    disabled={
+                      closing ||
+                      closeReason.trim().length < 3 ||
+                      closeConfirmEmail.trim().toLowerCase() !== editingUser.email.toLowerCase()
+                    }
+                    onClick={confirmCloseUser}
+                    type="button"
+                  >
+                    {closing ? "Closing…" : "Close this account permanently"}
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => setClosingUser(null)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <form className="credential-form" onSubmit={saveManagedUser}>
               <div className="credential-grid">
+                <label className="credential-field">
+                  <span>Full name</span>
+                  <input
+                    onChange={(event) =>
+                      setEditForm((current) =>
+                        current ? { ...current, name: event.target.value } : current
+                      )
+                    }
+                    required
+                    value={editForm.name}
+                  />
+                </label>
+                <label className="credential-field">
+                  <span>Email</span>
+                  <input
+                    onChange={(event) =>
+                      setEditForm((current) =>
+                        current ? { ...current, email: event.target.value } : current
+                      )
+                    }
+                    required
+                    type="email"
+                    value={editForm.email}
+                  />
+                </label>
+                <label className="credential-field">
+                  <span>Phone</span>
+                  <input
+                    onChange={(event) =>
+                      setEditForm((current) =>
+                        current ? { ...current, phone: event.target.value } : current
+                      )
+                    }
+                    placeholder="0712 345 678"
+                    value={editForm.phone}
+                  />
+                  {/* The field people actually sign in with, and the one a typo
+                      locks them out of. Any way of writing it is accepted; the
+                      server stores one canonical form. */}
+                  <small>Leave blank if they sign in by email only.</small>
+                </label>
                 <label className="credential-field">
                   <span>Role template</span>
                   <select
@@ -1107,6 +1257,18 @@ export default function UsersPage() {
                 <button className="button secondary" onClick={closeEditor} type="button">
                   Cancel
                 </button>
+                {/* Last, and visually separated: suspending is the reversible
+                    thing an admin usually wants, and it is one control up in
+                    the Status field. This one is not reversible. */}
+                {closingUser?.id === editingUser.id ? null : (
+                  <button
+                    className="link-button danger"
+                    onClick={() => startClosingUser(editingUser)}
+                    type="button"
+                  >
+                    Close this account
+                  </button>
+                )}
               </div>
             </form>
           </section>

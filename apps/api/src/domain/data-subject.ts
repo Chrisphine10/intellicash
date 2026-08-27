@@ -90,6 +90,71 @@ export function planMemberErasure(memberId: string): ErasurePlan {
 }
 
 /**
+ * Plans the closure of one login account.
+ *
+ * "Delete this user" cannot mean DELETE FROM User. Every relation pointing at
+ * User is `onDelete: SetNull` — including `AuditEvent.actor` — so a real delete
+ * would silently blank the actor on every audit record that person ever
+ * created. The trail would still be there, still readable, and no longer able
+ * to say who did any of it. In a system holding other people's savings that is
+ * the worst possible outcome of a routine admin action.
+ *
+ * So the row survives as a pseudonymous key and the identity is stripped out of
+ * it: the same shape as `planMemberErasure`, for the same reason.
+ *
+ * `passwordHash` is deliberately replaced rather than left. Status alone gates
+ * login today, but a closed account whose credential still verifies is one
+ * mistaken status flip away from being live again — and nobody would be
+ * watching that account.
+ *
+ * `phone` is cleared rather than pseudonymised because it is UNIQUE and it is
+ * how a person is identified at sign-in. Leaving a dead account holding a real
+ * number means the human being cannot be registered again from that number.
+ */
+export function planUserAccountClosure(userId: string): ErasurePlan {
+  const suffix = userId.slice(-6);
+
+  return {
+    erase: [
+      { field: "name", replacement: `Closed account ${suffix}` },
+      // Unique, so it needs a value rather than a blank — and a non-routable
+      // one, so nothing can ever mail it by accident.
+      { field: "email", replacement: `closed-${userId}@account.invalid` },
+      { field: "phone", replacement: null },
+      { field: "avatarUrl", replacement: null },
+      { field: "passwordHash", replacement: "" }
+    ],
+    retain: [
+      {
+        entity: "AuditEvent",
+        ground: "AUDIT_INTEGRITY",
+        note: "Who approved, recorded and amended what. The actor link is SetNull, so deleting the row would erase accountability for every action this account ever took."
+      },
+      {
+        entity: "GroupVisit.submittedByUserId",
+        ground: "AUDIT_INTEGRITY",
+        note: "Which agent stood with the group. A visit with no submitter cannot be verified after the fact."
+      },
+      {
+        entity: "Attachment.uploadedByUserId",
+        ground: "AUDIT_INTEGRITY",
+        note: "Evidence is only evidence while it is attributable to whoever captured it."
+      },
+      {
+        entity: "Member",
+        ground: "FINANCIAL_RECORD",
+        note: "Closing a login is not removing somebody from a group's roster. The member row, and the savings against it, belong to the group and survive. Erasing the person is a separate, narrower request — see planMemberErasure."
+      },
+      {
+        entity: "User.id",
+        ground: "PSEUDONYMOUS_KEY",
+        note: "Retained so every row above stays joined to something. It identifies a row, not a person."
+      }
+    ]
+  };
+}
+
+/**
  * Everything held about one member, named by relation, for an access or
  * portability request.
  *

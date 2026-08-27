@@ -8812,3 +8812,50 @@ html[data-theme="dark"] .pwa-splash-screen {
   width: auto;
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Closing an account
+   ---------------------------------------------------------------------------
+   Deliberately not styled like the other actions. Suspending is the reversible
+   thing an admin usually wants and lives in the Status field above; this one
+   cannot be undone, so it does not look like a sibling of "Save". */
+
+.button.danger {
+  border-color: var(--red);
+  background: var(--red);
+  color: #ffffff;
+}
+
+.button.danger:disabled {
+  opacity: 0.55;
+}
+
+.link-button.danger {
+  color: var(--red);
+}
+
+.close-account-panel {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.close-account-panel h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.close-account-panel p {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+/* The confirmation inputs sit in a column: side by side, the email field reads
+   as a search box rather than a deliberate step. */
+.close-account-panel .credential-field {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.close-account-panel .credential-field input {
+  width: 100%;
+}

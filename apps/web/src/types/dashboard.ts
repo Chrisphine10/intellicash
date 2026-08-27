@@ -2,6 +2,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  /** The account's own sign-in number, distinct from member.phone. */
+  phone?: string | null;
   role: string;
   status?: string;
   avatarUrl?: string | null;
