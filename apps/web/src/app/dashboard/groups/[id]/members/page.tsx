@@ -4,7 +4,7 @@ import React from "react";
 import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, KeyRound, Pencil, ShieldCheck, UserPlus, X } from "@/lib/theme-icons";
+import { ArrowLeft, KeyRound, Pencil, ShieldCheck, Trash2, UserPlus, X } from "@/lib/theme-icons";
 import { memberRoles } from "@intellicash/shared";
 import { apiFetch, humanizeEnum } from "../../../../../lib/api";
 import { CollectionView } from "../../../../../components/dashboard/collection-view";
@@ -33,6 +33,19 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
   const [form, setForm] = useState(defaultForm);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [editForm, setEditForm] = useState(defaultForm);
+
+  /**
+   * Erasing a member's personal data under the Data Protection Act.
+   *
+   * Separate from editing and from removing them from the group, because it is
+   * neither: the person stays on the roster and their savings stay in the
+   * group's books — under a pseudonym. What goes is the name, the phone, the
+   * national ID hash and the PIN.
+   */
+  const [erasingMember, setErasingMember] = useState<Member | null>(null);
+  const [eraseConfirmName, setEraseConfirmName] = useState("");
+  const [eraseReason, setEraseReason] = useState("");
+  const [erasing, setErasing] = useState(false);
   const [pinForm, setPinForm] = useState({ memberId: "" });
   const [otpForm, setOtpForm] = useState({ memberId: "" });
   const [saving, setSaving] = useState(false);
@@ -66,9 +79,14 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
   }, [id]);
 
   useEffect(() => {
-    document.body.classList.toggle("modal-open", Boolean(editingMember));
+    // The erasure modal locks the body too, or the page scrolls behind a
+    // confirmation somebody is meant to read.
+    document.body.classList.toggle(
+      "modal-open",
+      Boolean(editingMember) || Boolean(erasingMember)
+    );
     return () => document.body.classList.remove("modal-open");
-  }, [editingMember]);
+  }, [editingMember, erasingMember]);
 
   const canWrite = user?.permissions?.includes("members:write") ?? false;
 
@@ -82,6 +100,49 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
       status: member.status
     });
     setMessage(null);
+  }
+
+  function startErasingMember(member: Member) {
+    setErasingMember(member);
+    setEraseConfirmName("");
+    setEraseReason("");
+    setMessage(null);
+  }
+
+  async function confirmEraseMember() {
+    if (!erasingMember) return;
+    setErasing(true);
+    try {
+      const result = await apiFetch<{ erased?: boolean; alreadyErased?: boolean }>(
+        `/members/${erasingMember.id}/erase`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            confirmFullName: eraseConfirmName,
+            reason: eraseReason.trim() === "" ? undefined : eraseReason.trim()
+          })
+        }
+      );
+
+      // Reloaded rather than removed from local state: the row is still there,
+      // now pseudonymous. Making it disappear would suggest the savings went
+      // with it.
+      await loadPage();
+      setErasingMember(null);
+      setMessage({
+        ok: true,
+        text: result.alreadyErased
+          ? "That member's details were already erased."
+          : "Personal details erased. The group's financial record is kept under a pseudonym."
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Could not erase those details."
+      });
+    } finally {
+      setErasing(false);
+    }
   }
 
   function closeEditMember() {
@@ -211,6 +272,82 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
       </section>
 
       {!editingMember && message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
+
+      {erasingMember ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Erase personal data">
+          <button
+            aria-label="Close"
+            className="modal-backdrop"
+            onClick={() => setErasingMember(null)}
+            type="button"
+          />
+          <section className="data-card credential-modal">
+            <header>
+              <div>
+                <h3>Erase personal data</h3>
+                <span>{erasingMember.fullName}</span>
+              </div>
+              <button
+                aria-label="Close"
+                className="icon-button"
+                onClick={() => setErasingMember(null)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="close-account-panel notice warning">
+              <p>
+                <strong>Removed:</strong> name, phone, national ID and the PIN. Afterwards
+                nothing on the record says who this person was or how to reach them.
+              </p>
+              <p>
+                <strong>Kept:</strong> their contributions, repayments and loans, under a
+                pseudonym. Those rows are also other members&rsquo; balances — deleting them
+                would change what the rest of the group is owed, which is a worse privacy
+                outcome than a pseudonymous row.
+              </p>
+              <p>This cannot be undone.</p>
+
+              <label className="credential-field">
+                <span>Type {erasingMember.fullName} to confirm</span>
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setEraseConfirmName(event.target.value)}
+                  value={eraseConfirmName}
+                />
+              </label>
+              <label className="credential-field">
+                <span>Reason (optional, recorded in the audit trail)</span>
+                <input
+                  onChange={(event) => setEraseReason(event.target.value)}
+                  placeholder="Member asked for their details to be removed"
+                  value={eraseReason}
+                />
+              </label>
+
+              <div className="form-actions">
+                <button
+                  className="button danger"
+                  disabled={erasing || eraseConfirmName.trim() !== erasingMember.fullName.trim()}
+                  onClick={confirmEraseMember}
+                  type="button"
+                >
+                  {erasing ? "Erasing…" : "Erase these details"}
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => setErasingMember(null)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {editingMember && canWrite ? (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Edit member">
@@ -479,6 +616,15 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
                       >
                         <ShieldCheck size={15} />
                         Verify
+                      </button>
+                      <button
+                        className="link-button danger"
+                        disabled={saving}
+                        onClick={() => startErasingMember(member)}
+                        type="button"
+                      >
+                        <Trash2 size={15} />
+                        Erase details
                       </button>
                     </div>
                   ) : null}

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
+import { ensureAssessmentTemplate } from "../services/assessment-template-bootstrap";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -123,6 +124,12 @@ assessmentsRouter.get(
   async (req, res, next) => {
     try {
       const familyKey = (req.query.familyKey as string) || DEFAULT_TEMPLATE_FAMILY;
+
+      // Publishes v1 if this family has never had a template. Without it a
+      // production database — where no seed ever runs — answers every agent
+      // with NO_PUBLISHED_TEMPLATE and the assessment step is unreachable.
+      if (familyKey === DEFAULT_TEMPLATE_FAMILY) await ensureAssessmentTemplate();
+
       const snapshot = await currentSnapshot(familyKey);
       if (!snapshot) {
         throw new ApiHttpError(
