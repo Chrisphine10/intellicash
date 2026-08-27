@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 
 import { prisma as defaultClient } from "../src/lib/prisma";
+import { normalisePhone } from "../src/lib/phone";
 
 /**
  * Imports the FLOURISH onboarding pack.
@@ -80,8 +81,28 @@ interface Pack {
 
 const SOURCE_SYSTEM = "FLOURISH_ONBOARDING_2026";
 
-/** Which programme these groups belong to. Overridable without a code change. */
-const PROGRAMME_NAME = process.env.FLOURISH_PROGRAMME ?? "Brew the Coffee: Coffee to Stay";
+/**
+ * Two programmes, split on the register's own Status column.
+ *
+ * The workbook covers one project — "FLOURISH: Brewing the Future, Coffee to
+ * Stay" — but production holds two programme records, and the groups divide
+ * along a line the register already draws:
+ *
+ *   "Active - Kirinyaga"  the ten unassessed Kirinyaga groups -> Brew the Coffee
+ *   everything else       the mentored and baseline-only groups -> Flourish VSLA
+ *
+ * Stated here rather than inferred at a glance, because filing a group under
+ * the wrong programme puts it in the wrong report and the wrong funder's
+ * numbers. Both names are overridable.
+ */
+const BREW_PROGRAMME = process.env.FLOURISH_BREW_PROGRAMME ?? "Brew the Coffee: Coffee to Stay";
+const FLOURISH_PROGRAMME = process.env.FLOURISH_PROGRAMME ?? "Flourish VSLA";
+
+/** The status that marks the Brew the Coffee cohort. */
+const BREW_STATUS = "Active - Kirinyaga";
+
+/** Where group logins are written. Never the CI log, which is retained. */
+const CREDENTIALS_DIR = process.env.FLOURISH_CREDENTIALS_DIR ?? "/var/www/intellicash/data";
 
 /**
  * The agent every imported group is assigned to.
@@ -226,20 +247,33 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
     actionItems: 0,
     enterprisesCreated: 0,
     visitsWithMonthOnlyDate: 0,
+    programmeLinks: 0,
+    onFlourish: 0,
+    onBrewTheCoffee: 0,
+    groupAccountsCreated: 0,
     unmatchedEnterprises: [] as string[],
     unmatchedVisits: [] as string[]
   };
 
-  const programme = await client.programme.findFirst({
-    where: { name: PROGRAMME_NAME },
-    select: { id: true, name: true, partnerId: true }
-  });
-  if (!programme) {
-    throw new Error(
-      `No programme named "${PROGRAMME_NAME}". Set FLOURISH_PROGRAMME to one that exists — ` +
-        "guessing would file 40 groups under the wrong project."
-    );
+  async function requireProgramme(name: string) {
+    const found = await client.programme.findFirst({
+      where: { name },
+      select: { id: true, name: true, partnerId: true }
+    });
+    if (!found) {
+      throw new Error(
+        `No programme named "${name}". Set FLOURISH_PROGRAMME / FLOURISH_BREW_PROGRAMME ` +
+          "to names that exist — guessing would file groups under the wrong project."
+      );
+    }
+    return found;
   }
+
+  const flourish = await requireProgramme(FLOURISH_PROGRAMME);
+  const brew = await requireProgramme(BREW_PROGRAMME);
+  // The agent and the enterprise/visit lookups need one; the partner is the
+  // same for both.
+  const programme = flourish;
 
   // ---------------------------------------------------------------------
   // The agent
@@ -273,14 +307,17 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
     notes.push(`Reusing existing VA record for ${agent.name}.`);
   }
 
-  // Serving this programme, so the agent's own caseload resolves.
-  await client.villageAgentProgramme.upsert({
-    where: {
-      villageAgentId_programmeId: { villageAgentId: agent.id, programmeId: programme.id }
-    },
-    create: { villageAgentId: agent.id, programmeId: programme.id },
-    update: {}
-  });
+  // Serving BOTH, so the agent's caseload resolves whichever programme a group
+  // sits under. They belong to the same partner, which is the rule that matters.
+  for (const target of [flourish, brew]) {
+    await client.villageAgentProgramme.upsert({
+      where: {
+        villageAgentId_programmeId: { villageAgentId: agent.id, programmeId: target.id }
+      },
+      create: { villageAgentId: agent.id, programmeId: target.id },
+      update: {}
+    });
+  }
 
   // ---------------------------------------------------------------------
   // The agent's login
@@ -338,13 +375,15 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
       select: { id: true }
     });
 
+    const target = row.status === BREW_STATUS ? brew : flourish;
+
     const data = {
       name: row.name,
       county: row.county,
       subCounty: row.subCounty || null,
       location: row.ward || null,
       phase: row.phase,
-      programmeId: programme.id,
+      programmeId: target.id,
       villageAgentId: agent.id,
       contactPersonName: row.contactPersonName || null,
       contactPhone: row.contactPhone || null,
@@ -366,18 +405,119 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
       sourceReference: row.key
     };
 
+    let groupId: string;
     if (existing) {
       await client.group.update({ where: { id: existing.id }, data });
-      groupIdByKey.set(row.key, existing.id);
+      groupId = existing.id;
       summary.groupsUpdated += 1;
     } else {
       const created = await client.group.create({
         data: { ...data, code: nextCode(row.countyCode) },
         select: { id: true }
       });
-      groupIdByKey.set(row.key, created.id);
+      groupId = created.id;
       summary.groupsCreated += 1;
     }
+    groupIdByKey.set(row.key, groupId);
+
+    /*
+     * The join-table link, which is what the console actually reads.
+     *
+     * `Group.programmeId` alone left every programme showing zero groups on
+     * /dashboard/programmes: `programmeInclude` counts `groupLinks`, not the
+     * column. Both are set, because scoping reads the column and the UI reads
+     * the link, and a group that is in one but not the other is invisible in
+     * exactly one place — which is the hardest kind of missing to notice.
+     */
+    await client.programmeGroup.upsert({
+      where: { programmeId_groupId: { programmeId: target.id, groupId } },
+      create: { programmeId: target.id, groupId, role: "PRIMARY" },
+      update: {}
+    });
+    summary.programmeLinks += 1;
+
+    // A stale link from an earlier run that filed this group elsewhere.
+    const other = target.id === flourish.id ? brew.id : flourish.id;
+    await client.programmeGroup.deleteMany({ where: { programmeId: other, groupId } });
+
+    if (target.id === brew.id) summary.onBrewTheCoffee += 1;
+    else summary.onFlourish += 1;
+  }
+
+  // ---------------------------------------------------------------------
+  // A login for each group
+  // ---------------------------------------------------------------------
+  /*
+   * One GROUP_ACCOUNT per group. A group with no login cannot open a meeting,
+   * record a share or see its own book — the whole point of the platform is
+   * the group holding its own record.
+   *
+   * Passwords are generated per group and written to a 0600 file ON THE SERVER,
+   * never printed. A CI log is retained and readable by anyone with repository
+   * access, and forty group credentials in one is exactly the kind of thing
+   * that is still sitting there in a year.
+   */
+  const credentials: string[] = [];
+
+  for (const row of pack.groups) {
+    const groupId = groupIdByKey.get(row.key);
+    if (!groupId) continue;
+
+    const existing = await client.user.findFirst({
+      where: { groupId, role: "GROUP_ACCOUNT" },
+      select: { id: true }
+    });
+    if (existing) continue;
+
+    const group = await client.group.findUniqueOrThrow({
+      where: { id: groupId },
+      select: { code: true, name: true }
+    });
+
+    // Addressed by code rather than name: names collide, are re-spelled, and
+    // two of these groups differ only by "(II)".
+    const email = `${group.code.toLowerCase()}@groups.intellicash.co.ke`;
+
+    // The champion's number where the workbook has one, but only if no other
+    // account holds it — `User.phone` is unique and it is how people sign in.
+    let phone: string | null = null;
+    const candidate = normalisePhone(row.contactPhone);
+    if (candidate) {
+      const taken = await client.user.findFirst({ where: { phone: candidate }, select: { id: true } });
+      if (!taken) phone = candidate;
+    }
+
+    const password = randomBytes(9).toString("base64url");
+    await client.user.create({
+      data: {
+        name: group.name,
+        email,
+        phone,
+        passwordHash: await bcrypt.hash(password, 12),
+        role: "GROUP_ACCOUNT",
+        groupId
+      }
+    });
+
+    credentials.push(
+      [group.code, group.name, email, phone ?? "(no phone)", password].join("\t")
+    );
+    summary.groupAccountsCreated += 1;
+  }
+
+  let credentialsFile: string | null = null;
+  if (credentials.length > 0) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    credentialsFile = path.join(CREDENTIALS_DIR, `flourish-group-logins-${stamp}.tsv`);
+    const header = ["code", "group", "email", "phone", "password"].join("\t");
+    fs.writeFileSync(credentialsFile, [header, ...credentials].join("\n") + "\n", {
+      // Owner-read only. It is plaintext by necessity.
+      mode: 0o600
+    });
+    notes.push(
+      `${credentials.length} group logins written to ${credentialsFile} (owner-read only). ` +
+        "Hand them over and delete the file — it is plaintext by necessity and nothing re-reads it."
+    );
   }
 
   const keys = [...groupIdByKey.keys()];
@@ -512,7 +652,14 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
     }
   }
 
-  return { programme: programme.name, agent: agent.name, agentPassword, summary, notes };
+  return {
+    programmes: [flourish.name, brew.name],
+    agent: agent.name,
+    agentPassword,
+    credentialsFile,
+    summary,
+    notes
+  };
 }
 
 const isDirectRun =
@@ -522,7 +669,7 @@ if (isDirectRun) {
   importFlourishOnboarding()
     .then((result) => {
       console.log("\nFLOURISH onboarding import");
-      console.log("  programme :", result.programme);
+      console.log("  programmes:", result.programmes.join(" | "));
       console.log("  agent     :", result.agent);
       console.log("  summary   :", JSON.stringify(result.summary, null, 2));
       for (const note of result.notes) console.log("  note      :", note);

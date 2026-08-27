@@ -5,16 +5,20 @@ name: Import FLOURISH onboarding
 on:
   workflow_dispatch:
     inputs:
-      programme:
-        description: 'Programme the groups are filed under'
+      flourishProgramme:
+        description: 'Programme for the mentored and baseline-only groups'
+        required: false
+        default: 'Flourish VSLA'
+      brewProgramme:
+        description: 'Programme for the unassessed Kirinyaga cohort'
         required: false
         default: 'Brew the Coffee: Coffee to Stay'
       agentPhone:
-        description: "Caleb's phone, e.g. 254712345678. Blank creates a placeholder he cannot sign in with."
+        description: "Caleb's phone, e.g. 254712345678. Blank keeps whatever is on his record."
         required: false
         default: ''
       agentEmail:
-        description: "Caleb's email for the agent login"
+        description: "Caleb's email, used only if no agent login exists yet"
         required: false
         default: 'caleb.ogara@intellicash.co.ke'
 
@@ -46,11 +50,10 @@ jobs:
 
       # Resolved and PRINTED before anything is written. The service gets its
       # DATABASE_URL from systemd or an env file, and a manual shell does not
-      # necessarily inherit either — importing forty groups into whatever
-      # sqlite file happened to be the default would be very hard to notice and
-      # very annoying to undo.
+      # necessarily inherit either — importing forty groups into whatever sqlite
+      # file happened to be the default would be hard to notice and annoying to
+      # undo.
       - name: Show which database will be written to
-        id: resolve
         run: |
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
@@ -72,21 +75,35 @@ jobs:
                exit 1
              fi
              echo "DATABASE_URL -> $URL"
-             echo "$URL" > /tmp/flourish_database_url'
+             echo "$URL" > /tmp/flourish_db_url'
 
       - name: Run the import
         run: |
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "set -e
-             URL=\$(cat /tmp/flourish_database_url)
+             URL=\$(cat /tmp/flourish_db_url)
              sudo -u ${{ env.APP_USER }} env HOME=/var/www/intellicash \
                DATABASE_URL=\"\$URL\" \
-               FLOURISH_PROGRAMME='${{ inputs.programme }}' \
+               FLOURISH_PROGRAMME='${{ inputs.flourishProgramme }}' \
+               FLOURISH_BREW_PROGRAMME='${{ inputs.brewProgramme }}' \
                FLOURISH_AGENT_PHONE='${{ inputs.agentPhone }}' \
                FLOURISH_AGENT_EMAIL='${{ inputs.agentEmail }}' \
-               bash -lc 'cd ${{ env.APP_DIR }}/apps/api && npx tsx prisma/import-flourish-onboarding.ts'
-             rm -f /tmp/flourish_database_url"
+               bash -lc 'cd ${{ env.APP_DIR }}/apps/api && npx tsx prisma/import-flourish-onboarding.ts'"
+
+      # Read-only, and the point of it: the importer reports what it BELIEVED it
+      # did, which is not the same as what is in the database. This reads the
+      # rows back and compares them to the workbook, naming any group that fails.
+      - name: Validate against the workbook
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -e
+             URL=\$(cat /tmp/flourish_db_url)
+             sudo -u ${{ env.APP_USER }} env HOME=/var/www/intellicash \
+               DATABASE_URL=\"\$URL\" \
+               bash -lc 'cd ${{ env.APP_DIR }}/apps/api && npx tsx prisma/validate-flourish-import.ts'
+             rm -f /tmp/flourish_db_url"
 
       - name: Check the site is still healthy
         run: |
