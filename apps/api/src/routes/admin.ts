@@ -44,6 +44,9 @@ const userSelect = {
   partnerId: true,
   groupId: true,
   memberId: true,
+  // Without this the console cannot show which agent an account belongs to,
+  // and cannot tell a correctly bound agent from one that will see nothing.
+  villageAgentId: true,
   partner: { select: { id: true, name: true } },
   group: { select: { id: true, name: true, code: true } },
   member: { select: { id: true, fullName: true, phone: true } },
@@ -142,9 +145,41 @@ async function normalizeUserBinding(input: {
   partnerId?: string | null;
   groupId?: string | null;
   memberId?: string | null;
+  villageAgentId?: string | null;
 }) {
   if (input.role === "IWL_ADMIN" || input.role === "READ_ONLY") {
-    return { partnerId: null, groupId: null, memberId: null };
+    return { partnerId: null, groupId: null, memberId: null, villageAgentId: null };
+  }
+
+  /*
+   * A village agent account, which had no branch at all and fell through to the
+   * member one below.
+   *
+   * The consequences were both halves of the same fault: the console demanded a
+   * MEMBER for an agent account, so an agent could not be created here — and
+   * `villageAgentId` was never set, so anything that did get through was a
+   * village agent bound to no village agent. `scopeGroupWhere` returns an
+   * impossible filter for exactly that, meaning every group 404s and the app
+   * reads as broken rather than as a mis-configured account.
+   */
+  if (input.role === "VILLAGE_AGENT") {
+    if (!input.villageAgentId) {
+      throw new ApiHttpError(
+        400,
+        "VILLAGE_AGENT_REQUIRED",
+        "Agent accounts must be linked to a VA / CBT record, or they sign in to an empty caseload."
+      );
+    }
+
+    const agent = await prisma.villageAgent.findUnique({
+      where: { id: input.villageAgentId },
+      select: { id: true }
+    });
+    if (!agent) {
+      throw new ApiHttpError(404, "VILLAGE_AGENT_NOT_FOUND", "Selected VA / CBT record does not exist.");
+    }
+
+    return { partnerId: null, groupId: null, memberId: null, villageAgentId: agent.id };
   }
 
   if (input.role === "PARTNER_OFFICER" || input.role === "LENDER") {
@@ -169,7 +204,7 @@ async function normalizeUserBinding(input: {
       throw new ApiHttpError(400, "PARTNER_REQUIRED", "Partner officer accounts must be bound to a non-lender partner.");
     }
 
-    return { partnerId: partner.id, groupId: null, memberId: null };
+    return { partnerId: partner.id, groupId: null, memberId: null, villageAgentId: null };
   }
 
   if (input.role === "GROUP_ACCOUNT") {
@@ -186,7 +221,7 @@ async function normalizeUserBinding(input: {
       throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Selected group does not exist.");
     }
 
-    return { partnerId: null, groupId: group.id, memberId: null };
+    return { partnerId: null, groupId: group.id, memberId: null, villageAgentId: null };
   }
 
   if (!input.memberId) {
@@ -221,7 +256,9 @@ async function normalizeUserBinding(input: {
     );
   }
 
-  return { partnerId: null, groupId: member.groupId, memberId: member.id };
+  // Cleared like the others: a member account carrying a stale agent link is a
+  // caseload nobody is watching.
+  return { partnerId: null, groupId: member.groupId, memberId: member.id, villageAgentId: null };
 }
 
 async function queueMemberAccountPin(
@@ -320,7 +357,8 @@ const userCreateSchema = z.object({
   languagePreference: z.enum(languagePreferences).optional(),
   partnerId: z.string().optional(),
   groupId: z.string().optional(),
-  memberId: z.string().optional()
+  memberId: z.string().optional(),
+  villageAgentId: z.string().optional()
 });
 
 router.post("/users", requireAuth("users:write"), async (req, res, next) => {
@@ -402,7 +440,8 @@ const userUpdateSchema = z.object({
   languagePreference: z.enum(languagePreferences).optional(),
   partnerId: z.string().nullable().optional(),
   groupId: z.string().nullable().optional(),
-  memberId: z.string().nullable().optional()
+  memberId: z.string().nullable().optional(),
+  villageAgentId: z.string().nullable().optional()
 });
 
 router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) => {
@@ -417,7 +456,8 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
         status: true,
         partnerId: true,
         groupId: true,
-        memberId: true
+        memberId: true,
+        villageAgentId: true
       }
     });
 
@@ -445,7 +485,11 @@ router.patch("/users/:id", requireAuth("users:write"), async (req, res, next) =>
       role,
       partnerId: body.partnerId === undefined ? existing.partnerId : body.partnerId,
       groupId: body.groupId === undefined ? existing.groupId : body.groupId,
-      memberId: body.memberId === undefined ? existing.memberId : body.memberId
+      memberId: body.memberId === undefined ? existing.memberId : body.memberId,
+      // Carried through, so correcting an agent's phone does not silently
+      // detach them from their caseload.
+      villageAgentId:
+        body.villageAgentId === undefined ? existing.villageAgentId : body.villageAgentId
     });
 
     if ((existing.role === "IWL_ADMIN" || role === "IWL_ADMIN") && (role !== "IWL_ADMIN" || status !== "ACTIVE")) {

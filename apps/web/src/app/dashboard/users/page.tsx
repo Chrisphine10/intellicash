@@ -29,6 +29,7 @@ interface UserFormState {
 }
 
 interface UserEditState {
+  villageAgentId: string;
   name: string;
   email: string;
   phone: string;
@@ -172,6 +173,8 @@ function permissionGroups(permissionList: Permission[]) {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  /** VA / CBT records an agent account can be bound to. */
+  const [agentRecords, setAgentRecords] = useState<{ id: string; name: string }[]>([]);
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -268,16 +271,19 @@ export default function UsersPage() {
   async function loadPage() {
     setLoading(true);
     try {
-      const [userResponse, partnerResponse, groupResponse, accessResponse] = await Promise.all([
+      const [userResponse, partnerResponse, groupResponse, accessResponse, agentResponse] =
+        await Promise.all([
         apiFetch<User[]>("/users"),
         apiFetch<PartnerRow[]>("/partners"),
         apiFetch<GroupRow[]>("/groups"),
-        apiFetch<AccessControlState>("/access-control")
+        apiFetch<AccessControlState>("/access-control"),
+        apiFetch<{ id: string; name: string }[]>("/village-agents")
       ]);
       setUsers(userResponse);
       setPartners(partnerResponse);
       setGroups(groupResponse);
       setAccessControl(accessResponse);
+      setAgentRecords(agentResponse);
       setError(null);
     } catch (pageError) {
       setError(pageError instanceof Error ? pageError.message : "Users failed to load");
@@ -335,6 +341,7 @@ export default function UsersPage() {
     const role = roleValue(user.role);
     setEditingUser(user);
     setEditForm({
+      villageAgentId: user.villageAgentId ?? "",
       name: user.name ?? "",
       email: user.email ?? "",
       phone: user.phone ?? "",
@@ -434,6 +441,9 @@ export default function UsersPage() {
     if (editForm.role === "PARTNER_OFFICER" || editForm.role === "LENDER") payload.partnerId = editForm.partnerId;
     if (editForm.role === "GROUP_ACCOUNT") payload.groupId = editForm.groupId;
     if (editForm.role === "MEMBER") payload.memberId = editForm.memberId;
+    // Without this an agent account is a village agent bound to no village
+    // agent, and every group it asks for answers 404.
+    if (editForm.role === "VILLAGE_AGENT") payload.villageAgentId = editForm.villageAgentId;
     const memberAccountChanged =
       editForm.role === "MEMBER" &&
       (editingUser.role !== "MEMBER" || editingUser.memberId !== editForm.memberId);
@@ -608,7 +618,20 @@ export default function UsersPage() {
                   key: "role",
                   header: "Role",
                   value: (user) => humanizeEnum(user.role),
-                  cell: (user) => <span className="pill blue">{humanizeEnum(user.role)}</span>
+                  cell: (user) => (
+                    <>
+                      <span className="pill blue">{humanizeEnum(user.role)}</span>
+                      {/* An agent bound to no VA record signs in to an empty
+                          caseload and every group answers "not found". That is
+                          indistinguishable from a broken app unless it is said
+                          here. */}
+                      {user.role === "VILLAGE_AGENT" && !user.villageAgentId ? (
+                        <span className="pill red" title="Not linked to a VA / CBT record">
+                          no caseload
+                        </span>
+                      ) : null}
+                    </>
+                  )
                 },
                 {
                   key: "binding",
@@ -1182,6 +1205,31 @@ export default function UsersPage() {
                         </option>
                       ))}
                     </select>
+                  </label>
+                ) : null}
+                {editForm.role === "VILLAGE_AGENT" ? (
+                  <label className="credential-field">
+                    <span>VA / CBT record</span>
+                    <select
+                      onChange={(event) =>
+                        setEditForm((current) =>
+                          current ? { ...current, villageAgentId: event.target.value } : current
+                        )
+                      }
+                      required
+                      value={editForm.villageAgentId}
+                    >
+                      <option value="">Select the agent</option>
+                      {agentRecords.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      An agent account with no record here signs in to an empty caseload —
+                      every group answers &ldquo;not found&rdquo;.
+                    </small>
                   </label>
                 ) : null}
                 {editForm.role === "GROUP_ACCOUNT" || editForm.role === "MEMBER" ? (

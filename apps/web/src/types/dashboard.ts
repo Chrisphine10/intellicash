@@ -11,6 +11,8 @@ export interface User {
   partnerId?: string | null;
   groupId?: string | null;
   memberId?: string | null;
+  /** The VA / CBT record an agent account is bound to. Null means no caseload. */
+  villageAgentId?: string | null;
   permissions?: string[];
   partner?: { id: string; name: string } | null;
   group?: { id: string; name: string; code: string } | null;
