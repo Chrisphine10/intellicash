@@ -1,0 +1,96 @@
+name: Import FLOURISH onboarding
+
+# Manual only. This writes real records into the production database, so it must
+# never be something a push can set off by accident.
+on:
+  workflow_dispatch:
+    inputs:
+      programme:
+        description: 'Programme the groups are filed under'
+        required: false
+        default: 'Brew the Coffee: Coffee to Stay'
+      agentPhone:
+        description: "Caleb's phone, e.g. 254712345678. Blank creates a placeholder he cannot sign in with."
+        required: false
+        default: ''
+      agentEmail:
+        description: "Caleb's email for the agent login"
+        required: false
+        default: 'caleb.ogara@intellicash.co.ke'
+
+env:
+  APP_DIR: /var/www/intellicash/app
+  APP_USER: intellicash
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # The same script the deploy uses. It knows where the database lives; a
+      # path written here would be a guess, and a guess that silently backs up
+      # the wrong file is worse than no backup at all.
+      - name: Back up the database first
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             /usr/local/bin/intellicash-backup.sh
+             echo "Backup taken."'
+
+      # Resolved and PRINTED before anything is written. The service gets its
+      # DATABASE_URL from systemd or an env file, and a manual shell does not
+      # necessarily inherit either — importing forty groups into whatever
+      # sqlite file happened to be the default would be very hard to notice and
+      # very annoying to undo.
+      - name: Show which database will be written to
+        id: resolve
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             URL=$(systemctl show intellicash -p Environment --value 2>/dev/null \
+                   | tr " " "\n" | grep "^DATABASE_URL=" | cut -d= -f2- || true)
+             if [ -z "$URL" ]; then
+               EF=$(systemctl show intellicash -p EnvironmentFiles --value 2>/dev/null \
+                    | sed "s/ (ignore_errors=.*)//" | head -1)
+               [ -n "$EF" ] && [ -f "$EF" ] && \
+                 URL=$(grep -h "^DATABASE_URL=" "$EF" | cut -d= -f2- | tr -d "\"" || true)
+             fi
+             if [ -z "$URL" ] && [ -f /var/www/intellicash/app/apps/api/.env ]; then
+               URL=$(grep -h "^DATABASE_URL=" /var/www/intellicash/app/apps/api/.env \
+                     | cut -d= -f2- | tr -d "\"" || true)
+             fi
+             if [ -z "$URL" ]; then
+               echo "Could not resolve DATABASE_URL. Refusing to import into an unknown database."
+               exit 1
+             fi
+             echo "DATABASE_URL -> $URL"
+             echo "$URL" > /tmp/flourish_database_url'
+
+      - name: Run the import
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -e
+             URL=\$(cat /tmp/flourish_database_url)
+             sudo -u ${{ env.APP_USER }} env HOME=/var/www/intellicash \
+               DATABASE_URL=\"\$URL\" \
+               FLOURISH_PROGRAMME='${{ inputs.programme }}' \
+               FLOURISH_AGENT_PHONE='${{ inputs.agentPhone }}' \
+               FLOURISH_AGENT_EMAIL='${{ inputs.agentEmail }}' \
+               bash -lc 'cd ${{ env.APP_DIR }}/apps/api && npx tsx prisma/import-flourish-onboarding.ts'
+             rm -f /tmp/flourish_database_url"
+
+      - name: Check the site is still healthy
+        run: |
+          sleep 5
+          H=$(curl -s --max-time 20 https://intellicash.co.ke/health || echo '')
+          echo "/health -> $H"
+          echo "$H" | grep -q '"status":"ok"' || { echo '::error::unhealthy after import'; exit 1; }
