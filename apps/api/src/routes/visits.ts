@@ -154,7 +154,21 @@ visitsRouter.get("/visits/:visitId", requireAuth("visits:read"), async (req, res
         AND: [{ id: req.params.visitId as string }, { group: scopeGroupWhere(req.user) }]
       },
       include: {
-        group: { select: { id: true, name: true, code: true } },
+        group: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            county: true,
+            subCounty: true,
+            location: true,
+            phase: true
+          }
+        },
+        // Who stood with the group. A visit that cannot name its agent cannot
+        // be followed up, and the page had nowhere to read this from.
+        villageAgent: { select: { id: true, name: true, phone: true } },
+        submittedBy: { select: { id: true, name: true } },
         revisions: { orderBy: { revision: "desc" } }
       }
     });
@@ -163,6 +177,8 @@ visitsRouter.get("/visits/:visitId", requireAuth("visits:read"), async (req, res
     ok(res, {
       visit: serializeVisit(visit),
       group: visit.group,
+      agent: visit.villageAgent,
+      submittedBy: visit.submittedBy,
       revisions: visit.revisions.map((revision) => ({
         revision: revision.revision,
         reason: revision.reason,

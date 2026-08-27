@@ -16,15 +16,28 @@ import {
  * gallery. A photograph on its own proves nothing — what makes it evidence is
  * the claim it sits against, so the claim is what the page is organised by.
  */
+/**
+ * The visit itself. `GET /visits/:id` answers with a WRAPPER —
+ * `{ visit, group, agent, submittedBy, revisions }` — and this page used to
+ * treat that wrapper as the visit.
+ *
+ * The result was every field on the page reading undefined, and
+ * `visitData.groupId` resolving to nothing, so the action-plan call went to
+ * `/groups/undefined/action-items` and came back "Group does not exist or is
+ * outside your access." An admin has unrestricted group scope, so the message
+ * was true and useless: there is no group called "undefined".
+ */
 interface Visit {
   id: string;
   groupId: string;
+  clientRequestId: string;
   visitType: string;
   status: string;
   startedAt: string | null;
+  completedAt?: string | null;
   submittedAt: string | null;
-  group?: { name: string; code: string } | null;
-  agentName?: string | null;
+  revision?: number;
+  authenticityFlags?: string[];
   notes?: string | null;
   location?: {
     outcome: string;
@@ -35,6 +48,32 @@ interface Visit {
     longitude: number | null;
     note?: string | null;
   } | null;
+}
+
+interface VisitGroup {
+  id: string;
+  name: string;
+  code: string;
+  county?: string | null;
+  subCounty?: string | null;
+  location?: string | null;
+  phase?: string | null;
+}
+
+/** One amendment. A submitted visit is immutable; edits append. */
+interface Revision {
+  revision: number;
+  reason: string | null;
+  amendedByUserId: string | null;
+  createdAt: string;
+}
+
+interface VisitDetail {
+  visit: Visit;
+  group: VisitGroup | null;
+  agent: { id: string; name: string; phone: string | null } | null;
+  submittedBy: { id: string; name: string } | null;
+  revisions: Revision[];
 }
 
 interface Attachment {
@@ -87,6 +126,10 @@ interface ActionItem {
 export default function VisitDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [visit, setVisit] = useState<Visit | null>(null);
+  const [group, setGroup] = useState<VisitGroup | null>(null);
+  const [agent, setAgent] = useState<VisitDetail["agent"]>(null);
+  const [submittedBy, setSubmittedBy] = useState<VisitDetail["submittedBy"]>(null);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [assessment, setAssessment] = useState<AssessmentRecordData | null>(null);
   const [mentorship, setMentorship] = useState<Mentorship | null>(null);
@@ -97,11 +140,16 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     async function load() {
-      const [visitData, attachmentData] = await Promise.all([
-        apiFetch<Visit>(`/visits/${id}`),
+      const [detail, attachmentData] = await Promise.all([
+        apiFetch<VisitDetail>(`/visits/${id}`),
         apiFetch<Attachment[]>(`/visits/${id}/attachments`)
       ]);
-      setVisit(visitData);
+
+      setVisit(detail.visit);
+      setGroup(detail.group);
+      setAgent(detail.agent);
+      setSubmittedBy(detail.submittedBy);
+      setRevisions(detail.revisions ?? []);
       setAttachments(attachmentData ?? []);
 
       // A visit without an assessment is ordinary — an agent may record a visit
@@ -113,7 +161,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
       }
 
       setMentorship(await apiFetch<Mentorship>(`/visits/${id}/mentorship`));
-      await loadActionItems(visitData.groupId);
+      await loadActionItems(detail.visit.groupId);
     }
 
     async function loadActionItems(groupId: string) {
@@ -170,15 +218,78 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
             <ArrowLeft size={17} />
             <span>Field visits</span>
           </Link>
-          <h2>{visit.group?.name ?? "Visit"}</h2>
+          <h2>{group?.name ?? "Visit"}</h2>
           <p>
             {humanizeEnum(visit.visitType)}
-            {visit.agentName ? ` · ${visit.agentName}` : ""}
+            {agent ? ` · ${agent.name}` : ""}
             {visit.startedAt ? ` · ${new Date(visit.startedAt).toLocaleString()}` : ""}
           </p>
+          {group ? (
+            <p className="eyebrow">
+              <Link href={`/dashboard/groups/${group.id}`}>{group.code}</Link>
+              {group.location ? ` · ${group.location}` : ""}
+              {group.subCounty ? `, ${group.subCounty}` : ""}
+              {group.county ? `, ${group.county}` : ""}
+              {group.phase ? ` · ${humanizeEnum(group.phase)}` : ""}
+            </p>
+          ) : null}
         </div>
         <MapPinned size={22} />
       </header>
+
+      {/* What the visit IS, before what it found. Previously none of this was
+          on the page at all: an amended visit looked identical to an original,
+          and a submission recorded weeks after the fact looked like one made on
+          the day. */}
+      <article className="data-card">
+        <h3>The visit</h3>
+        <div className="enterprise-figures">
+          <div className="enterprise-figure">
+            <span className="label">Type</span>
+            <span className="value">{humanizeEnum(visit.visitType)}</span>
+          </div>
+          <div className="enterprise-figure">
+            <span className="label">Status</span>
+            <span className="value">{humanizeEnum(visit.status)}</span>
+          </div>
+          <div className="enterprise-figure">
+            <span className="label">Visited</span>
+            <span className="value">
+              {visit.startedAt ? new Date(visit.startedAt).toLocaleDateString() : "—"}
+            </span>
+          </div>
+          <div className="enterprise-figure">
+            <span className="label">Submitted</span>
+            <span className="value">
+              {visit.submittedAt ? new Date(visit.submittedAt).toLocaleDateString() : "—"}
+            </span>
+          </div>
+          <div className="enterprise-figure">
+            <span className="label">Agent</span>
+            <span className="value">{agent?.name ?? "Not recorded"}</span>
+          </div>
+          <div className="enterprise-figure">
+            <span className="label">Revision</span>
+            <span className="value">{visit.revision ?? 1}</span>
+          </div>
+        </div>
+
+        {submittedBy && agent && submittedBy.name !== agent.name ? (
+          <p className="eyebrow">
+            Entered by {submittedBy.name}, who is not the agent named on it.
+          </p>
+        ) : null}
+
+        {visit.notes ? <p className="eyebrow">{visit.notes}</p> : null}
+
+        {visit.authenticityFlags && visit.authenticityFlags.length > 0 ? (
+          <p className="notice warning">
+            {/* Raised by the server at submission. Worth reading before the
+                score below is quoted anywhere. */}
+            Flagged at submission: {visit.authenticityFlags.join(", ")}
+          </p>
+        ) : null}
+      </article>
 
       {visit.location ? (
         <article className="data-card">
@@ -192,8 +303,15 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
               : `${formatDistance(visit.location.distanceFromGroupM)} from the group's registered point`}
             {visit.location.accuracyM ? ` · fix ±${Math.round(visit.location.accuracyM)} m` : ""}
           </p>
+          {visit.location.latitude !== null && visit.location.longitude !== null ? (
+            <p className="eyebrow">
+              {visit.location.latitude}, {visit.location.longitude}
+            </p>
+          ) : null}
           {visit.location.note ? (
             <p className="eyebrow">
+              {/* An explanation, not evidence. The server's own distance
+                  calculation is the signal; this says why it may look wrong. */}
               Agent&apos;s explanation: {visit.location.note}
             </p>
           ) : null}
@@ -275,6 +393,39 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
               </tbody>
             </table>
           ) : null}
+        </article>
+      ) : null}
+
+      {/* The amendment trail. A SUBMITTED visit is immutable and edits append a
+          revision, which is the whole point of that design — but the page threw
+          the revisions away, so a corrected visit was indistinguishable from an
+          untouched one. */}
+      {revisions.length > 0 ? (
+        <article className="data-card">
+          <h3>Amendments</h3>
+          <p className="eyebrow">
+            This visit has been amended {revisions.length}
+            {revisions.length === 1 ? " time" : " times"}. The original submission is
+            kept; each change is recorded rather than overwriting it.
+          </p>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Revision</th>
+                <th>When</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {revisions.map((revision) => (
+                <tr key={revision.revision}>
+                  <td>{revision.revision}</td>
+                  <td>{new Date(revision.createdAt).toLocaleString()}</td>
+                  <td>{revision.reason ?? <span className="eyebrow">No reason given</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </article>
       ) : null}
 

@@ -295,4 +295,73 @@ describe("group visits", () => {
         .expect(403);
     });
   });
+
+  describe("what the visit detail actually answers with", () => {
+    /** Its own, rather than the amendment block's scoped id. */
+    let detailVisitId: string;
+
+    beforeAll(async () => {
+      detailVisitId = (
+        await prisma.groupVisit.findFirstOrThrow({ select: { id: true } })
+      ).id;
+    });
+
+    /*
+     * The console read this endpoint's WRAPPER as if it were the visit.
+     *
+     * Every field on the page came back undefined, and `groupId` — read from
+     * the wrapper rather than from `visit` — resolved to nothing, so the action
+     * plan was fetched from `/groups/undefined/action-items` and answered
+     * "Group does not exist or is outside your access." An admin has
+     * unrestricted group scope, so the message was true and entirely
+     * unhelpful: there is no group called "undefined".
+     *
+     * The shape is pinned here because a page and an endpoint disagreeing about
+     * it is invisible to both typecheck and build.
+     */
+    it("wraps the visit, and puts groupId on the visit itself", async () => {
+      const response = await request(app)
+        .get(`/api/v1/visits/${detailVisitId}`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+
+      const data = response.body.data;
+      expect(Object.keys(data).sort()).toEqual(
+        ["agent", "group", "revisions", "submittedBy", "visit"].sort()
+      );
+
+      // The field whose absence produced the error.
+      expect(data.visit.groupId).toBeTruthy();
+      expect(data.groupId).toBeUndefined();
+    });
+
+    it("names the group and the agent, so the page need not guess", async () => {
+      const response = await request(app)
+        .get(`/api/v1/visits/${detailVisitId}`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+
+      const data = response.body.data;
+      expect(data.group).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+      // The group's code and where it is: a visit list is unreadable without
+      // them once there are forty groups.
+      expect(data.group).toHaveProperty("code");
+      expect(data.group).toHaveProperty("county");
+      // `agent` may be null on a back-recorded visit, but the key must exist or
+      // the page has nowhere to read it from.
+      expect(data).toHaveProperty("agent");
+    });
+
+    it("carries the location as one object rather than loose columns", async () => {
+      const response = await request(app)
+        .get(`/api/v1/visits/${detailVisitId}`)
+        .set("Cookie", adminCookies)
+        .expect(200);
+
+      expect(response.body.data.visit.location).toMatchObject({
+        outcome: expect.any(String),
+        withinGeofence: expect.any(Boolean)
+      });
+    });
+  });
 });
