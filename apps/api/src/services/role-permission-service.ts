@@ -46,11 +46,33 @@ const permissionBackfills: readonly (readonly Permission[])[] = [
    * list without it, and `permissionsForRoleFromStore` reads that row. Members
    * could open a poll and were refused when they voted.
    */
-  // ONLY the new permission. Including `votes:read` — which MEMBER already
-  // held — would make the batch look delivered for that very role and skip it.
-  // A batch names what is being introduced, not the area it belongs to.
-  ["votes:write"]
+  // ONLY the new permission. A batch names what is being introduced, not the
+  // area it belongs to: adding a permission the role already holds makes the
+  // batch look delivered for that very role and skips it.
+  ["votes:write"],
+  /*
+   * `votes:read` needed its own batch, and the reasoning that left it out was
+   * simply wrong.
+   *
+   * The note above used to say votes:read was excluded because MEMBER already
+   * held it. Git says otherwise: at the first commit MEMBER held neither, and
+   * both arrived together. So the votes:write batch delivered the write and
+   * nothing delivered the read, and on every existing deployment a member could
+   * CAST a vote and was refused when listing or opening the poll — the mirror
+   * image of the bug that batch was written to fix, introduced by the sentence
+   * explaining it.
+   *
+   * Separate batch rather than added to the one above, because that one is
+   * already delivered for MEMBER; extending it would be skipped.
+   */
+  ["votes:read"]
 ];
+/**
+ * Read-only view for `permission-delivery.test.ts`, which checks these batches
+ * against the permission sets production databases actually hold.
+ */
+export const permissionBackfillsForTests = permissionBackfills;
+
 const adminOnlyPermissions = new Set<Permission>([
   "audit:read",
   "intelliaudit:read",
