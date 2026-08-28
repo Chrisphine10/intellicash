@@ -8859,3 +8859,507 @@ html[data-theme="dark"] .pwa-splash-screen {
 .close-account-panel .credential-field input {
   width: 100%;
 }
+
+/* ---------------------------------------------------------------------------
+   Card interior
+   ---------------------------------------------------------------------------
+   `.data-card` styles a `<header>` child and nothing else — no padding on the
+   card itself. Cards written as `<article class="data-card"><h3>` therefore got
+   no header treatment and no padding at all, and their content sat flush
+   against the border. These are the pieces those cards were reaching for. */
+
+/* Prose inside a card. NOT `.eyebrow`, which is a 12px uppercase green LABEL:
+   a paragraph set in it reads as shouting, and several pages were doing exactly
+   that to their explanatory text. */
+.card-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.card-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+/* The headline figure on a card.
+   `.metric-value` was used on several pages and defined on none of them, so the
+   most important number — an assessment score, a mentorship rating — rendered
+   at 16px regular: smaller and lighter than the heading above it. */
+.metric-value {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.metric-value.small {
+  font-size: 20px;
+}
+
+/* A grid of label/value facts. Neutral, because the visit and impact pages were
+   borrowing `.enterprise-figures` — a name from a different feature, which is
+   how a change to one page quietly restyles another. */
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 18px;
+}
+
+.fact .label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.fact .value {
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* Tables sit flush to the card edge, as they do elsewhere in the console, and
+   scroll inside their own box rather than pushing the page sideways. */
+.data-card > .data-table,
+.card-body > .data-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* A section's own score, beside its title. Not `.eyebrow` — that is a bright
+   green uppercase label, which is the wrong voice for a number and exactly the
+   wrong colour for a low one. */
+.section-score {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A question nobody answered. Deliberately muted rather than red: skipping is
+   not the same as answering "No", even though both score zero. */
+.unanswered-marker {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ---------------------------------------------------------------------------
+   Visit detail — the summary strip
+   ---------------------------------------------------------------------------
+   The page is a 5,600px column: visit facts, location, a 46-row scorecard, then
+   mentorship, amendments, the action plan and the evidence. Everything a reader
+   has to ACT on sat below the scorecard, so the four questions they arrive with
+   — did it score well, was it where it should have been, what is still owed, is
+   there anything to look at — each cost a scroll to answer.
+
+   The strip answers all four above the fold and links to the section, so the
+   long record stays intact underneath rather than being cut down. */
+
+.visit-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 12px;
+  margin: 16px 0 4px;
+}
+
+.visit-summary-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-theme-xs);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.visit-summary-tile:hover,
+.visit-summary-tile:focus-visible {
+  border-color: var(--green-dark);
+  box-shadow: var(--shadow-theme-md);
+  transform: translateY(-1px);
+}
+
+.visit-summary-tile .label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.visit-summary-tile strong {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.visit-summary-tile .note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Landing on an anchor must not tuck the heading under the sticky topbar. */
+#visit-assessment,
+#visit-location,
+#visit-actions,
+#visit-evidence {
+  scroll-margin-top: 88px;
+}
+
+/* ---------------------------------------------------------------------------
+   Score bar
+   ---------------------------------------------------------------------------
+   A percentage in text is read; a bar is seen. The colour follows the band, so
+   a weak section is recognisable before the number is read at all — which is
+   the whole job on a page carrying seven of them. */
+
+.score-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.score-bar-good { color: var(--green-dark); }
+.score-bar-fair { color: var(--green-700); }
+.score-bar-warn { color: var(--gold); }
+.score-bar-poor { color: var(--red); }
+
+/* What the agent wrote, given a box of its own. It used to be one more
+   `.card-note` paragraph among several, indistinguishable from the page's own
+   explanatory text — and it was ALSO repeated verbatim in a "Notes" card at the
+   bottom of the page. */
+.visit-notes {
+  margin-top: 12px;
+  border-left: 3px solid var(--green-dark);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-soft);
+  padding: 10px 14px;
+}
+
+.visit-notes .label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.visit-notes p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.fact-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* `.notice` is declared `font-weight: 800`, which is right for a one-line
+   warning and wrong for one that explains itself. A notice with a lead and a
+   list keeps the lead bold and sets the rest as body text. */
+.notice > strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.notice > ul {
+  margin: 0;
+  padding-left: 18px;
+  font-weight: 500;
+}
+
+.notice > ul li + li {
+  margin-top: 4px;
+}
+
+.notice > strong + :is(p, span, ul) {
+  font-weight: 500;
+}
+
+/* The scorecard's per-section disclosure.
+   Seven sections at six to eight questions each is 46 rows of table. Collapsed,
+   the card is a scannable list of seven bars; open, it is the full record. */
+.assessment-sections {
+  padding: 0 18px 6px;
+}
+
+.assessment-section .score-bar {
+  margin: 2px 0 8px;
+}
+
+.assessment-questions > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: var(--muted-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.assessment-questions > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A caret drawn in CSS rather than an icon import: it has to rotate on open,
+   and a border triangle does that without shipping a component. */
+.assessment-questions > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+
+.assessment-questions[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.assessment-questions > summary:hover,
+.assessment-questions > summary:focus-visible {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.assessment-questions > .data-table {
+  margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   Classes the console uses and no stylesheet declared
+   ---------------------------------------------------------------------------
+   An audit of every `className` in apps/web/src against the three stylesheets
+   found 178 names with no rule behind them. Most are harmless — a semantic
+   wrapper whose parent does the layout. These are the ones that were doing
+   visual work in the author's head and nothing on the screen.
+
+   Each was verified by rendering the page, not by reading the CSS. */
+
+/* Used as the root wrapper by 14 dashboard pages, and never defined — so every
+   card on those pages stacked flush against the one above it with no gap at
+   all. `.page-content` (the shell's own grid) has the 24px rhythm; a section
+   inside it had none. */
+.dashboard-section {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* 40 uses across 15 pages, defined nowhere. Every error a dashboard page
+   reported — including "Unable to load this visit." — rendered as a bare line
+   of body text, indistinguishable from the page's own prose. */
+.dashboard-notice {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 12px 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.dashboard-notice.error {
+  border-color: #e8bcbc;
+  border-left-color: var(--red);
+  background: var(--tint-danger);
+  color: var(--ink-danger);
+}
+
+.dashboard-notice.warning {
+  border-color: #ead6a8;
+  border-left-color: var(--gold);
+  background: var(--tint-warning);
+  color: var(--ink-warning);
+}
+
+.dashboard-notice.success {
+  border-color: #a9e8bf;
+  border-left-color: var(--green-dark);
+  background: var(--tint-positive);
+  color: var(--green-700);
+}
+
+/* `.button.subtle` is used 12 times — "Mark done" on the visit page among them
+   — and was never defined, so every one of them rendered as a full-weight
+   primary green button. A row of table actions competed with the page's real
+   call to action. */
+.button.subtle {
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  box-shadow: none;
+}
+
+.button.subtle:hover:not(:disabled) {
+  border-color: var(--green-dark);
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* Quieter still: a destructive or secondary row action that must be reachable
+   without inviting a click. */
+.button.quiet {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-strong);
+  box-shadow: none;
+}
+
+.button.quiet:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* Button rows under a form. Nine pages used one name, four used the other, and
+   neither existed, so the buttons sat hard against the last field. */
+.form-actions,
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* Defined in public-site.css only, but used 31 times inside the dashboard,
+   where that stylesheet does not reach — so a field meant to span its form's
+   grid took one column and the layout broke wherever it appeared. */
+.app-shell .wide-field {
+  grid-column: 1 / -1;
+}
+
+/* The console's form field: a label above its control. Every form that wanted
+   this wrote its own copy scoped to itself (`.intelliaudit-form label`,
+   `.assistant-compose label`, …), which is why a new form got nothing. */
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field > input,
+.field > select,
+.field > textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.field > textarea {
+  min-height: 62px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.field > input:focus-visible,
+.field > select:focus-visible,
+.field > textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--green-dark);
+}
+
+/* A card header that carries a control as well as a status pill. */
+.card-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The last column of a table, where the row's own controls live. Right-aligned
+   and never the column that grows when the table is short of width. */
+.data-table th.column-actions,
+.data-table td.column-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   Agreeing an action, from the console
+   ---------------------------------------------------------------------------
+   `POST /visits/:id/action-items` has existed since the action plan shipped and
+   had no caller in either client: the console could close an item and never
+   raise one. Anything a group agreed at a visit had to be remembered. */
+
+.action-form {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 16px 18px;
+}
+
+.action-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 12px 14px;
+  margin-top: 10px;
+}
+
+.action-form-wide {
+  grid-column: 1 / -1;
+}
+
+.action-form-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}

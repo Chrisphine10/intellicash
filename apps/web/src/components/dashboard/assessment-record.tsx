@@ -79,81 +79,190 @@ function choicePill(choice: QuestionResult["choice"]): string {
   return "pill blue";
 }
 
+/**
+ * Weakest first, and a section where nothing applied goes last.
+ *
+ * The template's own order is the order an agent answers in, which is right on
+ * the phone and wrong here: a reviewer is looking for what went badly, and
+ * putting Governance first every time makes them hunt for it.
+ */
+function bySeverityThenOrder(left: SectionResult, right: SectionResult): number {
+  if (left.percentage === null && right.percentage === null) {
+    return left.position - right.position;
+  }
+  if (left.percentage === null) return 1;
+  if (right.percentage === null) return -1;
+  if (left.percentage !== right.percentage) return left.percentage - right.percentage;
+  return left.position - right.position;
+}
+
+/** Bar colour, on the same thresholds the scorecard's own bands use. */
+function sectionTone(percentage: number): string {
+  if (percentage >= 80) return "score-bar-good";
+  if (percentage >= 60) return "score-bar-fair";
+  if (percentage >= 40) return "score-bar-warn";
+  return "score-bar-poor";
+}
+
+/** How many answers in a section are worth talking about at the next visit. */
+function countConcerns(section: SectionResult): number {
+  return section.questions.filter(
+    (question) => question.choice === "NO" || question.choice === "PARTIAL"
+  ).length;
+}
+
 export function AssessmentRecord({ assessment }: { assessment: AssessmentRecordData }) {
   const unanswered = assessment.breakdown.unansweredKeys.length;
 
   return (
     <article className="data-card">
-      <h3>Assessment</h3>
-      <p className="metric-value">
-        {assessment.earnedPoints} / {assessment.maxPoints}
-        {assessment.bandLabel ? ` · ${assessment.bandLabel}` : ""}
-      </p>
-      <p className="eyebrow">
-        {assessment.percentage}% · scorecard v{assessment.templateVersion}
-      </p>
+      <header>
+        <div>
+          <h3>Assessment</h3>
+          <span>Scorecard v{assessment.templateVersion}, as it was worded then</span>
+        </div>
+        {assessment.bandLabel ? (
+          <span className={assessment.complete ? "pill" : "pill gold"}>
+            {assessment.bandLabel}
+          </span>
+        ) : null}
+      </header>
 
-      {assessment.complete ? null : (
-        <p className="notice warning">
-          {unanswered} question{unanswered === 1 ? " was" : "s were"} left unanswered. Those
-          score zero and stay in the total, so this result reads lower than a finished one —
-          it is not comparable with a complete assessment.
+      <div className="card-body">
+        <div className="fact-grid">
+          <div className="fact">
+            <span className="label">Score</span>
+            <span className="value">
+              <span className="metric-value small">{assessment.percentage}%</span>
+            </span>
+          </div>
+          <div className="fact">
+            <span className="label">Points</span>
+            <span className="value">
+              {assessment.earnedPoints} of {assessment.applicablePoints} that applied
+            </span>
+          </div>
+          <div className="fact">
+            <span className="label">Full scale</span>
+            <span className="value">{assessment.maxPoints}</span>
+          </div>
+        </div>
+
+        <span
+          aria-hidden="true"
+          className={`score-bar ${sectionTone(assessment.percentage)}`}
+        >
+          <span
+            className="score-bar-fill"
+            style={{ width: `${Math.max(0, Math.min(100, assessment.percentage))}%` }}
+          />
+        </span>
+
+        {assessment.complete ? null : (
+          <p className="notice warning">
+            {unanswered} question{unanswered === 1 ? " was" : "s were"} left unanswered. Those
+            score zero and stay in the total, so this result reads lower than a finished one —
+            it is not comparable with a complete assessment.
+          </p>
+        )}
+
+        {assessment.bandGuidance ? (
+          <p className="card-note">{assessment.bandGuidance}</p>
+        ) : null}
+      </div>
+
+      {/* Section by section, then question by question.
+
+          The section that scored 40% is the conversation to have next time, and
+          a single total hides it. But seven sections at six to eight questions
+          each is 46 rows of table, which buried everything below this card and
+          made the weak section just as hard to find as it was in the total.
+
+          So the sections lead with a bar, WEAKEST FIRST, and the questions sit
+          behind a disclosure. Nothing is removed — a reader who wants the
+          wording of every question still has it, one click away. */}
+      <div className="assessment-sections">
+        <p className="card-note">
+          Weakest section first. Open one to read the questions as they were worded
+          at the time.
         </p>
-      )}
+        {[...assessment.breakdown.sections]
+          .sort(bySeverityThenOrder)
+          .map((section) => (
+            <section className="assessment-section" key={section.sectionKey}>
+              <header className="assessment-section-head">
+                <h4>{section.title}</h4>
+                {/* Not `.eyebrow`: that is a bright green uppercase label, which
+                    is the wrong voice for a score and the wrong colour for a
+                    low one. */}
+                <span className="section-score">
+                  {section.percentage === null
+                    ? "Nothing in this section applied"
+                    : `${Math.round(section.percentage)}% · ${section.earnedPoints} of ${section.applicablePoints} points`}
+                </span>
+              </header>
 
-      {assessment.bandGuidance ? <p className="eyebrow">{assessment.bandGuidance}</p> : null}
+              {section.percentage === null ? null : (
+                <span
+                  aria-hidden="true"
+                  className={`score-bar ${sectionTone(section.percentage)}`}
+                >
+                  <span
+                    className="score-bar-fill"
+                    style={{ width: `${Math.max(0, Math.min(100, section.percentage))}%` }}
+                  />
+                </span>
+              )}
 
-      {/* Section by section, then question by question. The section that scored
-          40% is the conversation to have next time; a single total hides it. */}
-      {[...assessment.breakdown.sections]
-        .sort((left, right) => left.position - right.position)
-        .map((section) => (
-          <section className="assessment-section" key={section.sectionKey}>
-            <header className="assessment-section-head">
-              <h4>{section.title}</h4>
-              <span className="eyebrow">
-                {section.percentage === null
-                  ? "Nothing in this section applied"
-                  : `${Math.round(section.percentage)}% · ${section.earnedPoints} of ${section.applicablePoints} points`}
-              </span>
-            </header>
+              <details className="assessment-questions">
+                <summary>
+                  {section.questions.length} question
+                  {section.questions.length === 1 ? "" : "s"}
+                  {countConcerns(section) > 0
+                    ? ` · ${countConcerns(section)} answered No or Partly`
+                    : ""}
+                </summary>
 
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Question</th>
-                  <th>Answer</th>
-                  <th>Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {section.questions.map((question) => (
-                  <tr key={question.questionKey}>
-                    <td>
-                      {/* The prompt as it was worded at the time. */}
-                      {question.prompt}
-                      {question.note ? (
-                        <p className="eyebrow">Agent&apos;s note: {question.note}</p>
-                      ) : null}
-                    </td>
-                    <td>
-                      {question.answered ? (
-                        <span className={choicePill(question.choice)}>
-                          {CHOICE_LABEL[question.choice ?? ""] ?? "—"}
-                        </span>
-                      ) : (
-                        <span className="eyebrow">Not answered</span>
-                      )}
-                    </td>
-                    <td>
-                      {question.excluded ? "—" : `${question.earnedPoints} / ${question.weight}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        ))}
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Question</th>
+                      <th>Answer</th>
+                      <th>Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.questions.map((question) => (
+                      <tr key={question.questionKey}>
+                        <td>
+                          {/* The prompt as it was worded at the time. */}
+                          {question.prompt}
+                          {question.note ? (
+                            <p className="card-note">Agent&apos;s note: {question.note}</p>
+                          ) : null}
+                        </td>
+                        <td>
+                          {question.answered ? (
+                            <span className={choicePill(question.choice)}>
+                              {CHOICE_LABEL[question.choice ?? ""] ?? "—"}
+                            </span>
+                          ) : (
+                            <span className="unanswered-marker">Not answered</span>
+                          )}
+                        </td>
+                        <td>
+                          {question.excluded
+                            ? "—"
+                            : `${question.earnedPoints} / ${question.weight}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            </section>
+          ))}
+      </div>
     </article>
   );
 }

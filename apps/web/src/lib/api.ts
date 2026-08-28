@@ -276,6 +276,52 @@ export function formatKes(cents: number) {
   }).format(cents / 100);
 }
 
+/**
+ * Dates, formatted the same way everywhere.
+ *
+ * 23 places called `toLocaleDateString()` with no locale, so the console showed
+ * whatever the reader's browser felt like. On a US-locale machine that renders
+ * 14 August 2026 as "8/14/2026", which a Kenyan reader parses as 8 April. Ten
+ * other places passed "en-KE" and got "14/08/2026". Same product, three
+ * formats, one of them actively misleading.
+ *
+ * The month is spelled, so there is no order to get wrong. `undefined` and an
+ * unparseable value both give an em dash rather than "Invalid Date" -- a field
+ * that was never filled in is ordinary, and should look ordinary.
+ */
+const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric"
+});
+
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false
+});
+
+function parseDate(value: string | number | Date | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** `14 Aug 2026`, or an em dash when there is no date. */
+export function formatDate(value: string | number | Date | null | undefined) {
+  const date = parseDate(value);
+  return date ? DATE_FORMAT.format(date) : "—";
+}
+
+/** `14 Aug 2026, 11:20`, or an em dash when there is no date. */
+export function formatDateTime(value: string | number | Date | null | undefined) {
+  const date = parseDate(value);
+  return date ? DATE_TIME_FORMAT.format(date) : "—";
+}
+
 export function humanizeEnum(value: string) {
   return value
     .split("_")

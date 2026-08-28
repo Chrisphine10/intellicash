@@ -10,6 +10,18 @@ export default defineConfig({
       "@": resolve(rootDir, "src")
     }
   },
+  /*
+   * The automatic JSX runtime, as Next itself compiles.
+   *
+   * tsconfig says `"jsx": "preserve"` because Next owns that transform, and
+   * with no React plugin here Vite fell back to esbuild's CLASSIC runtime --
+   * `React.createElement`. A page that does not import React by name therefore
+   * threw "React is not defined" the moment a test rendered it, which is why
+   * the suite only ever covered the pages that happened to import it. That is
+   * a property of the test setup, not of the page.
+   */
+  esbuild: { jsx: "automatic" },
+
   test: {
     environment: "jsdom",
     globals: true,
