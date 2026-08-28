@@ -502,7 +502,11 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
               <p className="notice">
                 {/* An explanation, not evidence. The server's own distance
                     calculation is the signal; this says why it may look wrong. */}
-                <strong>The agent&apos;s explanation.</strong> {visit.location.note}
+                <strong>The agent&apos;s explanation</strong>
+                {/* A span, not a bare text node: `.notice` sets font-weight 800
+                    for one-line warnings, and the rule that returns the body to
+                    normal weight can only match an element. */}
+                <span>{visit.location.note}</span>
               </p>
             ) : null}
 
