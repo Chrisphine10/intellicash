@@ -4,7 +4,7 @@ import React from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Activity } from "@/lib/theme-icons";
-import { apiFetch, formatKes } from "../../../../../lib/api";
+import { apiFetch, formatDate, formatKes } from "../../../../../lib/api";
 
 /**
  * Saving cycles.
@@ -123,8 +123,8 @@ export default function GroupCyclesPage({ params }: { params: Promise<{ id: stri
               <div>
                 <h3>Cycle {cycle.number}</h3>
                 <p>
-                  Started {new Date(cycle.startedAt).toLocaleDateString()}
-                  {cycle.closedAt ? ` · closed ${new Date(cycle.closedAt).toLocaleDateString()}` : ""}
+                  Started {formatDate(cycle.startedAt)}
+                  {cycle.closedAt ? ` · closed ${formatDate(cycle.closedAt)}` : ""}
                 </p>
               </div>
               <span className={`pill ${cycle.editable ? "" : "muted"}`}>

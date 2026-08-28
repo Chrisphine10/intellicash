@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Trash2
 } from "@/lib/theme-icons";
-import { API_BASE_URL, apiFetch, humanizeEnum } from "../../../lib/api";
+import { API_BASE_URL, apiFetch, formatDateTime, humanizeEnum } from "../../../lib/api";
 import {
   allMobileApiEndpoints,
   buildMobileOpenApiSpec,
@@ -25,7 +25,7 @@ import type { ApiKeyCreated, ApiKeyPreset, ApiKeyRow, User } from "../../../comp
 
 function formatDate(value?: string | null) {
   if (!value) return "Never";
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function downloadJson(fileName: string, payload: unknown) {

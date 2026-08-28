@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, UserCog } from "@/lib/theme-icons";
-import { apiFetch } from "../../../../../lib/api";
+import { apiFetch, formatDate } from "../../../../../lib/api";
 
 /**
  * Who holds which office, and who held it before.
@@ -57,10 +57,6 @@ const SINGLETON_OFFICES = new Set(["CHAIRPERSON", "SECRETARY", "TREASURER"]);
 
 function officeLabel(role: string) {
   return OFFICES[role] ?? role;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString();
 }
 
 export default function GroupOfficialsPage({ params }: { params: Promise<{ id: string }> }) {

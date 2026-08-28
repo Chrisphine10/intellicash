@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ClipboardList } from "@/lib/theme-icons";
-import { apiFetch, humanizeEnum } from "../../../../../lib/api";
+import { apiFetch, formatDate, humanizeEnum } from "../../../../../lib/api";
 
 /**
  * A group's document register.
@@ -145,7 +145,7 @@ export default function GroupDocumentsPage({ params }: { params: Promise<{ id: s
                 <td>
                   {doc.expiresOn ? (
                     <>
-                      {new Date(doc.expiresOn).toLocaleDateString()}
+                      {formatDate(doc.expiresOn)}
                       {doc.daysUntilExpiry !== null && doc.daysUntilExpiry < 0 ? (
                         <div className="eyebrow">{Math.abs(doc.daysUntilExpiry)} days ago</div>
                       ) : doc.daysUntilExpiry !== null ? (

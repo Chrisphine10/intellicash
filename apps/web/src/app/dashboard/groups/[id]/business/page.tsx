@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2 } from "@/lib/theme-icons";
-import { apiFetch } from "../../../../../lib/api";
+import { apiFetch, formatDate } from "../../../../../lib/api";
 
 /**
  * The businesses a group runs.
@@ -307,7 +307,7 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
           </div>
 
           <h4>Market coverage</h4>
-          <p className="eyebrow">
+          <p className="card-note">
             How far what they produce actually travels, and to how many buyers. Revenue
             rising against a single buyer is growth and concentration at the same time, and
             only one of those is good news.
@@ -415,7 +415,7 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
               rows={2}
               value={form.supportNeeded}
             />
-            <span className="eyebrow">
+            <span className="card-note">
               Use the support-need list below for anything that should be counted across the
               programme. This box is for what the list could not hold.
             </span>
@@ -550,19 +550,19 @@ function EnterpriseCard({
       ) : null}
 
       {enterprise.salesMonths.length > 0 && enterprise.salesMonths.length < 12 ? (
-        <p className="eyebrow">
+        <p className="card-note">
           Sells in {enterprise.salesMonths.map((month) => MONTHS[month - 1]).join(", ")}. A
           quiet month outside that season is not a fall.
         </p>
       ) : null}
 
       {enterprise.mainChallenge ? (
-        <p className="eyebrow">Biggest challenge: {enterprise.mainChallenge}</p>
+        <p className="card-note">Biggest challenge: {enterprise.mainChallenge}</p>
       ) : null}
 
       <h4>Support needed</h4>
       {enterprise.supportNeeds.length === 0 ? (
-        <p className="eyebrow">Nothing recorded against this enterprise yet.</p>
+        <p className="card-note">Nothing recorded against this enterprise yet.</p>
       ) : (
         <table className="data-table">
           <thead>
@@ -660,7 +660,7 @@ function EnterpriseCard({
             <tbody>
               {chronological.map((row) => (
                 <tr key={row.visitId ?? row.recordedAt}>
-                  <td>{new Date(row.recordedAt).toLocaleDateString()}</td>
+                  <td>{formatDate(row.recordedAt)}</td>
                   <td>{money(row.monthlyRevenueCents)}</td>
                   <td>{money(row.monthlyCostsCents)}</td>
                   <td>{row.marketReachLabel ?? "—"}</td>

@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, HeartHandshake } from "@/lib/theme-icons";
-import { apiFetch, formatKes } from "../../../../../lib/api";
+import { apiFetch, formatDate, formatKes } from "../../../../../lib/api";
 
 /**
  * Welfare spending.
@@ -187,7 +187,7 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
               <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
                 {openMeetings.map((meeting) => (
                   <option key={meeting.id} value={meeting.id}>
-                    {meeting.title} — {new Date(meeting.scheduledAt).toLocaleDateString()}
+                    {meeting.title} — {formatDate(meeting.scheduledAt)}
                   </option>
                 ))}
               </select>
@@ -258,7 +258,7 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
                 <strong>{formatKes(expense.ledgerEntry.amountCents)}</strong> ·{" "}
                 {expense.category.charAt(0) + expense.category.slice(1).toLowerCase()} ·{" "}
                 {expense.payeeMember?.fullName ?? expense.payeeName ?? "unrecorded payee"} ·{" "}
-                {new Date(expense.ledgerEntry.createdAt).toLocaleDateString()}
+                {formatDate(expense.ledgerEntry.createdAt)}
                 {expense.note ? ` — ${expense.note}` : ""}
               </li>
             ))}

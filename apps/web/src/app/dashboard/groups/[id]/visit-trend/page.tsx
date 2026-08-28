@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, TrendingUp } from "@/lib/theme-icons";
-import { apiFetch, humanizeEnum } from "../../../../../lib/api";
+import { apiFetch, formatDate, humanizeEnum } from "../../../../../lib/api";
 
 /**
  * How a group has scored across visits.
@@ -124,7 +124,7 @@ export default function GroupVisitTrendPage({ params }: { params: Promise<{ id: 
                 {[...data.overall].reverse().map((point, index) => (
                   <tr key={`${point.visitedAt ?? "unknown"}-${index}`}>
                     <td>
-                      {point.visitedAt ? new Date(point.visitedAt).toLocaleDateString() : "Undated"}
+                      {point.visitedAt ? formatDate(point.visitedAt) : "Undated"}
                     </td>
                     <td>{point.percentage === null ? "—" : `${point.percentage}%`}</td>
                     <td>

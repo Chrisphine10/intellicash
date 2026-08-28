@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, CheckCircle2, MapPinned, ShieldCheck } from "@/lib/theme-icons";
-import { apiFetch, humanizeEnum } from "../../../lib/api";
+import { apiFetch, formatDateTime, humanizeEnum } from "../../../lib/api";
 import { DataTable } from "../../../components/dashboard/data-table";
 import { StatCard } from "../../../components/dashboard/stat-card";
 
@@ -43,7 +43,7 @@ type VisitRow = {
 function formatDate(value: string | null) {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+  return formatDateTime(date);
 }
 
 /** Metres, rounded to something a person reads rather than 38.42917. */

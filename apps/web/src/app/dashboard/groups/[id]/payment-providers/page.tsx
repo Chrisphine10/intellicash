@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Banknote } from "@/lib/theme-icons";
-import { apiFetch, humanizeEnum } from "../../../../../lib/api";
+import { apiFetch, formatDate, humanizeEnum } from "../../../../../lib/api";
 
 /**
  * Where a group's collections land.
@@ -190,7 +190,7 @@ export default function GroupPaymentProvidersPage({ params }: { params: Promise<
                   {config.configured
                     ? `Using this group's own account${
                         config.credentialsUpdatedAt
-                          ? ` · updated ${new Date(config.credentialsUpdatedAt).toLocaleDateString()}`
+                          ? ` · updated ${formatDate(config.credentialsUpdatedAt)}`
                           : ""
                       }`
                     : "Using the platform's account"}

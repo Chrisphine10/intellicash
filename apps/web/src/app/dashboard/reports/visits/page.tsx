@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BarChart3 } from "@/lib/theme-icons";
-import { apiFetch } from "../../../../lib/api";
+import { apiFetch, formatDate } from "../../../../lib/api";
 
 /**
  * What the visits programme is actually doing.
@@ -249,7 +249,7 @@ export default function VisitsReportPage() {
                   </td>
                   <td>{group.county ?? "—"}</td>
                   <td>
-                    {group.lastVisitAt ? new Date(group.lastVisitAt).toLocaleDateString() : "—"}
+                    {formatDate(group.lastVisitAt)}
                   </td>
                   <td>
                     <span className="pill red">{group.daysSinceVisit}</span>

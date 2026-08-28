@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BarChart3 } from "@/lib/theme-icons";
-import { apiFetch } from "../../../../lib/api";
+import { apiFetch, formatDateTime } from "../../../../lib/api";
 
 /**
  * Monitoring, evaluation, accountability and learning.
@@ -160,8 +160,14 @@ export default function MealReportPage() {
       {/* Outcomes first: the average can hide a programme where half the groups
           are going backwards, so the direction of travel is shown beside it. */}
       <article className="data-card">
-        <h3>Where the groups are heading</h3>
-        <div className="enterprise-figures">
+        <header>
+          <div>
+            <h3>Where the groups are heading</h3>
+            <span>Direction of travel, which an average hides</span>
+          </div>
+        </header>
+        <div className="card-body">
+        <div className="fact-grid">
           <Movement label="Improved" value={report.assessmentMovement.improved} tone="improved" />
           <Movement label="No change" value={report.assessmentMovement.unchanged} tone="flat" />
           <Movement label="Declined" value={report.assessmentMovement.declined} tone="worsened" />
@@ -177,12 +183,13 @@ export default function MealReportPage() {
             tone="unknown"
           />
         </div>
-        <p className="meal-note">
+        <p className="card-note">
           &ldquo;Not comparable&rdquo; means the group was assessed on two different
           scorecard versions. Those two numbers are not the same measurement, so they are
           excluded rather than averaged — counting them would read a re-worded question as
           the group improving.
         </p>
+        </div>
       </article>
 
       {levels.map((level) => {
@@ -191,21 +198,34 @@ export default function MealReportPage() {
 
         return (
           <article className="data-card" key={level}>
-            <h3>{LEVEL_TITLE[level]}</h3>
-            <p className="eyebrow">{LEVEL_BLURB[level]}</p>
-            <div className="meal-grid">
-              {rows.map((row) => (
-                <IndicatorCard indicator={row} key={row.definition.key} />
-              ))}
+            <header>
+              <div>
+                <h3>{LEVEL_TITLE[level]}</h3>
+                <span>{LEVEL_BLURB[level]}</span>
+              </div>
+              <span className="pill blue">{rows.length}</span>
+            </header>
+            <div className="card-body">
+              <div className="meal-grid">
+                {rows.map((row) => (
+                  <IndicatorCard indicator={row} key={row.definition.key} />
+                ))}
+              </div>
             </div>
           </article>
         );
       })}
 
       <article className="data-card">
-        <h3>What groups are asking for</h3>
-        <p className="eyebrow">
-          Ranked by how often it is named. This list is only possible because needs are
+        <header>
+          <div>
+            <h3>What groups are asking for</h3>
+            <span>Ranked by how often it is named</span>
+          </div>
+          <span className="pill">{report.supportNeeds.total}</span>
+        </header>
+        <p className="card-note" style={{ padding: "14px 20px 0" }}>
+          This list is only possible because needs are
           recorded against a fixed list rather than typed as sentences — the same need
           written twelve ways cannot be counted.
         </p>
@@ -240,12 +260,18 @@ export default function MealReportPage() {
       </article>
 
       <article className="data-card">
-        <h3>What agents coached on</h3>
+        <header>
+          <div>
+            <h3>What agents coached on</h3>
+            <span>Topics delivered, and who rated them</span>
+          </div>
+          <span className="pill blue">{report.mentorship.sessions}</span>
+        </header>
         {report.mentorship.sessions === 0 ? (
           <p className="empty-state">No mentorship recorded yet.</p>
         ) : (
           <>
-            <p className="eyebrow">
+            <p className="card-note" style={{ padding: "14px 20px 0" }}>
               {report.mentorship.sessions} session
               {report.mentorship.sessions === 1 ? "" : "s"} ·{" "}
               {report.mentorship.ratingsFromGroup} of {report.mentorship.ratingsTotal} ratings
@@ -274,8 +300,11 @@ export default function MealReportPage() {
       </article>
 
       <article className="data-card">
-        <header className="enterprise-head">
-          <h3>How these figures are worked out</h3>
+        <header>
+          <div>
+            <h3>How these figures are worked out</h3>
+            <span>Definitions travel with the figures</span>
+          </div>
           <button
             className="button secondary"
             onClick={() => setShowMethod((current) => !current)}
@@ -284,10 +313,9 @@ export default function MealReportPage() {
             {showMethod ? "Hide" : "Show"}
           </button>
         </header>
-        <p className="eyebrow">
-          Definitions travel with the figures. An indicator without a written definition
-          gets redefined by whoever reads it next, and two people then quote the same name
-          for two different things.
+        <p className="card-note" style={{ padding: "14px 20px 0" }}>
+          An indicator without a written definition gets redefined by whoever reads it
+          next, and two people then quote the same name for two different things.
         </p>
         {showMethod ? (
           <table className="data-table">
@@ -311,7 +339,7 @@ export default function MealReportPage() {
         ) : null}
         <p className="meal-note">
           Method version {report.contractVersion} · figures as at{" "}
-          {new Date(report.generatedAt).toLocaleString()} · an assessment counts as current
+          {formatDateTime(report.generatedAt)} · an assessment counts as current
           for {report.scope.freshnessDays} days.
         </p>
       </article>
@@ -321,7 +349,7 @@ export default function MealReportPage() {
 
 function Movement({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="enterprise-figure">
+    <div className="fact">
       <span className="label">{label}</span>
       <span className={`value meal-movement ${tone}`}>{value}</span>
     </div>

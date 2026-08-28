@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ClipboardList } from "@/lib/theme-icons";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, formatDate } from "../../../lib/api";
 
 /**
  * The versions of the field scorecard.
@@ -116,7 +116,7 @@ export default function AssessmentTemplatesPage() {
                 <td>{template.assessmentCount}</td>
                 <td>
                   {template.publishedAt
-                    ? new Date(template.publishedAt).toLocaleDateString()
+                    ? formatDate(template.publishedAt)
                     : "—"}
                 </td>
                 <td>
