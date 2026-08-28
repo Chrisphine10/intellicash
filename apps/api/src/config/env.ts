@@ -25,7 +25,23 @@ function envBoolean(defaultValue: boolean) {
 const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   API_PORT: z.coerce.number().default(4000),
-  DATABASE_URL: z.string().default("file:./dev.db"),
+  /**
+   * The default carries `connection_limit=1`, and that is the point of it.
+   *
+   * SQLite takes one writer at a time. Prisma's default pool is
+   * `cpus * 2 + 1` connections, so on a two-core CI runner five of them queue
+   * on the same file lock and a `create` inside the seed can sit past the
+   * 10-second pool timeout — which surfaces as `P1008 Socket timeout` on a
+   * test that passes every time locally. It failed a production deploy on
+   * 28 Aug 2026, in `meeting-commitments`, having never failed on a
+   * developer machine.
+   *
+   * One connection serialises the writes in the pool instead of in the file
+   * lock, where they cannot time out. This is the default only: every
+   * deployment sets DATABASE_URL explicitly, so this reaches CI, the test
+   * suite and local development, and changes nothing in production.
+   */
+  DATABASE_URL: z.string().default("file:./dev.db?connection_limit=1"),
   /**
    * Where uploaded files live. Empty means "derive from DATABASE_URL" — see
    * `lib/uploads.ts`. Set this explicitly to put evidence on its own volume.
