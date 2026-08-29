@@ -1,21 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";
-import { decryptCredentials } from "./integration-credentials";
 import { maskPhone } from "./member-pin-service";
-import {
-  bongaSmsRequiredCredentialKeys,
-  combineBongaSmsCredentials,
-  sendSms,
-  type SmsProvider
-} from "./sms-service";
-
-const smsProviders = ["BONGA_SMS", "AFRICAS_TALKING"] as const satisfies SmsProvider[];
-const africasTalkingCredentialKeys = [
-  "AFRICASTALKING_USERNAME",
-  "AFRICASTALKING_API_KEY",
-  "AFRICASTALKING_SENDER_ID"
-];
+import { isSmsProvider, resolveSmsProvider } from "./sms-provider";
+import { sendSms, type SmsProvider } from "./sms-service";
 
 const broadcastInclude = {
   recipients: { orderBy: { createdAt: "asc" } }
@@ -48,48 +36,12 @@ type BroadcastRecipientTarget = {
   phone: string;
 };
 
-function isSmsProvider(provider: string): provider is SmsProvider {
-  return provider === "BONGA_SMS" || provider === "AFRICAS_TALKING";
-}
-
 function broadcastStatus(counts: { recipientCount: number; queuedCount: number; sentCount: number; failedCount: number }) {
   if (counts.recipientCount === 0) return "FAILED";
   if (counts.sentCount === counts.recipientCount) return "SENT";
   if (counts.failedCount === counts.recipientCount) return "FAILED";
   if (counts.sentCount > 0 || counts.failedCount > 0) return "PARTIAL";
   return "QUEUED";
-}
-
-async function credentialsFor(provider: SmsProvider) {
-  const config = await prisma.integrationConfig.findUnique({
-    where: { provider },
-    select: { credentialsJson: true }
-  });
-  const storedCredentials = decryptCredentials(config?.credentialsJson);
-
-  if (provider === "BONGA_SMS") return combineBongaSmsCredentials(storedCredentials);
-
-  return Object.fromEntries(
-    africasTalkingCredentialKeys
-      .map((key) => [key, storedCredentials[key] || process.env[key]])
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
-  );
-}
-
-function requiredCredentialKeys(provider: SmsProvider) {
-  return provider === "BONGA_SMS" ? [...bongaSmsRequiredCredentialKeys] : africasTalkingCredentialKeys;
-}
-
-async function resolveSmsProvider(provider?: SmsProvider) {
-  const providers = provider ? [provider] : smsProviders;
-
-  for (const candidate of providers) {
-    const credentials = await credentialsFor(candidate);
-    const configured = requiredCredentialKeys(candidate).every((key) => credentials[key] || process.env[key]);
-    if (configured) return { provider: candidate, credentials };
-  }
-
-  throw new ApiHttpError(400, "SMS_PROVIDER_NOT_CONFIGURED", "No configured SMS provider is ready for broadcasts.");
 }
 
 async function resolveRecipients(input: Pick<CreateSmsBroadcastInput, "targetType" | "groupId" | "memberId">) {

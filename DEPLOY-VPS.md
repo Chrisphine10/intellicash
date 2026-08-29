@@ -139,6 +139,32 @@ rather than the HTTP code — the endpoint answers 200 for both:
 curl -s -X POST http://167.172.14.50:4002/v1/send-sms -F apiClientID=... -F key=... -F secret=... -F serviceID=5843 -F MSISDN=2547XXXXXXXX -F txtMessage='test'
 ```
 
+### What the platform texts, and to whom
+
+| Message | Trigger | Gate |
+|---|---|---|
+| Default meeting PIN | A member's PIN is generated | always |
+| Meeting OTP | A member requests an online unlock code | always |
+| Share purchase confirmation | A `SHARE_PURCHASE` is posted at a meeting | `GroupPolicy.smsSharePurchaseEnabled` |
+| Per-member meeting summary | A meeting is sealed | `GroupPolicy.smsMeetingSummaryEnabled` |
+| Manual broadcast | An admin sends one from Dashboard -> SMS | always |
+
+The last two are **off for every group until someone turns them on**, per group,
+under Dashboard -> Groups -> *group* -> Policy. That is a cost decision as much
+as a privacy one: a 30-member group sealing a monthly meeting is 30 summaries,
+plus one text per share purchase, and the content is a member's own financial
+position going to a handset that is often shared at home.
+
+Automatic sends are recorded in `SmsBroadcast` alongside manual ones and show up
+on the same console page, tagged by `kind`. A member with a blank or malformed
+phone number is recorded FAILED with the reason rather than being handed to the
+provider, so imported rows with no number are visible instead of silently
+absent.
+
+Neither can fail the thing that triggered it. Both run after the HTTP response
+and swallow their own errors: a sealed meeting is sealed whether or not Bonga
+answered.
+
 ## Health endpoint
 
 `GET /health` — **not** `/api/v1/health`, which returns the web app's 404 page.

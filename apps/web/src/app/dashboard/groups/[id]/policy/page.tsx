@@ -20,6 +20,8 @@ interface Policy {
   defaultLoanTermMonths: number;
   expenseFundType: string;
   loanInterestRateBps: number;
+  smsSharePurchaseEnabled: boolean;
+  smsMeetingSummaryEnabled: boolean;
   configured: boolean;
   updatedAt: string | null;
 }
@@ -45,6 +47,8 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
   // Held as a PERCENTAGE, because nobody running a group thinks in basis
   // points. Converted at the boundary, once.
   const [ratePercent, setRatePercent] = useState("");
+  const [smsShares, setSmsShares] = useState(false);
+  const [smsSummary, setSmsSummary] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +60,8 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
     setTerm(String(response.policy.defaultLoanTermMonths));
     setFund(response.policy.expenseFundType);
     setRatePercent(String(response.policy.loanInterestRateBps / 100));
+    setSmsShares(response.policy.smsSharePurchaseEnabled);
+    setSmsSummary(response.policy.smsMeetingSummaryEnabled);
   }
 
   useEffect(() => {
@@ -76,7 +82,9 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
           defaultLoanTermMonths: Number(term),
           expenseFundType: fund,
           // Rounded, not truncated: 1.005% must not silently become 100 bps.
-          loanInterestRateBps: Math.round(Number(ratePercent) * 100)
+          loanInterestRateBps: Math.round(Number(ratePercent) * 100),
+          smsSharePurchaseEnabled: smsShares,
+          smsMeetingSummaryEnabled: smsSummary
         })
       });
       await load();
@@ -186,6 +194,48 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
               ))}
             </select>
           </label>
+
+          <fieldset className="policy-sms">
+            <legend>Text members</legend>
+            <p className="dashboard-notice">
+              Both are off unless a group asks for them. Every message spends SMS credits — a
+              30-member group is 30 summaries per meeting — and a member&apos;s own figures go to a
+              handset that is often shared at home. Turn them on for groups that want them, not by
+              default.
+            </p>
+
+            <label className="checkbox-field">
+              <input
+                checked={smsShares}
+                disabled={!data.canConfigure || saving}
+                onChange={(event) => setSmsShares(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>When a member buys shares</strong>
+                <small>
+                  One text per purchase, with the amount and their running total for the cycle. A
+                  member who did not buy shares learns the same day that the books say they did.
+                </small>
+              </span>
+            </label>
+
+            <label className="checkbox-field">
+              <input
+                checked={smsSummary}
+                disabled={!data.canConfigure || saving}
+                onChange={(event) => setSmsSummary(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>When a meeting is closed</strong>
+                <small>
+                  Every active member gets their own transactions for that meeting, and their loan
+                  balance if they owe anything. Members with nothing recorded are told exactly that.
+                </small>
+              </span>
+            </label>
+          </fieldset>
 
           {data.canConfigure ? (
             <div className="form-actions">

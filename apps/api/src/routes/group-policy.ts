@@ -26,7 +26,19 @@ export const POLICY_DEFAULTS = {
    * unconfigured group's members money their constitution never agreed to.
    * Lending interest-free by default invents no debt.
    */
-  loanInterestRateBps: 0
+  loanInterestRateBps: 0,
+  /**
+   * Both off. A group opts in to being texted.
+   *
+   * Each message spends the platform's SMS credits, a monthly meeting of 30
+   * members is 30 summaries plus a confirmation per share purchase, and the
+   * content is a member's own financial position going to a handset that is
+   * frequently shared in a household. Defaulting these on would start
+   * spending money and disclosing balances for every group on the platform
+   * the moment the feature deployed.
+   */
+  smsSharePurchaseEnabled: false,
+  smsMeetingSummaryEnabled: false
 } as const;
 
 /** Which funds an expense may legitimately be drawn from. */
@@ -47,6 +59,9 @@ export async function policyFor(groupId: string) {
     defaultLoanTermMonths: row?.defaultLoanTermMonths ?? POLICY_DEFAULTS.defaultLoanTermMonths,
     expenseFundType: row?.expenseFundType ?? POLICY_DEFAULTS.expenseFundType,
     loanInterestRateBps: row?.loanInterestRateBps ?? POLICY_DEFAULTS.loanInterestRateBps,
+    smsSharePurchaseEnabled: row?.smsSharePurchaseEnabled ?? POLICY_DEFAULTS.smsSharePurchaseEnabled,
+    smsMeetingSummaryEnabled:
+      row?.smsMeetingSummaryEnabled ?? POLICY_DEFAULTS.smsMeetingSummaryEnabled,
     /** False when the group is running on defaults — useful to a UI. */
     configured: Boolean(row),
     updatedByUserId: row?.updatedByUserId ?? null,
@@ -106,7 +121,10 @@ const updateSchema = z.object({
   // (1000). The ceiling is deliberate: a typo of 10000 for "10%" would charge
   // 100% a month and, on a flat rate over a 12-month term, bill a member
   // twelve times what they borrowed.
-  loanInterestRateBps: z.number().int().min(0).max(2000).optional()
+  loanInterestRateBps: z.number().int().min(0).max(2000).optional(),
+  // Outbound member SMS. See POLICY_DEFAULTS for why both start off.
+  smsSharePurchaseEnabled: z.boolean().optional(),
+  smsMeetingSummaryEnabled: z.boolean().optional()
 });
 
 groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), async (req, res, next) => {
@@ -134,7 +152,16 @@ groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), asy
       message:
         `Saved. New loans default to ${policy.defaultLoanTermMonths} month(s) at ` +
         `${(policy.loanInterestRateBps / 100).toFixed(2)}% a month; ` +
-        `existing loans keep the term and rate they were agreed with.`
+        `existing loans keep the term and rate they were agreed with.` +
+        (policy.smsSharePurchaseEnabled || policy.smsMeetingSummaryEnabled
+          ? ` Members will now be texted${
+              policy.smsSharePurchaseEnabled && policy.smsMeetingSummaryEnabled
+                ? " when they buy shares and when a meeting closes"
+                : policy.smsSharePurchaseEnabled
+                  ? " when they buy shares"
+                  : " when a meeting closes"
+            }; each message costs SMS credits.`
+          : "")
     });
   } catch (error) {
     next(error);

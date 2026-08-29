@@ -1440,7 +1440,20 @@ model SmsBroadcast {
   targetType        String
   targetGroupId     String?
   targetMemberId    String?
+
+  /// What raised this send: MANUAL (an admin typed it), SHARE_PURCHASE, or
+  /// MEETING_SUMMARY. Automatic sends land in the same table as manual ones so
+  /// there is one place to answer "what did we text this group, and did it
+  /// arrive" — but an operator still has to be able to tell them apart.
+  kind String @default("MANUAL")
+
+  /// The meeting a SHARE_PURCHASE or MEETING_SUMMARY send came out of.
+  meetingId String?
+
   provider          String
+
+  /// The body every recipient got, for a send where that is one message.
+  /// A per-member summary overrides it on the recipient row.
   message           String
   status            String   @default("QUEUED")
   recipientCount    Int      @default(0)
@@ -1456,6 +1469,8 @@ model SmsBroadcast {
   @@index([targetType, createdAt])
   @@index([targetGroupId, createdAt])
   @@index([targetMemberId, createdAt])
+  @@index([kind, createdAt])
+  @@index([meetingId])
 }
 
 model SmsBroadcastRecipient {
@@ -1465,6 +1480,12 @@ model SmsBroadcastRecipient {
   groupId           String?
   memberName        String
   phone             String
+
+  /// This recipient's own message, when it differs per person — a meeting
+  /// summary tells each member what THEY transacted. Null means "the
+  /// broadcast's shared message", which is every manual send.
+  message           String?
+
   provider          String
   status            String    @default("QUEUED")
   providerReference String?
@@ -1666,6 +1687,18 @@ model GroupPolicy {
   /// typical VSLA rate here would silently charge members money their
   /// constitution never agreed to. 1000 = 10% a month, the common VSLA figure.
   loanInterestRateBps Int @default(0)
+
+  /// Text a member when their share purchase is recorded at a meeting.
+  ///
+  /// Off by default, and deliberately. Every message costs the platform's SMS
+  /// credits, a 30-member group buying shares at a monthly meeting is 30 texts
+  /// a month per group, and a member's holding is their own financial
+  /// information going to a handset that is often shared. A group opts in.
+  smsSharePurchaseEnabled Boolean @default(false)
+
+  /// Text every member their own transactions once the meeting is sealed.
+  /// Off by default for the same reasons.
+  smsMeetingSummaryEnabled Boolean @default(false)
 
   updatedByUserId String?
   createdAt       DateTime @default(now())

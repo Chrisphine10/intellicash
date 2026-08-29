@@ -28,16 +28,29 @@ const memberPinLength = 4;
  */
 const memberOtpLength = 6;
 const memberOtpTtlMinutes = 15;
-const memberPinDeliveryProvider = "AFRICAS_TALKING";
+/**
+ * Where a PIN or OTP goes when no provider is configured at all.
+ *
+ * Bonga, because it is the live account: a delivery queued before the
+ * credentials were saved is then sendable by `sendQueuedMemberPinDelivery` the
+ * moment they arrive. Pointing the fallback at a provider nobody has set up
+ * stranded those rows permanently.
+ */
+const memberPinDeliveryProvider = "BONGA_SMS";
 const memberPinSmsProviders = ["BONGA_SMS", "AFRICAS_TALKING"] as const;
-const bongaMemberPinDeliveryKeys = [
-  ...bongaSmsRequiredCredentialKeys,
-  "BONGA_SMS_ENDPOINT",
-  "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
-  "BONGA_SMS_OTP_TEMPLATE"
-];
+
+/**
+ * What each provider genuinely needs before it can send.
+ *
+ * Only the keys without a code-level fallback belong here. `BONGA_SMS_ENDPOINT`
+ * and the two message templates all default in `sms-service`, and listing them
+ * made `every()` fail for an account that was completely usable: an admin who
+ * saved the four Bonga credentials and left the template boxes empty had their
+ * group's OTPs quietly routed to Africa's Talking, which is not configured at
+ * all, so no OTP was ever delivered.
+ */
 const memberPinSmsProviderEnv: Record<(typeof memberPinSmsProviders)[number], string[]> = {
-  BONGA_SMS: bongaMemberPinDeliveryKeys,
+  BONGA_SMS: [...bongaSmsRequiredCredentialKeys],
   AFRICAS_TALKING: [
     "AFRICASTALKING_USERNAME",
     "AFRICASTALKING_API_KEY",

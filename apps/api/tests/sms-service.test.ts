@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeSmsPhone, renderSmsTemplate, sendBongaSms } from "../src/services/sms-service";
+import {
+  isSendableSmsPhone,
+  normalizeSmsPhone,
+  renderSmsTemplate,
+  sendBongaSms
+} from "../src/services/sms-service";
 
 describe("SMS service", () => {
   it("normalizes Kenyan mobile numbers for SMS delivery", () => {
@@ -80,5 +85,22 @@ describe("SMS service", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.status).toBe("QUEUED");
+  });
+});
+
+describe("SMS phone validity", () => {
+  it("accepts Kenyan mobile numbers in every form the app stores them", () => {
+    expect(isSendableSmsPhone("0757255710")).toBe(true);
+    expect(isSendableSmsPhone("+254 757 255 710")).toBe(true);
+    expect(isSendableSmsPhone("254110255710")).toBe(true);
+  });
+
+  it("rejects what imported member rows actually contain", () => {
+    // Spending a provider request on these bills the account and files a
+    // failure that looks like a delivery problem rather than bad data.
+    expect(isSendableSmsPhone("")).toBe(false);
+    expect(isSendableSmsPhone("0757")).toBe(false);
+    expect(isSendableSmsPhone("N/A")).toBe(false);
+    expect(isSendableSmsPhone("254257255710")).toBe(false);
   });
 });

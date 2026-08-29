@@ -81,6 +81,18 @@ export function normalizeSmsPhone(phone: string) {
   return digits;
 }
 
+/**
+ * Whether a stored phone number is worth spending a request on.
+ *
+ * Imported member records carry blanks and half-typed numbers. Handing one of
+ * those to the provider costs a request, returns 666, and lands in the console
+ * as a failure indistinguishable from a real delivery problem. A number that
+ * cannot possibly be a Kenyan mobile is rejected here, before it leaves.
+ */
+export function isSendableSmsPhone(phone: string) {
+  return /^254(1|7)\d{8}$/.test(normalizeSmsPhone(phone));
+}
+
 export function combineBongaSmsCredentials(storedCredentials: Record<string, string> = {}) {
   const credentials: Record<string, string> = {};
 

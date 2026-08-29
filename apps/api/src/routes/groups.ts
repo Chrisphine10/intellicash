@@ -30,6 +30,8 @@ import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
 import { createNotifications } from "../services/notification-service";
+import { dispatchAfterResponse } from "../services/member-sms-service";
+import { notifySharePurchases, sendMeetingSummaries } from "../services/meeting-sms-service";
 import {
   generateAndQueueMemberOtp,
   generateAndQueueMemberPin,
@@ -2118,6 +2120,13 @@ router.post("/groups/:id/meetings/:meetingId/seal", requireAuth("meetings:write"
     });
 
     ok(res, meeting);
+
+    // Every member gets their own transactions for the meeting just closed.
+    // Thirty members is thirty sequential provider calls, so this runs after
+    // the response: sealing is the operation being confirmed, not the texting.
+    dispatchAfterResponse(() =>
+      sendMeetingSummaries(meeting.id, { requestedByUserId: req.user?.id ?? null })
+    );
   } catch (error) {
     next(error);
   }
@@ -2288,6 +2297,10 @@ router.post("/groups/:id/ledger", requireAuth("ledger:write"), async (req, res, 
     });
 
     ok(res.status(201), ledgerEntry);
+
+    dispatchAfterResponse(() =>
+      notifySharePurchases([ledgerEntry], { requestedByUserId: req.user?.id ?? null })
+    );
   } catch (error) {
     next(error);
   }
@@ -2306,6 +2319,14 @@ router.post("/groups/:id/meetings/:meetingId/ledger/batch", requireAuth("ledger:
       return created;
     });
     ok(res.status(201), entries);
+
+    // Share-purchase confirmations. AFTER the response, because Bonga takes one
+    // recipient per request and a treasurer should not wait on the network to
+    // learn their entries were saved. The money is already committed; a failed
+    // text is recorded, never thrown.
+    dispatchAfterResponse(() =>
+      notifySharePurchases(entries, { requestedByUserId: req.user?.id ?? null })
+    );
   } catch (error) {
     next(error);
   }
@@ -2325,6 +2346,7 @@ router.post("/groups/:id/meetings/:meetingId/offline-sync", requireAuth("ledger:
       }
 
       const synced: Array<{ kind: string; id: string }> = [];
+      const savedLedgerEntries: Awaited<ReturnType<typeof appendMeetingLedgerEntry>>[] = [];
       const conflicts: Array<{ kind: string; clientRequestId?: string | null; memberId?: string; code: string; message: string }> = [];
 
       for (const submission of payload.keySubmissions) {
@@ -2381,6 +2403,10 @@ router.post("/groups/:id/meetings/:meetingId/offline-sync", requireAuth("ledger:
           }
           const saved = await appendMeetingLedgerEntry(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"), entry);
           synced.push({ kind: "ledgerEntry", id: saved.id });
+          // Kept whole, not just its id: a share purchase captured offline is
+          // still a share purchase and the member is owed the same
+          // confirmation as one entered while the phone had signal.
+          savedLedgerEntries.push(saved);
         } catch (error) {
           conflicts.push({
             kind: "ledgerEntry",
@@ -2404,10 +2430,14 @@ router.post("/groups/:id/meetings/:meetingId/offline-sync", requireAuth("ledger:
         });
       }
 
-      return { synced, conflicts };
+      return { synced, conflicts, savedLedgerEntries };
     }, credentialTransactionOptions);
 
-    ok(res, result);
+    ok(res, { synced: result.synced, conflicts: result.conflicts });
+
+    dispatchAfterResponse(() =>
+      notifySharePurchases(result.savedLedgerEntries, { requestedByUserId: req.user?.id ?? null })
+    );
   } catch (error) {
     next(error);
   }
