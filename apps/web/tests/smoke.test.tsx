@@ -1154,6 +1154,19 @@ describe("web smoke helpers", () => {
               }
             ]
           };
+        } else if (url.includes("/notifications/sms-settings")) {
+          data = {
+            settings: [
+              {
+                type: "MEETING_ACTIVE",
+                label: "A meeting opens",
+                audience: "Every member and group login in that group",
+                volume: "A 30-member group is 30 texts every meeting.",
+                smsEnabled: true,
+                configured: false
+              }
+            ]
+          };
         } else if (url.includes("/integrations/credentials")) {
           data = {
             providers: [
@@ -1202,6 +1215,14 @@ describe("web smoke helpers", () => {
     expect(screen.getByDisplayValue("api-secret-demo")).toHaveAttribute("type", "text");
     expect(screen.getByDisplayValue("Your Intelli Cash meeting OTP is {otp}.")).toBeInTheDocument();
     expect(screen.queryByText(/Secrets stay masked/i)).not.toBeInTheDocument();
+
+    // Which system notifications also go out as SMS is configured here, next to
+    // the provider that carries them. The switch has to render checked when the
+    // category is running on its default, which is what "on unless told
+    // otherwise" means in practice.
+    expect(screen.getByText("System notifications by SMS")).toBeInTheDocument();
+    expect(screen.getByText("A meeting opens")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /A meeting opens/i })).toBeChecked();
     vi.unstubAllGlobals();
   });
 

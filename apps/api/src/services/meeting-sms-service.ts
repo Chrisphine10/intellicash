@@ -6,10 +6,10 @@ import {
   type MemberMeetingTotals
 } from "../domain/member-sms-messages";
 import { prisma } from "../lib/prisma";
-import { dispatchMemberSms, type MemberSmsRecipient } from "./member-sms-service";
+import { dispatchSms, type OutboundSmsRecipient } from "./outbound-sms-service";
 
 /**
- * Gathers what a member needs to be told, and hands it to `member-sms-service`
+ * Gathers what a member needs to be told, and hands it to `outbound-sms-service`
  * to send.
  *
  * Split from the sending for the usual reason: this half knows the ledger and
@@ -102,7 +102,7 @@ export async function notifySharePurchases(
     cycleTotals.find((row) => row.memberId === memberId && row.cycleId === cycleId)?._sum
       .amountCents ?? 0;
 
-  const recipients: MemberSmsRecipient[] = [];
+  const recipients: OutboundSmsRecipient[] = [];
   for (const entry of purchases) {
     const member = memberById.get(entry.memberId as string);
     if (!member) continue;
@@ -123,7 +123,7 @@ export async function notifySharePurchases(
 
   if (recipients.length === 0) return null;
 
-  return dispatchMemberSms(
+  return dispatchSms(
     {
       kind: "SHARE_PURCHASE",
       groupId,
@@ -223,7 +223,7 @@ export async function sendMeetingSummaries(
     0;
 
   const meetingDate = meeting.closedAt ?? meeting.scheduledAt;
-  const recipients: MemberSmsRecipient[] = members.map((member) => ({
+  const recipients: OutboundSmsRecipient[] = members.map((member) => ({
     memberId: member.id,
     memberName: member.fullName,
     phone: member.phone,
@@ -245,7 +245,7 @@ export async function sendMeetingSummaries(
 
   if (recipients.length === 0) return null;
 
-  return dispatchMemberSms(
+  return dispatchSms(
     {
       kind: "MEETING_SUMMARY",
       groupId: meeting.groupId,

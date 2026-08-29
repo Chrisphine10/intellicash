@@ -141,19 +141,39 @@ curl -s -X POST http://167.172.14.50:4002/v1/send-sms -F apiClientID=... -F key=
 
 ### What the platform texts, and to whom
 
-| Message | Trigger | Gate |
-|---|---|---|
-| Default meeting PIN | A member's PIN is generated | always |
-| Meeting OTP | A member requests an online unlock code | always |
-| Share purchase confirmation | A `SHARE_PURCHASE` is posted at a meeting | `GroupPolicy.smsSharePurchaseEnabled` |
-| Per-member meeting summary | A meeting is sealed | `GroupPolicy.smsMeetingSummaryEnabled` |
-| Manual broadcast | An admin sends one from Dashboard -> SMS | always |
+| Message | Trigger | Gate | Default |
+|---|---|---|---|
+| Default meeting PIN | A member's PIN is generated | — | on |
+| Meeting OTP | A member requests an online unlock code | — | on |
+| Manual broadcast | An admin sends one from Dashboard -> SMS | — | on |
+| Share purchase confirmation | A `SHARE_PURCHASE` is posted at a meeting | `GroupPolicy.smsSharePurchaseEnabled` | **off** |
+| Per-member meeting summary | A meeting is sealed | `GroupPolicy.smsMeetingSummaryEnabled` | **off** |
+| Someone asks to join a group | A join request is raised | `NotificationSmsSetting` | on |
+| A join request is approved | An official approves | `NotificationSmsSetting` | on |
+| A join request is declined | An official declines | `NotificationSmsSetting` | on |
+| A meeting opens | A meeting moves to IN_PROGRESS | `NotificationSmsSetting` | on |
+| A store request is submitted | Store credit requested | `NotificationSmsSetting` | on |
+| A store request changes status | Status, financier or repayment change | `NotificationSmsSetting` | on |
+| A store repayment is recorded | Repayment posted | `NotificationSmsSetting` | on |
 
-The last two are **off for every group until someone turns them on**, per group,
+**Every system notification the console shows in the bell is also texted.** The
+seam is `services/notification-service`, not the individual call sites, so a
+notification added later is texted without anyone remembering to wire it. A
+missing `NotificationSmsSetting` row means enabled; switch categories off under
+Dashboard -> Integrations -> *System notifications by SMS*.
+
+Watch **A meeting opens**: it is the only one that fans out. Every member and
+group login in the group is texted each time a meeting is opened, so a 30-member
+group meeting monthly is 30 texts a month per group before anything else.
+
+The two group-level ones are **off for every group until someone turns them on**,
 under Dashboard -> Groups -> *group* -> Policy. That is a cost decision as much
 as a privacy one: a 30-member group sealing a monthly meeting is 30 summaries,
 plus one text per share purchase, and the content is a member's own financial
 position going to a handset that is often shared at home.
+
+A recipient is reached on `User.phone`, falling back to their linked member's
+number. One handset gets one message per event however many logins share it.
 
 Automatic sends are recorded in `SmsBroadcast` alongside manual ones and show up
 on the same console page, tagged by `kind`. A member with a blank or malformed

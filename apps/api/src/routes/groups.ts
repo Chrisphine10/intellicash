@@ -30,7 +30,7 @@ import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
 import { createNotifications } from "../services/notification-service";
-import { dispatchAfterResponse } from "../services/member-sms-service";
+import { dispatchAfterResponse } from "../services/outbound-sms-service";
 import { notifySharePurchases, sendMeetingSummaries } from "../services/meeting-sms-service";
 import {
   generateAndQueueMemberOtp,
@@ -661,6 +661,7 @@ async function notifyMeetingActive(groupId: string, title: string) {
       userId: account.id,
       title: "Meeting is active",
       body: `${title} has started.`,
+      type: "MEETING_ACTIVE",
       href: "/dashboard/meetings"
     }))
   );

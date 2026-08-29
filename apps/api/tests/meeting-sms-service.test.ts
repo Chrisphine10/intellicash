@@ -282,7 +282,7 @@ describe("automatic member SMS", () => {
 
     expect(blank?.status).toBe("FAILED");
     expect(blank?.providerStatus).toBe("NO_PHONE");
-    expect(blank?.providerMessage).toContain("no phone number");
+    expect(blank?.providerMessage).toMatch(/no phone number/i);
   });
 
   it("survives a provider that throws, and records the failure", async () => {

@@ -69,6 +69,23 @@ model Notification {
   @@index([userId, readAt, createdAt])
 }
 
+/// Whether a category of system notification is also sent as an SMS.
+///
+/// Every notification the console shows in the bell is texted as well, because
+/// the people who most need to know - a secretary approving a join request, a
+/// member whose meeting has started - are not sitting in front of the console.
+/// A missing row means enabled: a new notification type reaches people by
+/// default rather than being silently console-only until someone notices.
+///
+/// Per category rather than one global switch, so the noisy ones can be turned
+/// off without losing the ones that matter.
+model NotificationSmsSetting {
+  type            String   @id
+  smsEnabled      Boolean  @default(true)
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+}
+
 model Session {
   id         String    @id @default(cuid())
   userId     String

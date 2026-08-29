@@ -9409,3 +9409,23 @@ html[data-theme="dark"] .pwa-splash-screen {
   color: var(--ink-muted, var(--muted));
   line-height: 1.45;
 }
+
+/* Which system notifications also go out as SMS. A list of switches whose
+   consequence is money, so each states its audience and its volume rather than
+   leaving an admin to guess what "meeting opens" costs. */
+.notification-sms-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.notification-sms .checkbox-field {
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.notification-sms .checkbox-field:hover {
+  border-color: var(--line);
+  background: var(--surface-hover, transparent);
+}

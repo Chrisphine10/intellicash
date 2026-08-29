@@ -1290,7 +1290,7 @@ router.post("/intelli-store/credit-requests", requireAuth("store:write"), async 
       userId: creditRequest.requesterUserId,
       title: "Store request submitted",
       body: `${creditRequest.product.name} is waiting for programme review.`,
-      type: "STORE",
+      type: "STORE_REQUEST_SUBMITTED",
       href: "/dashboard/intelli-store"
     }).catch(() => null);
 
@@ -1899,7 +1899,7 @@ router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), a
         userId: updated.requesterUserId,
         title: "Store request updated",
         body: `${updated.product.name} is now ${humanizeStatus(updated.status)}.`,
-        type: "STORE",
+        type: "STORE_REQUEST_UPDATED",
         href: "/dashboard/intelli-store"
       }).catch(() => null);
     }
@@ -1982,7 +1982,7 @@ router.post("/intelli-store/credit-requests/:id/repayments", requireAuth("store:
       userId: updated.requesterUserId,
       title: "Loan repayment posted",
       body: `A repayment has been recorded for ${updated.product.name}.`,
-      type: "STORE",
+      type: "STORE_REPAYMENT_POSTED",
       href: "/dashboard/intelli-store"
     }).catch(() => null);
 

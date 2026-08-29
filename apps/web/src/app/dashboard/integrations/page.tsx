@@ -14,6 +14,16 @@ interface TestResult {
   status?: IntegrationStatus;
 }
 
+interface NotificationSmsSetting {
+  type: string;
+  label: string;
+  audience: string;
+  volume: string;
+  smsEnabled: boolean;
+  /** False means it is running on the default, which nobody chose. */
+  configured: boolean;
+}
+
 interface CredentialValuesIndexResponse {
   providers: Array<{
     provider: string;
@@ -69,6 +79,8 @@ export default function IntegrationsPage() {
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [smsSettings, setSmsSettings] = useState<NotificationSmsSetting[]>([]);
+  const [savingSmsType, setSavingSmsType] = useState<string | null>(null);
   const [credentialValuesByProvider, setCredentialValuesByProvider] = useState<Record<string, Record<string, string>>>({});
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
   const [loadingCredentials, setLoadingCredentials] = useState(false);
@@ -90,6 +102,38 @@ export default function IntegrationsPage() {
     setCredentialValues(credentialValuesByProvider[selectedProvider] ?? {});
   }, [credentialValuesByProvider, selectedProvider]);
 
+  /**
+   * Turn one category of system notification on or off for SMS.
+   *
+   * Optimistic, then reconciled from the server: an admin scanning a list of
+   * eight switches should not wait on a round trip between each one, and a
+   * failure puts the switch back where it was rather than leaving the screen
+   * claiming something the platform will not do.
+   */
+  async function setNotificationSms(type: string, smsEnabled: boolean) {
+    const previous = smsSettings;
+    setSavingSmsType(type);
+    setSmsSettings((current) =>
+      current.map((row) => (row.type === type ? { ...row, smsEnabled, configured: true } : row))
+    );
+
+    try {
+      await apiFetch("/notifications/sms-settings", {
+        method: "PUT",
+        body: JSON.stringify({ type, smsEnabled })
+      });
+      const refreshed = await apiFetch<{ settings: NotificationSmsSetting[] }>(
+        "/notifications/sms-settings"
+      );
+      setSmsSettings(refreshed.settings);
+    } catch (saveError) {
+      setSmsSettings(previous);
+      setError(saveError instanceof Error ? saveError.message : "Could not save that setting.");
+    } finally {
+      setSavingSmsType(null);
+    }
+  }
+
   async function loadHealth() {
     setLoading(true);
     try {
@@ -99,10 +143,12 @@ export default function IntegrationsPage() {
       }
 
       setLoadingCredentials(true);
-      const [response, credentialIndex] = await Promise.all([
+      const [response, credentialIndex, notificationSms] = await Promise.all([
         apiFetch<IntegrationHealth>("/integrations/health"),
-        apiFetch<CredentialValuesIndexResponse>("/integrations/credentials")
+        apiFetch<CredentialValuesIndexResponse>("/integrations/credentials"),
+        apiFetch<{ settings: NotificationSmsSetting[] }>("/notifications/sms-settings")
       ]);
+      setSmsSettings(notificationSms.settings);
       const preferredProvider =
         response.statuses.find((status) => !smsProviders.includes(status.provider))?.provider ??
         response.statuses[0]?.provider ??
@@ -474,6 +520,51 @@ export default function IntegrationsPage() {
             <div className="empty-state">No providers</div>
           )}
         </section>
+      </section>
+
+      <section className="data-card notification-sms">
+        <header>
+          <div>
+            <h3>System notifications by SMS</h3>
+            <span>
+              Everything the console shows in the bell is also texted, because the person who needs
+              to act on it is usually not at a screen. Switch off the ones that are not worth the
+              credits.
+            </span>
+          </div>
+          <span className="pill">
+            {smsSettings.filter((row) => row.smsEnabled).length} of {smsSettings.length} on
+          </span>
+        </header>
+
+        <div className="notification-sms-list">
+          {smsSettings.map((row) => (
+            <label className="checkbox-field" key={row.type}>
+              <input
+                checked={row.smsEnabled}
+                disabled={savingSmsType === row.type}
+                onChange={(event) => setNotificationSms(row.type, event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>{row.label}</strong>
+                <small>
+                  {row.audience}. {row.volume}
+                  {row.configured ? "" : " Running on the default."}
+                </small>
+              </span>
+            </label>
+          ))}
+          {smsSettings.length === 0 ? (
+            <div className="empty-state">No notification types</div>
+          ) : null}
+        </div>
+
+        <p className="dashboard-notice">
+          These are delivered by whichever SMS provider above is configured, and appear on the SMS
+          page alongside manual broadcasts. A recipient with no phone number on record is listed
+          there as failed rather than silently skipped.
+        </p>
       </section>
     </>
   );

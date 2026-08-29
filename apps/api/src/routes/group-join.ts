@@ -110,6 +110,7 @@ async function notifyOfficials(groupId: string, requestedName: string, groupName
       userId: official.id,
       title: "Someone wants to join",
       body: `${requestedName} has asked to join ${groupName}.`,
+      type: "GROUP_JOIN_REQUESTED",
       href: `/dashboard/groups/${groupId}/join-requests`
     }))
   );
@@ -438,6 +439,7 @@ router.post(
         await createNotification({
           userId: request.userId,
           title: "Your request was declined",
+          type: "GROUP_JOIN_REJECTED",
           body: body.notes?.trim()
             ? `${visible.name} declined your request: ${body.notes.trim()}`
             : `${visible.name} declined your request to join.`
@@ -467,6 +469,7 @@ router.post(
       await createNotification({
         userId: request.userId,
         title: `You are now in ${visible.name}`,
+        type: "GROUP_JOIN_APPROVED",
         body: matched
           ? "Your savings already recorded with the group are now in your passbook."
           : "You have been added to the group. Your savings will appear as they are recorded."
