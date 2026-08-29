@@ -3823,3 +3823,239 @@ html[data-theme="dark"] .hero-phone {
     box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Join by invite link.
+
+   The first Intelli-Cash screen a new member ever sees, often on a cheap phone
+   held by somebody standing at a meeting. So: one column, large touch targets,
+   and the group's name as the largest thing on the page — the reader has to
+   recognise it instantly or they are in the wrong place.
+--------------------------------------------------------------------------- */
+.join-page {
+  display: flex;
+  justify-content: center;
+  /* The public header is `position: fixed`, 64px tall. Pages with a tall hero
+     let it float over the top of the artwork; this card is short, so without
+     explicit clearance the badge and the group's name sit underneath it. */
+  padding: calc(64px + 44px) 20px 72px;
+  background:
+    radial-gradient(1100px 420px at 50% -12%, color-mix(in srgb, var(--green) 12%, transparent), transparent),
+    var(--surface-tint);
+  min-height: 70vh;
+}
+
+.join-card {
+  width: 100%;
+  max-width: 470px;
+  padding: 34px 30px 30px;
+  border: 1px solid color-mix(in srgb, var(--green) 18%, var(--line));
+  border-radius: 20px;
+  background: var(--surface-raised);
+  box-shadow: 0 18px 44px -30px rgba(15, 40, 25, 0.5);
+}
+
+.join-head {
+  text-align: center;
+}
+
+.join-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+}
+
+.join-kicker {
+  margin: 0;
+  font-size: 0.83rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.join-head h1 {
+  margin: 6px 0 0;
+  font-size: 1.65rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.join-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+
+.join-explainer {
+  margin: 20px 0 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.join-form {
+  display: grid;
+  gap: 16px;
+}
+
+.join-field {
+  display: grid;
+  gap: 6px;
+}
+
+.join-field > span {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.join-field input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.join-field input:focus-visible {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent);
+}
+
+.join-field small {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.join-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.98rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.join-button:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.join-button.secondary {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* The line that stops somebody believing a link let them in. Quiet, but never
+   omitted — a person who thinks they are a member goes looking for savings
+   that do not exist yet. */
+.join-guard {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 20px 0 0;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.join-guard svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--green);
+}
+
+.join-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, #c0392b 35%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, #c0392b 8%, transparent);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.join-fineprint {
+  margin: 16px 0 0;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.join-loading {
+  margin: 0;
+  padding: 30px 0;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.join-state {
+  text-align: center;
+}
+
+.join-state h1 {
+  margin: 12px 0 10px;
+  font-size: 1.45rem;
+  color: var(--ink);
+}
+
+.join-state p {
+  margin: 0 0 16px;
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.join-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+}
+
+@media (max-width: 480px) {
+  .join-page {
+    padding: calc(64px + 20px) 14px 48px;
+  }
+
+  .join-card {
+    padding: 26px 20px 24px;
+    border-radius: 16px;
+  }
+
+  .join-head h1 {
+    font-size: 1.42rem;
+  }
+}

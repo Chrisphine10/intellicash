@@ -475,6 +475,12 @@ export const auditEventTypes = [
   "VOTE_RECORDED",
   "CREDIT_SCORE_COMPUTED",
   "GROUP_JOIN_REQUESTED",
+  /// Asked through a group's public invite link rather than by typing its code.
+  "GROUP_JOIN_REQUESTED_VIA_LINK",
+  /// An invite link was revoked and reissued, so every poster and QR bearing
+  /// the old one stopped working. Worth a trail: it is the only way to tell a
+  /// dead link from a mistyped one afterwards.
+  "GROUP_JOIN_LINK_ROTATED",
   "GROUP_JOIN_APPROVED",
   "GROUP_JOIN_REJECTED",
   "GROUP_PAYMENT_INITIATED",

@@ -630,6 +630,20 @@ model Group {
   /// them apart. Signed-in demo accounts still see their own group; it simply
   /// stops being evidence about anything.
   isDemo                       Boolean  @default(false)
+
+  /// Secret half of the group's public invite link and QR code.
+  ///
+  /// NOT the group code. Codes read `IWL-KBU-0001` and are trivially
+  /// enumerable, so a link built on one would let anyone walk the whole
+  /// platform's group list by counting upwards. This is random, unique, and
+  /// rotatable: a poster that ends up somewhere it should not be is revoked by
+  /// issuing a new one, without disturbing the code the group is known by.
+  ///
+  /// Nullable because a group only gets one when someone first asks to share
+  /// a link. A group that never invites anyone has no public surface at all.
+  joinToken                    String?  @unique
+  joinTokenIssuedAt            DateTime?
+
   phase                        String
   county                       String
   subCounty                    String?
