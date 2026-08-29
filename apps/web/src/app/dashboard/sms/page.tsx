@@ -63,25 +63,42 @@ function providerLabel(provider: string) {
   return provider === "BONGA_SMS" ? "Bonga" : provider.replace(/_/g, " ");
 }
 
-function recipientFailureDetail(recipient: SmsBroadcastRecipient) {
-  if (recipient.status !== "FAILED") return null;
+/**
+ * Why a recipient did not get a text.
+ *
+ * This used to return null for anything but FAILED, which hid the single most
+ * important message the provider layer produces: a QUEUED row carrying
+ * "SMS network delivery is disabled." looked exactly like one on its way. The
+ * distinction the operator needs is delivered / not delivered, and QUEUED is
+ * firmly on the second side of it.
+ */
+function recipientProblemDetail(recipient: SmsBroadcastRecipient) {
+  if (recipient.status === "SENT") return null;
 
   const status = recipient.providerStatus
     ? `${providerLabel(recipient.provider)} status ${recipient.providerStatus}`
-    : `${providerLabel(recipient.provider)} failure`;
+    : recipient.status === "FAILED"
+      ? `${providerLabel(recipient.provider)} failure`
+      : `${providerLabel(recipient.provider)} not sent`;
   const message = recipient.providerMessage ? ` - ${recipient.providerMessage}` : "";
   return `${recipient.memberName}: ${status}${message}`;
 }
 
-function broadcastFailureDetails(broadcast: SmsBroadcast) {
+function broadcastProblemDetails(broadcast: SmsBroadcast) {
   return broadcast.recipients
-    .map((recipient) => recipientFailureDetail(recipient))
+    .map((recipient) => recipientProblemDetail(recipient))
     .filter((detail): detail is string => Boolean(detail));
 }
 
 function broadcastNoticeText(broadcast: SmsBroadcast) {
-  const base = `${broadcast.provider} SMS broadcast ${broadcast.status.toLowerCase()} for ${broadcast.recipientCount} recipient${broadcast.recipientCount === 1 ? "" : "s"}.`;
-  const details = broadcastFailureDetails(broadcast);
+  // "queued for 12 recipients" reads like success. Say how many were actually
+  // delivered, which is the only number worth reporting.
+  const plural = broadcast.recipientCount === 1 ? "" : "s";
+  const base =
+    broadcast.sentCount === broadcast.recipientCount
+      ? `${providerLabel(broadcast.provider)} delivered to ${broadcast.recipientCount} recipient${plural}.`
+      : `${providerLabel(broadcast.provider)} delivered to ${broadcast.sentCount} of ${broadcast.recipientCount} recipient${plural}.`;
+  const details = broadcastProblemDetails(broadcast);
   return details.length > 0 ? `${base} ${details.join(" ")}` : base;
 }
 
@@ -182,7 +199,7 @@ export default function SmsBroadcastPage() {
         body: JSON.stringify(payload)
       });
       setNotice({
-        ok: broadcast.failedCount === 0,
+        ok: broadcast.sentCount === broadcast.recipientCount,
         text: broadcastNoticeText(broadcast)
       });
       await loadBroadcasts();
@@ -308,7 +325,7 @@ export default function SmsBroadcastPage() {
                     {broadcast.provider} - {broadcast.recipientCount} recipients - {formatDate(broadcast.createdAt)}
                   </span>
                   <em>{broadcast.message}</em>
-                  {broadcastFailureDetails(broadcast).map((detail) => (
+                  {broadcastProblemDetails(broadcast).map((detail) => (
                     <span className="warning-text" key={detail}>
                       {detail}
                     </span>

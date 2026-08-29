@@ -1,6 +1,7 @@
 import type { IntegrationProvider } from "@intellicash/shared";
 import { integrationProviders } from "@intellicash/shared";
 import { env } from "../config/env";
+import { smsNetworkCallsEnabled } from "../services/sms-service";
 
 export interface IntegrationStatus {
   provider: IntegrationProvider;
@@ -13,6 +14,18 @@ export interface IntegrationStatus {
   envCredentialKeys: string[];
   storedCredentialKeys: string[];
   networkTestsAllowed: boolean;
+  /**
+   * Whether a stored credential would actually reach the provider.
+   *
+   * `configured` only says the keys are present. Production ran with
+   * `ENABLE_SMS_NETWORK_CALLS=false`, so a correctly configured Bonga account
+   * showed green here while `sendBongaSms` short-circuited every send to
+   * QUEUED and nobody was ever texted. Credentials being right and delivery
+   * being on are two different facts and the console has to show both.
+   */
+  deliveryEnabled: boolean;
+  /** Why delivery is off, for the operator who has to fix it. */
+  deliveryNote?: string | null;
   credentialsUpdatedAt?: string | null;
   lastCheckedAt?: string | null;
 }
@@ -22,6 +35,7 @@ export interface IntegrationAdapter {
   displayName: string;
   requiredEnv: string[];
   sandboxBaseUrl?: string;
+  delivery?: DeliverySwitch;
   buildStatus(credentials?: Record<string, string>, meta?: IntegrationStatusMeta): IntegrationStatus;
   test(
     credentials?: Record<string, string>,
@@ -34,28 +48,52 @@ export interface IntegrationStatusMeta {
   lastCheckedAt?: string | null;
 }
 
+/**
+ * A named kill switch that stands between stored credentials and a real
+ * outbound call. Evaluated per request rather than captured at module load,
+ * because the tests flip the environment variable between cases.
+ */
+export interface DeliverySwitch {
+  envKey: string;
+  enabled: () => boolean;
+}
+
+const smsDelivery: DeliverySwitch = {
+  envKey: "ENABLE_SMS_NETWORK_CALLS",
+  enabled: smsNetworkCallsEnabled
+};
+
+const paymentDelivery: DeliverySwitch = {
+  envKey: "ENABLE_PAYMENT_NETWORK_CALLS",
+  enabled: () => env.ENABLE_PAYMENT_NETWORK_CALLS
+};
+
 class SandboxAdapter implements IntegrationAdapter {
   provider: IntegrationProvider;
   displayName: string;
   requiredEnv: string[];
   sandboxBaseUrl?: string;
+  delivery?: DeliverySwitch;
 
   constructor(options: {
     provider: IntegrationProvider;
     displayName: string;
     requiredEnv: string[];
     sandboxBaseUrl?: string;
+    delivery?: DeliverySwitch;
   }) {
     this.provider = options.provider;
     this.displayName = options.displayName;
     this.requiredEnv = options.requiredEnv;
     this.sandboxBaseUrl = options.sandboxBaseUrl;
+    this.delivery = options.delivery;
   }
 
   buildStatus(credentials: Record<string, string> = {}, meta: IntegrationStatusMeta = {}): IntegrationStatus {
     const envCredentialKeys = this.requiredEnv.filter((key) => Boolean(process.env[key]));
     const storedCredentialKeys = this.requiredEnv.filter((key) => Boolean(credentials[key]));
     const missingEnv = this.requiredEnv.filter((key) => !process.env[key] && !credentials[key]);
+    const deliveryEnabled = this.delivery ? this.delivery.enabled() : true;
 
     return {
       provider: this.provider,
@@ -69,7 +107,12 @@ class SandboxAdapter implements IntegrationAdapter {
       storedCredentialKeys,
       credentialsUpdatedAt: meta.credentialsUpdatedAt ?? null,
       lastCheckedAt: meta.lastCheckedAt ?? null,
-      networkTestsAllowed: env.ALLOW_SANDBOX_NETWORK_TESTS
+      networkTestsAllowed: env.ALLOW_SANDBOX_NETWORK_TESTS,
+      deliveryEnabled,
+      deliveryNote:
+        deliveryEnabled || !this.delivery
+          ? null
+          : `${this.delivery.envKey} is off, so nothing is delivered even with valid credentials.`
     };
   }
 
@@ -80,6 +123,16 @@ class SandboxAdapter implements IntegrationAdapter {
       return {
         ok: false,
         message: `${this.displayName} sandbox credentials are incomplete.`,
+        status
+      };
+    }
+
+    // Credentials that cannot leave the building are not a pass. Saying "ok"
+    // here is what let a switched-off provider look healthy.
+    if (!status.deliveryEnabled) {
+      return {
+        ok: false,
+        message: `${this.displayName} credentials are stored, but ${status.deliveryNote}`,
         status
       };
     }
@@ -132,7 +185,8 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
       "MPESA_B2C_RESULT_URL",
       "MPESA_B2C_TIMEOUT_URL"
     ],
-    sandboxBaseUrl: "https://sandbox.safaricom.co.ke"
+    sandboxBaseUrl: "https://sandbox.safaricom.co.ke",
+    delivery: paymentDelivery
   }),
   AFRICAS_TALKING: new SandboxAdapter({
     provider: "AFRICAS_TALKING",
@@ -142,7 +196,8 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
       "AFRICASTALKING_API_KEY",
       "AFRICASTALKING_SENDER_ID"
     ],
-    sandboxBaseUrl: "https://api.sandbox.africastalking.com"
+    sandboxBaseUrl: "https://api.sandbox.africastalking.com",
+    delivery: smsDelivery
   }),
   BONGA_SMS: new SandboxAdapter({
     provider: "BONGA_SMS",
@@ -155,7 +210,8 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
       "BONGA_SMS_ENDPOINT",
       "BONGA_SMS_DEFAULT_PIN_TEMPLATE",
       "BONGA_SMS_OTP_TEMPLATE"
-    ]
+    ],
+    delivery: smsDelivery
   }),
   IPRS: new SandboxAdapter({
     provider: "IPRS",
@@ -172,13 +228,15 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
       "KCB_BUNI_CLIENT_SECRET",
       "KCB_BUNI_CALLBACK_URL"
     ],
-    sandboxBaseUrl: process.env.KCB_BUNI_BASE_URL
+    sandboxBaseUrl: process.env.KCB_BUNI_BASE_URL,
+    delivery: paymentDelivery
   }),
   PAYSTACK: new SandboxAdapter({
     provider: "PAYSTACK",
     displayName: "Paystack",
     requiredEnv: ["PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY"],
-    sandboxBaseUrl: "https://api.paystack.co"
+    sandboxBaseUrl: "https://api.paystack.co",
+    delivery: paymentDelivery
   }),
   TRANSUNION_CRB: new SandboxAdapter({
     provider: "TRANSUNION_CRB",

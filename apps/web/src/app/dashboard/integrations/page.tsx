@@ -25,6 +25,18 @@ interface CredentialValuesIndexResponse {
 
 const smsProviders = ["AFRICAS_TALKING", "BONGA_SMS"];
 
+/**
+ * "Ready" used to mean nothing more than "the keys are filled in". Bonga was
+ * configured correctly while `ENABLE_SMS_NETWORK_CALLS` was off, so every send
+ * short-circuited to QUEUED and the console showed a healthy provider. Readiness
+ * is credentials AND delivery; anything less gets its own label.
+ */
+function readinessLabel(status: IntegrationStatus) {
+  if (!status.configured) return { tone: "gold", text: "Gated" };
+  if (!status.deliveryEnabled) return { tone: "gold", text: "Not sending" };
+  return { tone: "blue", text: "Ready" };
+}
+
 function inputTypeForKey(key: string) {
   if (key.includes("URL") || key.includes("ENDPOINT")) return "url";
   return "text";
@@ -308,8 +320,8 @@ export default function IntegrationsPage() {
                     </div>
                   </div>
                   <div className="modal-header-actions">
-                    <span className={`pill ${status.configured ? "blue" : "gold"}`}>
-                      {status.configured ? "Ready" : "Gated"}
+                    <span className={`pill ${readinessLabel(status).tone}`}>
+                      {readinessLabel(status).text}
                     </span>
                     <button
                       aria-pressed={selected}
@@ -334,11 +346,11 @@ export default function IntegrationsPage() {
               <span>Stored values are visible to admins so setup can be reviewed without guessing.</span>
             </div>
             {selectedStatus ? (
-              <span className={`pill ${selectedStatus.configured ? "blue" : "gold"}`}>
+              <span className={`pill ${readinessLabel(selectedStatus).tone}`}>
                 {loadingCredentials
                   ? "Loading values"
                   : selectedStatus.configured
-                    ? "Ready"
+                    ? readinessLabel(selectedStatus).text
                     : `${selectedStatus.missingEnv.length} missing`}
               </span>
             ) : null}
@@ -346,6 +358,14 @@ export default function IntegrationsPage() {
 
           {selectedStatus ? (
             <form className="credential-form" onSubmit={saveCredentials}>
+              {selectedStatus.configured && !selectedStatus.deliveryEnabled ? (
+                <p className="dashboard-notice warning">
+                  {selectedStatus.deliveryNote ??
+                    "Delivery is switched off for this provider."}{" "}
+                  Saving credentials here will not change that — it is a server
+                  environment variable and takes a restart.
+                </p>
+              ) : null}
               <div className="credential-grid">
                 <label className="credential-field">
                   <span>Provider</span>

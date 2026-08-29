@@ -467,6 +467,9 @@ export interface IntegrationStatus {
   envCredentialKeys: string[];
   storedCredentialKeys: string[];
   networkTestsAllowed: boolean;
+  /** False when a kill switch would stop a send even though credentials are present. */
+  deliveryEnabled: boolean;
+  deliveryNote?: string | null;
   credentialsUpdatedAt?: string | null;
   lastCheckedAt?: string | null;
 }

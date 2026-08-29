@@ -93,7 +93,7 @@ HOST=127.0.0.1                          # nginx is the only entrypoint
 API_PUBLIC_URL=https://intellicash.co.ke
 WEB_ORIGIN=https://intellicash.co.ke,https://www.intellicash.co.ke
 ENABLE_PAYMENT_NETWORK_CALLS=false      # until real gateway credentials exist
-ENABLE_SMS_NETWORK_CALLS=false
+ENABLE_SMS_NETWORK_CALLS=true           # see "SMS delivery" below — false means nothing is ever sent
 INITIAL_ADMIN_EMAIL=admin@intellicash.co.ke
 INITIAL_ADMIN_PASSWORD=<strong, >=12 chars>
 ```
@@ -103,6 +103,41 @@ templates and the `INITIAL_ADMIN_*` account — no demo groups, no demo members.
 Confirmed on this deploy: `[bootstrap] Created initial admin admin@intellicash.co.ke`
 and nothing else. Leave the admin vars blank and it seeds no admin at all and
 says so, rather than inventing a guessable one.
+
+## SMS delivery (Bonga)
+
+Two separate things have to be true before a member receives a text, and for a
+while only the first one was visible anywhere:
+
+1. **Credentials.** Either the `BONGA_SMS_*` variables below, or the same keys
+   saved through Dashboard → Integrations → Bonga SMS (encrypted in
+   `IntegrationConfig`, and preferred over the environment). The console path
+   survives a redeploy and needs no shell.
+2. **`ENABLE_SMS_NETWORK_CALLS=true`.** With it off, `sendBongaSms` returns
+   before it ever calls the provider and every recipient is recorded `QUEUED`.
+   This is an environment variable only — it cannot be set from the console, and
+   it takes a restart.
+
+The live account (Intelli-Wealth Limited, sender ID `INTELLIWLTH`):
+
+```
+BONGA_SMS_ENDPOINT="http://167.172.14.50:4002/v1/send-sms"
+BONGA_SMS_CLIENT_ID=<apiClientID>
+BONGA_SMS_API_KEY=<key>
+BONGA_SMS_API_SECRET=<secret>
+BONGA_SMS_SERVICE_ID=5843
+```
+
+The endpoint is plain HTTP on a bare IP with the secret in the request body, so
+it must only ever be called server-side. Never from the phone or the browser.
+
+A send is delivered when the provider answers `status: 222`; anything else is a
+failure. Verify with one message to a number you hold, and read the response
+rather than the HTTP code — the endpoint answers 200 for both:
+
+```bash
+curl -s -X POST http://167.172.14.50:4002/v1/send-sms -F apiClientID=... -F key=... -F secret=... -F serviceID=5843 -F MSISDN=2547XXXXXXXX -F txtMessage='test'
+```
 
 ## Health endpoint
 
