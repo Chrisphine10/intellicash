@@ -51,19 +51,88 @@ export function LoginExperience({
   const [loading, setLoading] = useState(false);
   const [activeDemoPhone, setActiveDemoPhone] = useState<string | null>(null);
 
+  /**
+   * Three ways in. A group's champion usually has no password worth the name —
+   * the account was created for them — so a texted code is the ordinary path,
+   * and a reset is how they set a password if they want one.
+   */
+  const [mode, setMode] = useState<"password" | "code" | "reset">("password");
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function switchMode(next: "password" | "code" | "reset") {
+    setMode(next);
+    setCodeSent(false);
+    setCode("");
+    setNewPassword("");
+    setError(null);
+    setNotice(null);
+  }
+
+  async function afterSignIn(signedInUser: { role: Role; groupId?: string | null }) {
+    if (signedInUser.role === "GROUP_ACCOUNT" && signedInUser.groupId) {
+      void refreshOfflinePinCache(signedInUser.groupId).catch(() => undefined);
+    }
+    router.push("/dashboard");
+  }
+
+  async function requestCode() {
+    setError(null);
+    setNotice(null);
+    setLoading(true);
+    try {
+      await apiFetch(mode === "reset" ? "/auth/password/reset/request" : "/auth/otp/request", {
+        method: "POST",
+        body: JSON.stringify({ phone })
+      });
+      setCodeSent(true);
+      // Worded as a possibility on purpose: the server does not say whether the
+      // number has an account, and this screen must not guess it either.
+      setNotice("If that number has an account, a 6-digit code is on its way by SMS. It expires in 10 minutes.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not send a code.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitCode() {
+    setError(null);
+    setLoading(true);
+    try {
+      const body =
+        mode === "reset" ? { phone, code: code.trim(), newPassword } : { phone, code: code.trim() };
+      const signedInUser = await apiFetch<{ role: Role; groupId?: string | null }>(
+        mode === "reset" ? "/auth/password/reset" : "/auth/otp/verify",
+        { method: "POST", body: JSON.stringify(body) }
+      );
+      await afterSignIn(signedInUser);
+    } catch (codeError) {
+      setError(codeError instanceof Error ? codeError.message : "That code did not work.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function signIn(nextPhone: string = phone, nextPassword: string = password) {
     setError(null);
     setLoading(true);
 
     try {
+      // Groups without a phone on record sign in with their group email, so the
+      // one box takes either. Sending an email as `phone` failed for exactly
+      // those groups.
+      const identifier = nextPhone.trim();
+      const credentials = isEmail(identifier)
+        ? { email: identifier, password: nextPassword }
+        : { phone: identifier, password: nextPassword };
       const signedInUser = await apiFetch<{ role: Role; groupId?: string | null; phone: string }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ phone: nextPhone, password: nextPassword })
+        body: JSON.stringify(credentials)
       });
-      if (signedInUser.role === "GROUP_ACCOUNT" && signedInUser.groupId) {
-        void refreshOfflinePinCache(signedInUser.groupId).catch(() => undefined);
-      }
-      router.push("/dashboard");
+      await afterSignIn(signedInUser);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
     } finally {
@@ -81,7 +150,20 @@ export function LoginExperience({
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await signIn();
+    if (mode === "password") {
+      await signIn();
+    } else if (!codeSent) {
+      await requestCode();
+    } else {
+      await submitCode();
+    }
+  }
+
+  function submitLabel() {
+    if (mode === "password") return loading ? "Signing in" : "Sign in";
+    if (!codeSent) return loading ? "Sending code" : "Send me a code";
+    if (mode === "reset") return loading ? "Saving" : "Set password and sign in";
+    return loading ? "Checking" : "Sign in";
   }
 
   async function signInAsDemo(account: (typeof demoAccounts)[number]) {
@@ -109,33 +191,91 @@ export function LoginExperience({
       </section>
       <section className="login-panel">
         <form className="login-form" onSubmit={onSubmit}>
-          <h2>{formTitle}</h2>
+          <h2>{mode === "reset" ? "Reset your password" : formTitle}</h2>
           <label>
-            <Smartphone size={16} /> Phone Number
+            <Smartphone size={16} /> {mode === "password" ? "Phone number or group email" : "Phone number"}
             <input
-              autoComplete="tel"
+              autoComplete={mode === "password" ? "username" : "tel"}
+              disabled={codeSent}
               onChange={(event) => setPhone(event.target.value)}
               required
-              type="tel"
-              placeholder="+254700000001"
+              type={mode === "password" ? "text" : "tel"}
+              placeholder="0712 345 678"
               value={phone}
             />
           </label>
-          <label>
-            Password
-            <input
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </label>
+
+          {mode === "password" ? (
+            <label>
+              Password
+              <input
+                autoComplete="current-password"
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </label>
+          ) : null}
+
+          {mode !== "password" && codeSent ? (
+            <label>
+              6-digit code from the SMS
+              <input
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, ""))}
+                required
+                value={code}
+              />
+            </label>
+          ) : null}
+
+          {mode === "reset" && codeSent ? (
+            <label>
+              New password (at least 8 characters)
+              <input
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                type="password"
+                value={newPassword}
+              />
+            </label>
+          ) : null}
+
+          {notice ? <div className="notice">{notice}</div> : null}
           {error ? <div className="error">{error}</div> : null}
+
           <button className="button" disabled={loading} type="submit">
             <LogIn size={18} />
-            {loading ? "Signing in" : "Sign in"}
+            {submitLabel()}
           </button>
+
+          <div className="login-alternatives">
+            {mode !== "code" ? (
+              <button className="link-button" onClick={() => switchMode("code")} type="button">
+                Sign in with a code sent to my phone
+              </button>
+            ) : null}
+            {mode !== "reset" ? (
+              <button className="link-button" onClick={() => switchMode("reset")} type="button">
+                Forgot password?
+              </button>
+            ) : null}
+            {mode !== "password" ? (
+              <button className="link-button" onClick={() => switchMode("password")} type="button">
+                Sign in with a password
+              </button>
+            ) : null}
+            {mode !== "password" && codeSent ? (
+              <button className="link-button" disabled={loading} onClick={() => void requestCode()} type="button">
+                Send the code again
+              </button>
+            ) : null}
+          </div>
         </form>
         {visibleDemoAccounts.length > 0 ? (
           <section className="demo-login">

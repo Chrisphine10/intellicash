@@ -12,11 +12,26 @@ import {
 } from "../middleware/auth";
 import { permissionsForRoleFromStore } from "../services/role-permission-service";
 import { ApiHttpError, ok } from "../lib/http";
+import { requestLoginOtp, verifyLoginOtp } from "../services/login-otp-service";
 import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
-import { loginRateLimit, registerRateLimit } from "../middleware/rate-limit";
+import { loginRateLimit, otpRequestRateLimit, otpVerifyRateLimit, registerRateLimit } from "../middleware/rate-limit";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
+
+const otpRequestSchema = z.object({ phone: z.string().min(6).max(32) });
+const passwordResetSchema = z.object({
+  phone: z.string().min(6).max(32),
+  code: z.string().trim().length(6),
+  // The same rule as changing a password while signed in. A reset must not be
+  // the easy way round the password policy.
+  newPassword: z.string().min(8).max(128)
+});
+
+const otpVerifySchema = z.object({
+  phone: z.string().min(6).max(32),
+  code: z.string().trim().length(6)
+});
 
 const loginSchema = z.object({
   email: z.string().optional(),
@@ -187,7 +202,11 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
       throw new ApiHttpError(
         409,
         "ACCOUNT_EXISTS",
-        "An account with this phone or email already exists. Try signing in instead."
+        "This number already has an account. Sign in with a code sent to it, or reset the password.",
+        // The field team was stuck here: the account existed and the only way
+        // forward offered was a password nobody had. The client uses this to
+        // go straight to the code screen with the number already filled in.
+        { canSignInWithCode: true, canResetPassword: true }
       );
     }
 
@@ -235,6 +254,175 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
     });
 
     ok(res.status(201), {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      permissions,
+      avatarUrl: user.avatarUrl,
+      languagePreference: user.languagePreference,
+      partnerId: user.partnerId,
+      groupId: user.groupId,
+      memberId: user.memberId,
+      villageAgentId: user.villageAgentId
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Ask for a sign-in code.
+ *
+ * **Always answers 200**, whatever happened. Whether a number has an account is
+ * not something a stranger gets to find out by posting numbers one at a time —
+ * and here the answer would be "this savings group banks with you", which is
+ * worth more to somebody choosing a target than an ordinary account check.
+ *
+ * So the body never varies. What did happen is in the audit trail.
+ */
+router.post("/otp/request", otpRequestRateLimit, async (req, res, next) => {
+  try {
+    const body = otpRequestSchema.parse(req.body);
+    const result = await requestLoginOtp(body.phone);
+
+    await appendAuditEvent({
+      entityType: "USER",
+      entityId: result.maskedPhone ?? "unknown",
+      type: "AUTH_OTP_REQUESTED",
+      // Masked, never the number itself: this table is read by more people
+      // than the user table is.
+      payload: { outcome: result.reason, phone: result.maskedPhone ?? null }
+    });
+
+    ok(res, {
+      // Deliberately incurious. The client shows "if that number has an
+      // account, a code is on its way" and moves to the code screen either way.
+      requested: true,
+      expiresInMinutes: 10,
+      // Only ever present with SMS network calls switched off, which is when
+      // there is no handset to read it from anyway. It is what makes an
+      // end-to-end test of this flow possible at all.
+      ...(result.devCode ? { devCode: result.devCode } : {})
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Exchange the code for a session. */
+router.post("/otp/verify", otpVerifyRateLimit, async (req, res, next) => {
+  try {
+    const body = otpVerifySchema.parse(req.body);
+    const result = await verifyLoginOtp(body.phone, body.code);
+
+    if (!result.ok) {
+      // One message for every failure. Saying "that code expired" rather than
+      // "wrong code" tells somebody guessing that they had the right number and
+      // should ask for a fresh one.
+      throw new ApiHttpError(401, "INVALID_CODE", "That code is wrong or has expired.");
+    }
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: result.userId } });
+    const session = await createSession(user.id);
+    const permissions = await permissionsForRoleFromStore(user.role);
+    res.setHeader("Set-Cookie", serializeSessionCookie(session));
+
+    await appendAuditEvent({
+      actorUserId: user.id,
+      entityType: "USER",
+      entityId: user.id,
+      type: "AUTH_LOGIN",
+      payload: { phone: user.phone, role: user.role, method: "OTP" }
+    });
+
+    ok(res, {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      permissions,
+      avatarUrl: user.avatarUrl,
+      languagePreference: user.languagePreference,
+      partnerId: user.partnerId,
+      groupId: user.groupId,
+      memberId: user.memberId,
+      villageAgentId: user.villageAgentId
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Forgotten password, step one: text a code to the account's own phone.
+ *
+ * Same answer whatever happened, for the same reason as the sign-in code — this
+ * must not become a way to learn which numbers hold accounts.
+ */
+router.post("/password/reset/request", otpRequestRateLimit, async (req, res, next) => {
+  try {
+    const body = otpRequestSchema.parse(req.body);
+    const result = await requestLoginOtp(body.phone, { purpose: "PASSWORD_RESET" });
+
+    await appendAuditEvent({
+      entityType: "USER",
+      entityId: result.maskedPhone ?? "unknown",
+      type: "AUTH_OTP_REQUESTED",
+      payload: { purpose: "PASSWORD_RESET", outcome: result.reason, phone: result.maskedPhone ?? null }
+    });
+
+    ok(res, {
+      requested: true,
+      expiresInMinutes: 10,
+      ...(result.devCode ? { devCode: result.devCode } : {})
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Forgotten password, step two: the code proves the phone, and sets a new
+ * password.
+ *
+ * Every existing session is ended. A reset is often the response to "somebody
+ * else has been using our account", and leaving their session alive would make
+ * the new password decorative.
+ *
+ * Signs the person in afterwards. Making them type the password they chose ten
+ * seconds ago is friction, not security — the code has already proved the
+ * phone.
+ */
+router.post("/password/reset", otpVerifyRateLimit, async (req, res, next) => {
+  try {
+    const body = passwordResetSchema.parse(req.body);
+    const result = await verifyLoginOtp(body.phone, body.code);
+    if (!result.ok) {
+      throw new ApiHttpError(401, "INVALID_CODE", "That code is wrong or has expired.");
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 12);
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: result.userId } });
+      return tx.user.update({ where: { id: result.userId }, data: { passwordHash } });
+    });
+
+    await appendAuditEvent({
+      actorUserId: user.id,
+      entityType: "USER",
+      entityId: user.id,
+      type: "USER_PASSWORD_UPDATED",
+      payload: { method: "OTP_RESET", role: user.role }
+    });
+
+    const session = await createSession(user.id);
+    const permissions = await permissionsForRoleFromStore(user.role);
+    res.setHeader("Set-Cookie", serializeSessionCookie(session));
+
+    ok(res, {
       id: user.id,
       name: user.name,
       email: user.email,

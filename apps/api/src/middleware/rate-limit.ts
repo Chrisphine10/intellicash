@@ -104,3 +104,56 @@ export const joinRequestRateLimit = rateLimit(
   })
 );
 
+
+/**
+ * Asking for a sign-in code.
+ *
+ * Keyed on the NUMBER, not the IP: a whole group works off one handset behind
+ * one mobile carrier NAT, and an IP key would have the first group through the
+ * door lock out the rest of the county.
+ *
+ * Successful requests count here, unlike the password limiter. Every request
+ * sends a real SMS that somebody pays for, and a "success" is exactly what an
+ * abuser wants to repeat.
+ */
+export const otpRequestRateLimit = rateLimit(
+  baseOptions({
+    windowMs: 60 * 60 * 1000,
+    limit: 6,
+    keyGenerator: (req) => {
+      const phone = bodyField(req, "phone");
+      return `otp-request:${phone ? normalisePhone(phone) : "unknown"}`;
+    },
+    message: {
+      error: {
+        code: "TOO_MANY_CODES",
+        message: "Too many sign-in codes requested for this number. Try again in an hour."
+      }
+    }
+  })
+);
+
+/**
+ * Guessing a sign-in code.
+ *
+ * The service already burns a code after five wrong guesses. This is the outer
+ * wall: without it, an attacker could request a fresh code and spend five
+ * guesses on it, over and over.
+ */
+export const otpVerifyRateLimit = rateLimit(
+  baseOptions({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => {
+      const phone = bodyField(req, "phone");
+      return `otp-verify:${phone ? normalisePhone(phone) : "unknown"}`;
+    },
+    message: {
+      error: {
+        code: "TOO_MANY_ATTEMPTS",
+        message: "Too many attempts. Wait 15 minutes and try again."
+      }
+    }
+  })
+);

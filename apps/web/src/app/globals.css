@@ -9429,3 +9429,17 @@ html[data-theme="dark"] .pwa-splash-screen {
   border-color: var(--line);
   background: var(--surface-hover, transparent);
 }
+
+/* The ways in besides a password: a code, a reset, and back again. Quiet links
+   under the button, because the password path is still the one staff use. */
+.login-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin-top: 4px;
+}
+
+.login-alternatives .link-button {
+  font-size: 13px;
+}

@@ -29,7 +29,13 @@ import { isSendableSmsPhone, sendSms } from "./sms-service";
  * What raised a send. Recorded on the broadcast so an operator can tell an
  * automatic message from one an admin typed, and so cost can be attributed.
  */
-export type OutboundSmsKind = "SHARE_PURCHASE" | "MEETING_SUMMARY" | "SYSTEM_NOTIFICATION";
+export type OutboundSmsKind =
+  | "SHARE_PURCHASE"
+  | "MEETING_SUMMARY"
+  | "SYSTEM_NOTIFICATION"
+  /** A sign-in code. Its own kind so it can be found — and audited — apart
+   *  from ordinary notifications. */
+  | "LOGIN_OTP";
 
 export interface OutboundSmsRecipient {
   /** Null for a recipient who is a platform user rather than a group member. */

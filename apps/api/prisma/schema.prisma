@@ -37,6 +37,7 @@ model User {
   member                   Member?                   @relation(fields: [memberId], references: [id])
   villageAgent             VillageAgent?             @relation(fields: [villageAgentId], references: [id])
   sessions                 Session[]
+  loginOtp                 UserLoginOtp?
   apiKeys                  ApiKey[]
   notifications            Notification[]
   auditEvents              AuditEvent[]
@@ -629,7 +630,7 @@ model Group {
   /// savings, members and credit scores next to real ones, where nobody can tell
   /// them apart. Signed-in demo accounts still see their own group; it simply
   /// stops being evidence about anything.
-  isDemo                       Boolean  @default(false)
+  isDemo Boolean @default(false)
 
   /// Secret half of the group's public invite link and QR code.
   ///
@@ -641,8 +642,8 @@ model Group {
   ///
   /// Nullable because a group only gets one when someone first asks to share
   /// a link. A group that never invites anyone has no public surface at all.
-  joinToken                    String?  @unique
-  joinTokenIssuedAt            DateTime?
+  joinToken         String?   @unique
+  joinTokenIssuedAt DateTime?
 
   phase                        String
   county                       String
@@ -1466,7 +1467,7 @@ model MemberPinDelivery {
 }
 
 model SmsBroadcast {
-  id                String   @id @default(cuid())
+  id                String  @id @default(cuid())
   requestedByUserId String?
   targetType        String
   targetGroupId     String?
@@ -1481,18 +1482,18 @@ model SmsBroadcast {
   /// The meeting a SHARE_PURCHASE or MEETING_SUMMARY send came out of.
   meetingId String?
 
-  provider          String
+  provider String
 
   /// The body every recipient got, for a send where that is one message.
   /// A per-member summary overrides it on the recipient row.
-  message           String
-  status            String   @default("QUEUED")
-  recipientCount    Int      @default(0)
-  queuedCount       Int      @default(0)
-  sentCount         Int      @default(0)
-  failedCount       Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  message        String
+  status         String   @default("QUEUED")
+  recipientCount Int      @default(0)
+  queuedCount    Int      @default(0)
+  sentCount      Int      @default(0)
+  failedCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   recipients SmsBroadcastRecipient[]
 
@@ -1505,17 +1506,17 @@ model SmsBroadcast {
 }
 
 model SmsBroadcastRecipient {
-  id                String    @id @default(cuid())
-  broadcastId       String
-  memberId          String?
-  groupId           String?
-  memberName        String
-  phone             String
+  id          String  @id @default(cuid())
+  broadcastId String
+  memberId    String?
+  groupId     String?
+  memberName  String
+  phone       String
 
   /// This recipient's own message, when it differs per person — a meeting
   /// summary tells each member what THEY transacted. Null means "the
   /// broadcast's shared message", which is every manual send.
-  message           String?
+  message String?
 
   provider          String
   status            String    @default("QUEUED")
@@ -2494,4 +2495,31 @@ model UserMembership {
 
   @@unique([userId, groupId])
   @@index([userId])
+}
+
+/// A one-time code for signing in without a password.
+///
+/// Its own table, for the same reason the group visit PIN has one: the secret
+/// then cannot leak through a `User` serializer that somebody later widens.
+///
+/// One live code per user. Requesting a new one REPLACES the old, so a code
+/// read off an older SMS is already dead — which matters on a handset that is
+/// passed around a meeting and keeps every message it has ever received.
+model UserLoginOtp {
+  id       String @id @default(cuid())
+  userId   String @unique
+  codeHash String
+
+  expiresAt DateTime
+
+  /// Wrong guesses against THIS code. Reset when a new code is issued, so a
+  /// lockout cannot be inherited by the next attempt.
+  attempts Int @default(0)
+
+  /// Throttles resends. A second table for that would be one more thing to
+  /// keep consistent with this one.
+  lastSentAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

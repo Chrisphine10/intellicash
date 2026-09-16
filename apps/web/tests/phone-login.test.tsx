@@ -14,15 +14,17 @@ describe("phone-based login", () => {
   it("renders phone input instead of email input", () => {
     render(<LoginPage />);
 
-    expect(screen.getByText("Phone Number")).toBeInTheDocument();
+    // One box takes a phone or a group email: the groups with no number on
+    // record sign in with the email.
+    expect(screen.getByText("Phone number or group email")).toBeInTheDocument();
     expect(screen.getByText("Password")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("+254700000001")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("0712 345 678")).toBeInTheDocument();
   });
 
   it("uses phone number as default value from demo accounts", () => {
     render(<LoginPage />);
 
-    const phoneInput = screen.getByPlaceholderText("+254700000001") as HTMLInputElement;
+    const phoneInput = screen.getByPlaceholderText("0712 345 678") as HTMLInputElement;
     expect(phoneInput.value).toBe(demoAccounts[0].phone);
   });
 
@@ -37,7 +39,7 @@ describe("phone-based login", () => {
   it("has sign in button with LogIn icon", () => {
     render(<LoginPage />);
 
-    const signInButton = screen.getByRole("button", { name: /Sign in/ });
+    const signInButton = screen.getByRole("button", { name: /^Sign in$/ });
     expect(signInButton).toBeInTheDocument();
   });
 

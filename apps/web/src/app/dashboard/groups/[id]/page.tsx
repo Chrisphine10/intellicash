@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Activity, ArrowLeft, Banknote, Building2, ClipboardList, FileText, HeartHandshake, Pencil, Settings, TrendingUp, UserCog, UsersRound, Vote, X} from "@/lib/theme-icons";
 import { apiFetch, formatKes, humanizeEnum } from "../../../../lib/api";
 import { DataTable } from "../../../../components/dashboard/data-table";
+import { ChampionAccessCard } from "../../../../components/dashboard/champion-access-card";
 import type { AgentRow, LedgerEntry, MeetingRow, Member, ProgrammeRow, User, VoteRow } from "../../../../components/dashboard/types";
 
 const groupPhases = ["MOBILISATION", "INTENSIVE", "DEVELOPMENT", "MATURITY", "POST_GRADUATION"];
@@ -509,6 +510,16 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
             </form>
           </section>
         </div>
+      ) : null}
+
+      {/* Field agents hold members:write for their own caseload, so they can do
+          this at the group's meeting; the server checks the caseload. */}
+      {!isMember && user?.permissions?.includes("members:write") ? (
+        <ChampionAccessCard
+          championName={group.contactPersonName}
+          championPhone={group.contactPhone}
+          groupId={group.id}
+        />
       ) : null}
 
       {!isMember ? (
