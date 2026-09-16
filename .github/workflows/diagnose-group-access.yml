@@ -1,0 +1,24 @@
+name: Diagnose group access
+
+# Manual and READ-ONLY. Reports whether SMS actually leaves the server and
+# whether onboarded groups can reach their accounts. Writes nothing; prints no
+# full phone numbers and no secrets.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run the diagnostic with the service's own environment
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /var/www/intellicash/app/apps/api/prisma/run-with-service-env.sh prisma/diagnose-group-access.ts'
