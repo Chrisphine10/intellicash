@@ -8,9 +8,12 @@
 #
 # Usage (as root on the server):
 #   bash apps/api/prisma/run-with-service-env.sh prisma/diagnose-group-access.ts
+#   bash apps/api/prisma/run-with-service-env.sh prisma/link-orphan-group-logins.ts APPLY=1
+# Extra KEY=VALUE arguments are passed to the script's environment.
 set -euo pipefail
 
-SCRIPT="${1:?usage: run-with-service-env.sh prisma/<script>.ts}"
+SCRIPT="${1:?usage: run-with-service-env.sh prisma/<script>.ts [KEY=VALUE ...]}"
+shift
 APP_API=/var/www/intellicash/app/apps/api
 
 ENVFILE=$(mktemp)
@@ -20,6 +23,12 @@ trap 'rm -f "$ENVFILE"' EXIT
 systemctl show intellicash -p Environment --value | tr ' ' '\n' | grep '=' >>"$ENVFILE" || true
 for file in $(systemctl show intellicash -p EnvironmentFiles --value | sed 's/ (ignore_errors=[a-z]*)//g'); do
   [ -f "$file" ] && grep -Ev '^[[:space:]]*(#|$)' "$file" >>"$ENVFILE" || true
+done
+for pair in "$@"; do
+  case "$pair" in
+    [A-Z_]*=*) echo "$pair" >>"$ENVFILE" ;;
+    *) echo "ignoring argument that is not KEY=VALUE: $pair" >&2 ;;
+  esac
 done
 chown intellicash "$ENVFILE"
 

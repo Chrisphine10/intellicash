@@ -1,0 +1,37 @@
+name: Link orphan group logins
+
+# Manual. Attaches group logins that field sign-ups created with no group to the
+# imported group each was meant for, per the explicit mapping in
+# prisma/link-orphan-group-logins.ts. Dry run unless "apply" is ticked; a real
+# run backs up the database first.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Write the links (leave unticked for a dry run)"
+        type: boolean
+        default: false
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Back up the database
+        if: ${{ inputs.apply }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            '/usr/local/bin/intellicash-backup.sh && echo "Backup taken."'
+
+      - name: Link
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /var/www/intellicash/app/apps/api/prisma/run-with-service-env.sh prisma/link-orphan-group-logins.ts APPLY=${{ inputs.apply && '1' || '0' }}'
