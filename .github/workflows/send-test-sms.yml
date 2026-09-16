@@ -1,0 +1,40 @@
+name: Send test SMS
+
+# Manual. Sends one test message through the live Bonga credentials on the
+# server and prints the provider's own status, message and remaining credit.
+on:
+  workflow_dispatch:
+    inputs:
+      to:
+        description: "Number to text, e.g. 254712345678"
+        required: true
+      serviceId:
+        description: "Optional: try a different Bonga service ID"
+        required: false
+        default: ""
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Send
+        env:
+          TO: ${{ inputs.to }}
+          SERVICE_ID: ${{ inputs.serviceId }}
+        run: |
+          # Digits only, so nothing typed into the form can become shell syntax
+          # on the server.
+          TO_DIGITS=$(printf '%s' "$TO" | tr -cd '0-9')
+          SID_DIGITS=$(printf '%s' "$SERVICE_ID" | tr -cd '0-9')
+          EXTRA="TO=$TO_DIGITS"
+          [ -n "$SID_DIGITS" ] && EXTRA="$EXTRA SERVICE_ID=$SID_DIGITS"
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /var/www/intellicash/app/apps/api/prisma/run-with-service-env.sh prisma/send-test-sms.ts $EXTRA"

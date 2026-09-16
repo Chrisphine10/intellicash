@@ -1,0 +1,83 @@
+name: Configure Bonga SMS
+
+# Manual. Writes the Bonga SMS credentials from the repository's encrypted
+# secrets into the API's .env on the server, then restarts.
+#
+# The values travel over SSH on stdin, never on a command line (where `ps` on the
+# server would show them) and never in the repository. GitHub masks them in this
+# log. The .env is backed up first and stays 0600, owned by the app user.
+on:
+  workflow_dispatch:
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the secrets are present
+        env:
+          CLIENT_ID: ${{ secrets.BONGA_SMS_CLIENT_ID }}
+          API_KEY: ${{ secrets.BONGA_SMS_API_KEY }}
+          API_SECRET: ${{ secrets.BONGA_SMS_API_SECRET }}
+          SERVICE_ID: ${{ secrets.BONGA_SMS_SERVICE_ID }}
+        run: |
+          for name in CLIENT_ID API_KEY API_SECRET SERVICE_ID; do
+            if [ -z "${!name}" ]; then echo "::error::BONGA_SMS_$name secret is missing"; exit 1; fi
+          done
+          echo "All four Bonga secrets are present."
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write the credentials and restart
+        env:
+          CLIENT_ID: ${{ secrets.BONGA_SMS_CLIENT_ID }}
+          API_KEY: ${{ secrets.BONGA_SMS_API_KEY }}
+          API_SECRET: ${{ secrets.BONGA_SMS_API_SECRET }}
+          SERVICE_ID: ${{ secrets.BONGA_SMS_SERVICE_ID }}
+        run: |
+          {
+            echo "BONGA_SMS_CLIENT_ID=$CLIENT_ID"
+            echo "BONGA_SMS_API_KEY=$API_KEY"
+            echo "BONGA_SMS_API_SECRET=$API_SECRET"
+            echo "BONGA_SMS_SERVICE_ID=$SERVICE_ID"
+            echo "BONGA_SMS_ENDPOINT=http://167.172.14.50:4002/v1/send-sms"
+            echo "ENABLE_SMS_NETWORK_CALLS=true"
+          } | ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             ENV=/var/www/intellicash/app/apps/api/.env
+             cp -p "$ENV" "$ENV.before-bonga-$(date +%Y%m%d-%H%M%S)"
+             while IFS= read -r line; do
+               key="${line%%=*}"
+               [ -z "$key" ] && continue
+               grep -v "^${key}=" "$ENV" > "$ENV.tmp" || true
+               echo "$line" >> "$ENV.tmp"
+               cat "$ENV.tmp" > "$ENV"
+               rm -f "$ENV.tmp"
+               echo "set $key"
+             done
+             chown intellicash:intellicash "$ENV"
+             chmod 600 "$ENV"
+             systemctl restart intellicash
+             echo "restarted"'
+
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5 6; do
+            sleep 10
+            H=$(curl -s --max-time 20 https://intellicash.co.ke/health || echo '')
+            echo "attempt $i: $H"
+            echo "$H" | grep -q '"status":"ok"' && exit 0
+          done
+          echo '::error::API did not come back healthy after the restart'
+          exit 1
+
+      - name: Confirm the provider now resolves
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /var/www/intellicash/app/apps/api/prisma/run-with-service-env.sh prisma/diagnose-group-access.ts' | sed -n '/== SMS ==/,/most recent/p'
