@@ -60,6 +60,30 @@ async function main() {
       select: { id: true, name: true, code: true }
     });
 
+    if (orphans.length === 0) {
+      // Not an orphan any more — somebody already attached it. Say where, so a
+      // login already on the RIGHT group is not mistaken for a problem, and one
+      // on the wrong group is.
+      const attached = await prisma.user.findMany({
+        where: { name: row.orphanName, role: "GROUP_ACCOUNT", groupId: { not: null } },
+        select: { phone: true, group: { select: { name: true, code: true } } }
+      });
+      const target = groups[0];
+      const alreadyRight =
+        attached.length > 0 && target !== undefined && attached.every((login) => login.group?.code === target.code);
+      if (alreadyRight) {
+        console.log(`  ${row.orphanName.padEnd(28)} already on ${target!.name} (${target!.code}) — nothing to do`);
+        continue;
+      }
+      problems.push(
+        `"${row.orphanName}": no orphan login; ${
+          attached.length === 0
+            ? "no login by that name at all"
+            : `already attached to ${attached.map((login) => `${login.group?.name} (${login.group?.code}) ${mask(login.phone)}`).join(", ")}`
+        }`
+      );
+      continue;
+    }
     if (orphans.length !== row.expectedLogins) {
       problems.push(`"${row.orphanName}": expected ${row.expectedLogins} orphan login(s), found ${orphans.length}`);
       continue;
