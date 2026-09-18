@@ -91,22 +91,83 @@ async function findUserByPhone(phone: string) {
 }
 
 /**
+ * The account a code for this number opens, and the number to text it to.
+ *
+ * First the login that holds the number. Failing that, the group whose
+ * recorded digital champion has this number — provided that group has exactly
+ * one active login and that login has no number of its own yet.
+ *
+ * The second path is what field sign-in actually needed. Most groups were set
+ * up centrally: the champion's number sits on the GROUP (it came from the
+ * onboarding register, or a programme officer typed it in), while the group's
+ * login was created with no phone, or lost the number to another account. A
+ * code request for that number used to match nothing and stop silently — no
+ * text, nothing in the SMS log — which is exactly "OTP doesn't even reach the
+ * server". Receiving the code on that phone proves the champion holds it, which
+ * is the same proof as a code to a login's own number; on success the number is
+ * attached to the login, so the next sign-in goes the direct way.
+ *
+ * Anything ambiguous matches nothing: a number recorded on two groups, or a
+ * group with two logins, or a login that already has a different number. A
+ * code that opens the wrong group hands one group's books to another.
+ */
+async function resolveOtpAccount(phone: string) {
+  const direct = await findUserByPhone(phone);
+  if (direct?.phone) return { user: direct, sendTo: direct.phone, attachPhone: false };
+
+  // A login that holds the number but is not active must not be bypassed via
+  // the group: closed means closed.
+  const tail = phoneTail(phone);
+  if (tail.length < 9) return null;
+  const heldByAnyone = await prisma.user.findMany({
+    where: { phone: { contains: tail } },
+    select: { phone: true }
+  });
+  if (heldByAnyone.some((holder) => samePhone(holder.phone, phone))) return null;
+
+  const groups = (
+    await prisma.group.findMany({
+      where: { contactPhone: { contains: tail }, isDemo: false },
+      select: {
+        id: true,
+        contactPhone: true,
+        userAccounts: {
+          where: { role: "GROUP_ACCOUNT", status: "ACTIVE" },
+          select: { id: true, name: true, phone: true, status: true }
+        }
+      }
+    })
+  ).filter((group) => samePhone(group.contactPhone, phone));
+
+  if (groups.length !== 1) return null;
+  const logins = groups[0]!.userAccounts;
+  if (logins.length !== 1 || logins[0]!.phone) return null;
+
+  return { user: logins[0]!, sendTo: normalisePhone(phone), attachPhone: true };
+}
+
+/**
  * What the code is for. It is the same code store either way — one live code
  * per person — but the text must say which, or somebody who asked to reset a
  * password reads "sign-in code" and assumes the wrong screen.
  */
 export type LoginOtpPurpose = "SIGN_IN" | "PASSWORD_RESET";
 
+function otpText(code: string, purpose?: LoginOtpPurpose) {
+  return purpose === "PASSWORD_RESET"
+    ? `${code} is your Intelli-Cash code to reset your password. It expires in ${TTL_MINUTES} minutes. If you did not ask for this, ignore it.`
+    : `${code} is your Intelli-Cash sign-in code. It expires in ${TTL_MINUTES} minutes. Do not share it with anyone.`;
+}
+
 export async function requestLoginOtp(
   phone: string,
   options: { requestedByUserId?: string; purpose?: LoginOtpPurpose } = {}
 ): Promise<RequestLoginOtpResult> {
-  const user = await findUserByPhone(phone);
+  const account = await resolveOtpAccount(phone);
 
   // No account on that number. The caller is told the same thing either way.
-  if (!user || !user.phone) {
-    return { sent: false, reason: user ? "NO_PHONE" : "NO_ACCOUNT" };
-  }
+  if (!account) return { sent: false, reason: "NO_ACCOUNT" };
+  const user = { ...account.user, phone: account.sendTo };
 
   const existing = await prisma.userLoginOtp.findUnique({
     where: { userId: user.id },
@@ -152,10 +213,9 @@ export async function requestLoginOtp(
         phone: normalisePhone(user.phone),
         // No group name and no link. A text read over somebody's shoulder
         // should not also say which book it opens.
-        message:
-          options.purpose === "PASSWORD_RESET"
-            ? `${code} is your Intelli-Cash code to reset your password. It expires in ${TTL_MINUTES} minutes. If you did not ask for this, ignore it.`
-            : `${code} is your Intelli-Cash sign-in code. It expires in ${TTL_MINUTES} minutes. Do not share it with anyone.`
+        message: otpText(code, options.purpose),
+        // The log keeps the wording, never the code: it is hashed everywhere else.
+        logMessage: otpText("••••••", options.purpose)
       }
     ]
   });
@@ -174,8 +234,9 @@ export type VerifyLoginOtpResult =
   | { ok: false; reason: "NO_CODE" | "EXPIRED" | "TOO_MANY_ATTEMPTS" | "WRONG_CODE" };
 
 export async function verifyLoginOtp(phone: string, code: string): Promise<VerifyLoginOtpResult> {
-  const user = await findUserByPhone(phone);
-  if (!user) return { ok: false, reason: "NO_CODE" };
+  const account = await resolveOtpAccount(phone);
+  if (!account) return { ok: false, reason: "NO_CODE" };
+  const { user } = account;
 
   const record = await prisma.userLoginOtp.findUnique({ where: { userId: user.id } });
   if (!record) return { ok: false, reason: "NO_CODE" };
@@ -206,5 +267,16 @@ export async function verifyLoginOtp(phone: string, code: string): Promise<Verif
   // Single use. Consumed before the session exists, so a code that raced two
   // requests cannot mint two sessions.
   await prisma.userLoginOtp.delete({ where: { userId: user.id } });
+
+  // The code arrived on the group's recorded champion number, so that number
+  // now belongs on the login. Checked again, not assumed: `User.phone` is
+  // unique, and someone may have taken it in the last ten minutes.
+  if (account.attachPhone) {
+    const taken = await prisma.user.findFirst({ where: { phone: account.sendTo }, select: { id: true } });
+    if (!taken) {
+      await prisma.user.update({ where: { id: user.id }, data: { phone: account.sendTo } });
+    }
+  }
+
   return { ok: true, userId: user.id };
 }

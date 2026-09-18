@@ -92,10 +92,17 @@ async function resolveRecipients(input: Pick<CreateSmsBroadcastInput, "targetTyp
 }
 
 export function serializeSmsBroadcast(broadcast: SmsBroadcastWithRecipients) {
+  // Sign-in codes sent before the log stopped storing them are still in these
+  // rows. Hidden on the way out, so the SMS page is not a list of door keys.
+  const hideCode = <T extends string | null>(text: T): T =>
+    broadcast.kind === "LOGIN_OTP" && text ? (text.replace(/\b\d{6}\b/g, "••••••") as T) : text;
+
   return {
     ...broadcast,
+    message: hideCode(broadcast.message),
     recipients: broadcast.recipients.map((recipient) => ({
       ...recipient,
+      message: hideCode(recipient.message),
       phone: maskPhone(recipient.phone)
     }))
   };

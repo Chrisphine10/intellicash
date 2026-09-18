@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { verifyLoginOtp, requestLoginOtp } from "../src/services/login-otp-service";
+import { serializeSmsBroadcast } from "../src/services/admin-sms-service";
 
 const app = createApp();
 
@@ -196,6 +197,106 @@ describe("signing in with a code", () => {
     // The database must not be a list of live door codes.
     expect(record.codeHash).not.toBe(code);
     expect(await bcrypt.compare(code, record.codeHash)).toBe(true);
+  });
+});
+
+describe("a code to the group's recorded champion number", () => {
+  // The field failure: the number is on the GROUP, the login has none, and a
+  // code request used to match nothing and stop without a trace.
+  const CHAMPION = "254799001177";
+  let groupId: string;
+  let loginId: string;
+
+  beforeAll(async () => {
+    const group = await prisma.group.upsert({
+      where: { code: "IWL-TST-0177" },
+      create: { name: "Champion Test Group", code: "IWL-TST-0177", phase: "INTENSIVE", county: "Embu", contactPhone: "0799001177" },
+      update: { contactPhone: "0799001177", isDemo: false },
+      select: { id: true }
+    });
+    groupId = group.id;
+    const login = await prisma.user.upsert({
+      where: { email: "iwl-tst-0177@groups.intellicash.test" },
+      create: {
+        name: "Champion Test Group",
+        email: "iwl-tst-0177@groups.intellicash.test",
+        passwordHash: await bcrypt.hash("never-handed-out", 10),
+        role: "GROUP_ACCOUNT",
+        groupId
+      },
+      update: { phone: null, status: "ACTIVE", groupId },
+      select: { id: true }
+    });
+    loginId = login.id;
+  }, 120000);
+
+  beforeEach(async () => {
+    await prisma.user.update({ where: { id: loginId }, data: { phone: null, status: "ACTIVE" } });
+    await prisma.userLoginOtp.deleteMany({ where: { userId: loginId } });
+  });
+
+  it("issues the code for the group's login, and signs in with it", async () => {
+    const issued = await requestLoginOtp("+254 799 001 177");
+    expect(issued.reason).not.toBe("NO_ACCOUNT");
+    expect(issued.devCode).toBeTruthy();
+
+    const response = await request(app)
+      .post("/api/v1/auth/otp/verify")
+      .send({ phone: "0799001177", code: issued.devCode })
+      .expect(200);
+    expect(response.body.data.id).toBe(loginId);
+  });
+
+  it("attaches the number to the login once the code has proved it", async () => {
+    const issued = await requestLoginOtp(CHAMPION);
+    await verifyLoginOtp(CHAMPION, issued.devCode!);
+    const login = await prisma.user.findUniqueOrThrow({ where: { id: loginId }, select: { phone: true } });
+    expect(login.phone).toBe(CHAMPION);
+  });
+
+  it("does not touch a login that already has a different number", async () => {
+    await prisma.user.update({ where: { id: loginId }, data: { phone: "254799001178" } });
+    const issued = await requestLoginOtp(CHAMPION);
+    expect(issued.reason).toBe("NO_ACCOUNT");
+  });
+
+  it("matches nothing when two groups record the same champion number", async () => {
+    const twin = await prisma.group.upsert({
+      where: { code: "IWL-TST-0178" },
+      create: { name: "Twin Group", code: "IWL-TST-0178", phase: "INTENSIVE", county: "Embu", contactPhone: CHAMPION },
+      update: { contactPhone: CHAMPION },
+      select: { id: true }
+    });
+    try {
+      expect((await requestLoginOtp(CHAMPION)).reason).toBe("NO_ACCOUNT");
+    } finally {
+      await prisma.group.update({ where: { id: twin.id }, data: { contactPhone: null } });
+    }
+  });
+
+  it("does not open a closed login through the group", async () => {
+    await prisma.user.update({ where: { id: loginId }, data: { status: "CLOSED" } });
+    expect((await requestLoginOtp(CHAMPION)).reason).toBe("NO_ACCOUNT");
+  });
+});
+
+describe("the SMS log never shows a live code", () => {
+  it("hides the code on sign-in messages already stored", () => {
+    const shown = serializeSmsBroadcast({
+      kind: "LOGIN_OTP",
+      message: "482913 is your Intelli-Cash sign-in code.",
+      recipients: [{ phone: "254799001122", message: "482913 is your Intelli-Cash sign-in code." }]
+    } as never);
+    expect(JSON.stringify(shown)).not.toContain("482913");
+  });
+
+  it("leaves other messages alone", () => {
+    const shown = serializeSmsBroadcast({
+      kind: "SHARE_PURCHASE",
+      message: "Receipt 482913",
+      recipients: []
+    } as never);
+    expect(shown.message).toBe("Receipt 482913");
   });
 });
 

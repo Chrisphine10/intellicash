@@ -45,6 +45,12 @@ export interface OutboundSmsRecipient {
   phone: string;
   /** This recipient's own body. Per-recipient by design; see the domain module. */
   message: string;
+  /**
+   * What the SMS log keeps instead of `message`, when the text itself is a
+   * secret. A sign-in code stored in the log is a live door key readable by
+   * every admin who opens the SMS page, while the code store keeps only a hash.
+   */
+  logMessage?: string;
 }
 
 export interface DispatchSmsInput {
@@ -133,7 +139,10 @@ export async function dispatchSms(
         provider: integration.provider,
         // One shared body when there is one; the label otherwise. The text a
         // given person received is always on their own row.
-        message: input.recipients.length === 1 ? input.recipients[0]!.message : input.label,
+        message:
+          input.recipients.length === 1
+            ? (input.recipients[0]!.logMessage ?? input.recipients[0]!.message)
+            : input.label,
         status: "QUEUED",
         recipientCount: input.recipients.length,
         queuedCount: input.recipients.length
@@ -153,7 +162,7 @@ export async function dispatchSms(
           groupId: input.groupId ?? null,
           memberName: recipient.memberName,
           phone: recipient.phone,
-          message: recipient.message,
+          message: recipient.logMessage ?? recipient.message,
           provider: integration.provider,
           status: "QUEUED"
         }
