@@ -71,10 +71,10 @@ describe("web smoke helpers", () => {
       expect.objectContaining({ label: "Help & Docs", section: "resources" })
     );
     expect(new Set(helpItem?.roles)).toEqual(
-      new Set(["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY"])
+      new Set(["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY", "VILLAGE_AGENT"])
     );
 
-    for (const role of ["IWL_ADMIN", "GROUP_ACCOUNT", "MEMBER", "LENDER", "PARTNER_OFFICER", "READ_ONLY"] as const) {
+    for (const role of ["IWL_ADMIN", "GROUP_ACCOUNT", "MEMBER", "LENDER", "PARTNER_OFFICER", "READ_ONLY", "VILLAGE_AGENT"] as const) {
       expect(getNavigationItemsForRole(role).map((item) => item.label)).toContain("Help & Docs");
     }
   });
@@ -3214,5 +3214,15 @@ describe("web smoke helpers", () => {
     expect(screen.getAllByText("Chat").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("a field agent's menu", () => {
+  it("offers their own work and nothing from the admin console", () => {
+    const labels = getNavigationItemsForRole("VILLAGE_AGENT").map((item) => item.label);
+    expect(labels).toEqual(expect.arrayContaining(["Dashboard", "My groups", "Meetings", "My visits", "Help & Docs"]));
+    for (const adminOnly of ["Users", "Audit", "Payments", "Integrations", "SMS", "Scorecard", "Settings"]) {
+      expect(labels).not.toContain(adminOnly);
+    }
   });
 });

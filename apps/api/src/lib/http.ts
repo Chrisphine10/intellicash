@@ -61,6 +61,8 @@ export function validationMessage(error: ZodError) {
         .replace(/[_-]+/g, " ")
         .trim()
         .toLowerCase()
+        // "programmeIds" reads as "Programme", not "Programme ids".
+        .replace(/\s+ids?$/, "")
         .replace(/\b(id|pin|otp|gps|url|va|sms)\b/g, (word) => word.toUpperCase())
         .replace(/^./, (first) => first.toUpperCase())
     : null;

@@ -853,7 +853,7 @@ router.post("/users/:id/password", requireAuth("users:write"), async (req, res, 
         throw new ApiHttpError(
           429,
           "CODE_RECENTLY_SENT",
-          "A code was sent to this number less than a minute ago. Wait a moment before sending another."
+          "A code was already sent to this phone in the last minute. Give it a minute to arrive; if it does not, send another."
         );
       }
       if (result.reason === "SMS_FAILED") {

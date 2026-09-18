@@ -134,7 +134,9 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
     setAttendance(
       Object.fromEntries(
         memberResponse.map((member) => {
-          const existing = meetingResponse.attendance.find((row) => row.member.fullName === member.fullName);
+          // By id: two members can share a name, and matching on it gave one
+          // the other's attendance.
+          const existing = meetingResponse.attendance.find((row) => row.memberId === member.id);
           return [member.id, (existing?.status as "PRESENT" | "ABSENT" | "LATE" | "EXCUSED") ?? "PRESENT"];
         })
       )
@@ -174,7 +176,9 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
         setAttendance(
           Object.fromEntries(
             memberResponse.map((member) => {
-              const existing = meetingResponse.attendance.find((row) => row.member.fullName === member.fullName);
+              // By id: two members can share a name, and matching on it gave one
+          // the other's attendance.
+          const existing = meetingResponse.attendance.find((row) => row.memberId === member.id);
               return [member.id, (existing?.status as "PRESENT" | "ABSENT" | "LATE" | "EXCUSED") ?? "PRESENT"];
             })
           )
@@ -249,7 +253,14 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
   const shareNumbers = Array.from({ length: shareLimit }, (_item, index) => index + 1);
   const completedUnlockRows = unlockRows.filter((row) => row.memberId && row.pin).length;
   const savedAttendanceCount = meeting?.attendance.length ?? 0;
-  const presentMembers = Object.values(attendance).filter((status) => status === "PRESENT" || status === "LATE").length;
+  // The summary reports what is SAVED. The form pre-selects "Present" for
+  // anyone without a row, which is a typing convenience — counting those
+  // defaults showed a member added mid-meeting as having attended it.
+  const savedAttendance = meeting?.attendance ?? [];
+  const presentMembers = savedAttendance.filter((row) => row.status === "PRESENT" || row.status === "LATE").length;
+  const unrecordedMembers = members.filter(
+    (member) => !savedAttendance.some((row) => row.memberId === member.id)
+  ).length;
   const draftLedgerRows = Object.values(amounts).reduce(
     (count, row) =>
       count +
@@ -278,7 +289,10 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
       icon: <UserCheck size={20} />,
       title: "Attendance",
       note: `${members.length} members`,
-      detail: `${presentMembers} present or late`,
+      detail:
+        savedAttendanceCount > 0 && unrecordedMembers > 0
+          ? `${presentMembers} present or late, ${unrecordedMembers} not recorded`
+          : `${presentMembers} present or late`,
       state: !meetingIsActive && !meetingIsSealed ? "locked" : savedAttendanceCount > 0 ? "done" : "current"
     },
     {

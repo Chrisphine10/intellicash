@@ -21,6 +21,7 @@ import type { GroupRow, Member, PartnerRow, User } from "../../../components/das
 interface UserFormState {
   name: string;
   email: string;
+  phone: string;
   password: string;
   role: Role;
   avatarUrl: string;
@@ -61,6 +62,7 @@ interface AccessControlState {
 const defaultForm: UserFormState = {
   name: "",
   email: "",
+  phone: "",
   // Never prefill a shared password: an admin who accepts the default
   // creates an account whose password is published in the source tree.
   password: "",
@@ -306,6 +308,7 @@ export default function UsersPage() {
     };
 
     if (form.avatarUrl) payload.avatarUrl = form.avatarUrl;
+    if (form.phone.trim()) payload.phone = form.phone.trim();
     if (form.role === "PARTNER_OFFICER" || form.role === "LENDER") payload.partnerId = form.partnerId;
     if (form.role === "GROUP_ACCOUNT") payload.groupId = form.groupId;
     if (form.role === "MEMBER") payload.memberId = form.memberId;
@@ -878,6 +881,19 @@ export default function UsersPage() {
                     required
                     type="email"
                     value={form.email}
+                  />
+                </label>
+                {/* Phone is how groups and members sign in, and where sign-in and
+                    reset codes are texted. Without it the account is email-only. */}
+                <label className="credential-field">
+                  <span>Phone (for sign-in and SMS codes)</span>
+                  <input
+                    autoComplete="off"
+                    inputMode="tel"
+                    onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                    placeholder="0712 345 678"
+                    type="tel"
+                    value={form.phone}
                   />
                 </label>
                 <label className="credential-field">

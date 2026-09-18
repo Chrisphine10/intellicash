@@ -4,7 +4,7 @@ import React from "react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Pencil, Plus, Rocket, UsersRound, X } from "@/lib/theme-icons";
+import { ArrowRight, MapPinned, Pencil, Plus, Rocket, UsersRound, X } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
@@ -40,6 +40,7 @@ export default function GroupsPage() {
   const [form, setForm] = useState(defaultGroupForm);
   const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -382,6 +383,53 @@ export default function GroupsPage() {
                         value={form.gpsLongitude}
                       />
                     </label>
+                    {/* Typing coordinates is where GPS goes wrong. An officer
+                        standing at the meeting point can take them from the
+                        device instead; the visit geofence is checked against
+                        exactly this point. */}
+                    <div className="credential-field">
+                      <span>Meeting point</span>
+                      <button
+                        className="button secondary"
+                        disabled={locating}
+                        onClick={() => {
+                          if (typeof navigator === "undefined" || !navigator.geolocation) {
+                            setMessage({ ok: false, text: "This browser cannot share its location. Type the coordinates instead." });
+                            return;
+                          }
+                          setLocating(true);
+                          navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                              setForm((current) => ({
+                                ...current,
+                                gpsLatitude: position.coords.latitude.toFixed(6),
+                                gpsLongitude: position.coords.longitude.toFixed(6)
+                              }));
+                              setMessage({
+                                ok: true,
+                                text: `Location captured (accurate to about ${Math.round(position.coords.accuracy)} m). Save the group to keep it.`
+                              });
+                              setLocating(false);
+                            },
+                            (positionError) => {
+                              setMessage({
+                                ok: false,
+                                text:
+                                  positionError.code === positionError.PERMISSION_DENIED
+                                    ? "Location permission was refused. Allow location for this site, or type the coordinates."
+                                    : "Your location could not be found. Move to open sky and try again, or type the coordinates."
+                              });
+                              setLocating(false);
+                            },
+                            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+                          );
+                        }}
+                        type="button"
+                      >
+                        <MapPinned size={16} />
+                        {locating ? "Finding location" : "Use my current location"}
+                      </button>
+                    </div>
                     <label className="credential-field">
                       <span>GPS radius meters</span>
                       <input

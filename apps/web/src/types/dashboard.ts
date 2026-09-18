@@ -524,7 +524,7 @@ export interface MeetingRow {
   transactionTotal: number;
   minutes?: string | null;
   steps: Array<{ id: string; step: string; status: string; name: string; completedAt?: string | null }>;
-  attendance: Array<{ id: string; status: string; member: { fullName: string; role: string } }>;
+  attendance: Array<{ id: string; memberId: string; status: string; member: { fullName: string; role: string } }>;
   keySubmissions?: Array<{
     id: string;
     memberId: string;

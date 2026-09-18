@@ -488,6 +488,10 @@ export default function DashboardOverviewPage() {
     );
   }
 
+  if (user.role === "VILLAGE_AGENT") {
+    return <AgentDashboard meetings={meetings} user={user} />;
+  }
+
   if (user.role === "READ_ONLY") {
     return (
       <ReadOnlyDashboard
@@ -1089,6 +1093,133 @@ function LenderDashboard({
               </div>
               <span className="pill blue">Open</span>
             </div>
+          </div>
+        </DashboardDataCard>
+      </section>
+    </>
+  );
+}
+
+interface AgentReport {
+  summary: { groups: number; rated: number; needSupport: number; totalMembers: number };
+  groups: Array<{
+    id: string;
+    name: string;
+    code: string;
+    county: string;
+    memberCount: number;
+    meetingCount: number;
+    creditRating: { score: number | null; band: string | null; rated: boolean };
+    needsSupport: boolean;
+  }>;
+}
+
+/**
+ * A field agent's own caseload.
+ *
+ * Agents used to fall through to the admin operations dashboard, which offered
+ * them Users, Payments, Integrations and Audit — none of which they can open.
+ * This shows the groups they are responsible for, which of those need a visit,
+ * and the meetings coming up in them.
+ */
+function AgentDashboard({ meetings, user }: { meetings: MeetingWithGroup[]; user: User }) {
+  const [report, setReport] = useState<AgentReport | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<AgentReport>("/reports/agent")
+      .then((response) => {
+        if (active) setReport(response);
+      })
+      .catch((error: unknown) => {
+        if (active) setReportError(error instanceof Error ? error.message : "Your caseload could not be loaded.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const upcoming = meetings
+    .filter((meeting) => meeting.status !== "SEALED")
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())
+    .slice(0, 5);
+  const needingSupport = report?.groups.filter((group) => group.needsSupport) ?? [];
+
+  return (
+    <>
+      <DashboardIntro
+        actionHref="/dashboard/groups"
+        actionLabel="Open my groups"
+        eyebrow="Field agent"
+        title="My caseload"
+        user={user}
+      />
+
+      <QuickAccessSection user={user} />
+
+      {reportError ? <p className="notice warning">{reportError}</p> : null}
+
+      <section className="stat-grid dashboard-stat-grid">
+        <StatCard icon={<UsersRound size={20} />} label="Groups" note="On my caseload" value={String(report?.summary.groups ?? "–")} />
+        <StatCard icon={<Activity size={20} />} label="Members" note="Across my groups" value={String(report?.summary.totalMembers ?? "–")} />
+        <StatCard icon={<ShieldCheck size={20} />} label="Rated" note="Have a credit rating" value={String(report?.summary.rated ?? "–")} />
+        <StatCard icon={<KeyRound size={20} />} label="Need a visit" note="Unrated or rated low" value={String(report?.summary.needSupport ?? "–")} />
+      </section>
+
+      <section className="dashboard-data-grid">
+        <DashboardDataCard actionHref="/dashboard/groups" count={report?.groups.length ?? 0} title="My groups">
+          <div className="list">
+            {(report?.groups ?? []).map((group) => (
+              <Link className="list-row" href={`/dashboard/groups/${group.id}`} key={group.id}>
+                <div>
+                  <strong>{group.name}</strong>
+                  <span>
+                    {group.code} · {group.memberCount} members · {group.meetingCount} meetings
+                  </span>
+                </div>
+                <span className={group.needsSupport ? "pill gold" : "pill blue"}>
+                  {group.creditRating.rated ? `Rated ${group.creditRating.band ?? ""}` : "Not rated"}
+                </span>
+              </Link>
+            ))}
+            {report && report.groups.length === 0 ? (
+              <p className="card-note">No groups are assigned to you yet. Ask your programme officer.</p>
+            ) : null}
+          </div>
+        </DashboardDataCard>
+
+        <DashboardDataCard actionHref="/dashboard/visits" count={needingSupport.length} title="Groups to visit">
+          <div className="list">
+            {needingSupport.map((group) => (
+              <Link className="list-row" href={`/dashboard/groups/${group.id}`} key={group.id}>
+                <div>
+                  <strong>{group.name}</strong>
+                  <span>{group.creditRating.rated ? "Rated low — worth a follow-up visit" : "Never assessed — needs a first visit"}</span>
+                </div>
+                <span className="pill gold">Visit</span>
+              </Link>
+            ))}
+            {report && needingSupport.length === 0 ? (
+              <p className="card-note">Every group on your caseload is rated and on track.</p>
+            ) : null}
+          </div>
+        </DashboardDataCard>
+
+        <DashboardDataCard actionHref="/dashboard/meetings" count={upcoming.length} title="Upcoming meetings">
+          <div className="list">
+            {upcoming.map((meeting) => (
+              <div className="list-row" key={meeting.id}>
+                <div>
+                  <strong>{meeting.title}</strong>
+                  <span>
+                    {meeting.group?.name ?? ""} · {formatShortDateTime(meeting.scheduledAt)}
+                  </span>
+                </div>
+                <span className="pill">{humanizeEnum(meeting.status)}</span>
+              </div>
+            ))}
+            {upcoming.length === 0 ? <p className="card-note">No meetings coming up in your groups.</p> : null}
           </div>
         </DashboardDataCard>
       </section>

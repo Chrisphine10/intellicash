@@ -169,8 +169,15 @@ export default function AssessmentTemplateDetailPage({
         .map((segment) => segment.label)
         .join(" · ") || "Nothing to cover yet.";
 
+  const questionCount = template.sections.reduce((sum, section) => sum + section.questions.length, 0);
+
+  // Laid out with the theme's card pieces — a <header> per card, `.card-body`
+  // for padding, `.card-note` for prose. This page used `.eyebrow` (a small
+  // uppercase green LABEL) for every paragraph and put content straight into
+  // `.data-card`, so explanations shouted in green capitals and sat flush
+  // against the card border.
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section scorecard-detail">
       <header className="page-heading">
         <div>
           <Link className="inline-back" href="/dashboard/assessment-templates">
@@ -180,166 +187,211 @@ export default function AssessmentTemplateDetailPage({
           <h2>
             {template.title} — v{template.version}
           </h2>
-          <p>
+          <p className="card-note">
             {template.status === "PUBLISHED"
               ? "Published and locked. Clone it to make changes; this version has to keep scoring the assessments already made against it."
               : "Draft. Nothing uses it until it is published."}
           </p>
         </div>
-        <ClipboardList size={22} />
+        <span className={template.status === "PUBLISHED" ? "pill blue" : "pill gold"}>
+          <ClipboardList size={14} /> {template.status === "PUBLISHED" ? "Published" : "Draft"}
+        </span>
       </header>
 
       {message ? (
-        <div className={`dashboard-notice ${message.ok ? "" : "error"}`}>{message.text}</div>
+        <p className={message.ok ? "notice success" : "notice warning"}>{message.text}</p>
       ) : null}
 
       <article className="data-card">
-        <h3>Total points</h3>
-        <p className="metric-value">{computedMaxPoints}</p>
-        <p className="eyebrow">
-          The sum of every question weight, computed here and again on the server at
-          publish. It is never typed in, so adding a question moves it and nothing
-          has to be kept in step by hand.
-        </p>
+        <header>
+          <div>
+            <h3>Summary</h3>
+            <span>Totals are computed from the questions — never typed in</span>
+          </div>
+        </header>
+        <div className="card-body">
+          <div className="fact-grid">
+            <div className="fact">
+              <span className="label">Total points</span>
+              <span className="value metric-value">{computedMaxPoints}</span>
+            </div>
+            <div className="fact">
+              <span className="label">Sections</span>
+              <span className="value metric-value small">{template.sections.length}</span>
+            </div>
+            <div className="fact">
+              <span className="label">Questions</span>
+              <span className="value metric-value small">{questionCount}</span>
+            </div>
+            <div className="fact">
+              <span className="label">Bands</span>
+              <span className="value metric-value small">{bands.length}</span>
+            </div>
+          </div>
+        </div>
       </article>
 
       {issues.length ? (
         <article className="data-card">
-          <h3>Not publishable yet</h3>
-          <ul>
-            {issues.map((issue) => (
-              <li key={`${issue.path}-${issue.message}`}>
-                <code>{issue.path}</code> — {issue.message}
-              </li>
-            ))}
-          </ul>
+          <header>
+            <div>
+              <h3>Not publishable yet</h3>
+              <span>Fix these before publishing</span>
+            </div>
+            <span className="pill red">{issues.length}</span>
+          </header>
+          <div className="card-body">
+            <ul className="scorecard-issues">
+              {issues.map((issue) => (
+                <li key={`${issue.path}-${issue.message}`}>
+                  <code>{issue.path}</code> — {issue.message}
+                </li>
+              ))}
+            </ul>
+          </div>
         </article>
       ) : null}
 
       <article className="data-card">
-        <h3>Bands</h3>
-        <p className="eyebrow">
-          Bands must cover every score from 0 to {computedMaxPoints} with no gap and
-          no overlap. A gap means some achievable score has no band, and the first
-          time anyone notices is when a real assessment lands in it.
-        </p>
-
-        {/*
-          * The strip draws the whole 0..total range so a gap or an overlap is
-          * something you SEE rather than something you infer from a validation
-          * path. The commonest way to create one is to add a question: the
-          * total moves and the top band quietly stops short of it.
-          */}
-        {coverage.length ? (
-          <>
-            <div className="band-strip" role="img" aria-label={coverageSummary}>
-              {coverage.map((segment) => (
-                <span
-                  className={`band-strip-segment ${segment.kind}`}
-                  key={`${segment.kind}-${segment.from}`}
-                  style={{ width: `${segment.widthPercent}%` }}
-                  title={segment.label}
-                >
-                  <span className="band-strip-label">{segment.label}</span>
-                </span>
-              ))}
-            </div>
-            <p className={coverageOk ? "eyebrow" : "dashboard-notice error"}>{coverageSummary}</p>
-          </>
-        ) : null}
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Band</th>
-              <th>From</th>
-              <th>To</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bands.map((band, index) => (
-              <tr key={band.key}>
-                <td>{band.label}</td>
-                <td>
-                  <input
-                    type="number"
-                    value={band.minPoints}
-                    disabled={!editable || busy}
-                    onChange={(event) =>
-                      updateBand(index, { minPoints: Number(event.target.value) })
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={band.maxPoints}
-                    disabled={!editable || busy}
-                    onChange={(event) =>
-                      updateBand(index, { maxPoints: Number(event.target.value) })
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {editable ? (
-          <div className="button-row">
-            <button className="button" disabled={busy} onClick={saveBands}>
-              {busy ? "Saving…" : "Save bands"}
-            </button>
-            <button
-              className="button"
-              disabled={busy || !template.validation.ok}
-              onClick={publish}
-            >
-              Publish this version
-            </button>
+        <header>
+          <div>
+            <h3>Bands</h3>
+            <span>Every score from 0 to {computedMaxPoints} needs exactly one band</span>
           </div>
-        ) : null}
+          <span className={coverageOk ? "pill blue" : "pill red"}>{coverageOk ? "Complete" : "Gaps"}</span>
+        </header>
+        <div className="card-body">
+          <p className="card-note">
+            A gap means some achievable score has no band, and the first time anyone notices is
+            when a real assessment lands in it.
+          </p>
+
+          {/*
+            * The strip draws the whole 0..total range so a gap or an overlap is
+            * something you SEE rather than something you infer from a validation
+            * path. The commonest way to create one is to add a question: the
+            * total moves and the top band quietly stops short of it.
+            */}
+          {coverage.length ? (
+            <>
+              <div className="band-strip" role="img" aria-label={coverageSummary}>
+                {coverage.map((segment) => (
+                  <span
+                    className={`band-strip-segment ${segment.kind}`}
+                    key={`${segment.kind}-${segment.from}`}
+                    style={{ width: `${segment.widthPercent}%` }}
+                    title={segment.label}
+                  >
+                    <span className="band-strip-label">{segment.label}</span>
+                  </span>
+                ))}
+              </div>
+              <p className={coverageOk ? "card-note" : "notice warning"}>{coverageSummary}</p>
+            </>
+          ) : null}
+
+          <div className="table-wrap">
+            <table className="data-table scorecard-bands">
+              <thead>
+                <tr>
+                  <th>Band</th>
+                  <th>From (points)</th>
+                  <th>To (points)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bands.map((band, index) => (
+                  <tr key={band.key}>
+                    <td>
+                      <strong>{band.label}</strong>
+                    </td>
+                    <td>
+                      <input
+                        aria-label={`${band.label} from`}
+                        disabled={!editable || busy}
+                        onChange={(event) => updateBand(index, { minPoints: Number(event.target.value) })}
+                        type="number"
+                        value={band.minPoints}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label={`${band.label} to`}
+                        disabled={!editable || busy}
+                        onChange={(event) => updateBand(index, { maxPoints: Number(event.target.value) })}
+                        type="number"
+                        value={band.maxPoints}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {editable ? (
+            <div className="scorecard-actions">
+              <button className="button secondary" disabled={busy} onClick={saveBands} type="button">
+                {busy ? "Saving…" : "Save bands"}
+              </button>
+              <button
+                className="button"
+                disabled={busy || !template.validation.ok}
+                onClick={publish}
+                type="button"
+              >
+                Publish this version
+              </button>
+            </div>
+          ) : null}
+        </div>
       </article>
 
       {template.sections.map((section) => (
         <article className="data-card" key={section.key}>
-          <h3>
-            {section.title}{" "}
-            <span className="eyebrow">
+          <header>
+            <div>
+              <h3>{section.title}</h3>
+              <span>{section.questions.length} questions</span>
+            </div>
+            <span className="pill">
               {section.questions.reduce((sum, question) => sum + question.weight, 0)} points
             </span>
-          </h3>
-          {section.description ? <p className="eyebrow">{section.description}</p> : null}
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Question</th>
-                <th>Key</th>
-                <th>Weight</th>
-              </tr>
-            </thead>
-            <tbody>
-              {section.questions.map((question) => (
-                <tr key={question.key}>
-                  <td>
-                    {question.prompt}
-                    {question.guidance ? (
-                      <div className="eyebrow">{question.guidance}</div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <code>{question.key}</code>
-                  </td>
-                  <td>{question.weight}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          </header>
+          <div className="card-body">
+            {section.description ? <p className="card-note">{section.description}</p> : null}
+            <div className="table-wrap">
+              <table className="data-table scorecard-questions">
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Key</th>
+                    <th className="numeric">Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.questions.map((question) => (
+                    <tr key={question.key}>
+                      <td>
+                        <span className="scorecard-prompt">{question.prompt}</span>
+                        {question.guidance ? <span className="card-note">{question.guidance}</span> : null}
+                      </td>
+                      <td>
+                        <code>{question.key}</code>
+                      </td>
+                      <td className="numeric">{question.weight}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </article>
       ))}
 
-      <p className="eyebrow">
-        Section and question keys are what cross-visit trends join on. Renaming a
-        section's title is free; changing its key breaks the history.
+      <p className="card-note">
+        Section and question keys are what cross-visit trends join on. Renaming a section&apos;s
+        title is free; changing its key breaks the history.
       </p>
     </section>
   );

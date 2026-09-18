@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 
 import { createApp } from "../src/app";
@@ -229,6 +229,13 @@ describe("a code to the group's recorded champion number", () => {
     });
     loginId = login.id;
   }, 120000);
+
+  // These tests share the development database; leave no groups behind in it.
+  afterAll(async () => {
+    await prisma.userLoginOtp.deleteMany({ where: { userId: loginId } });
+    await prisma.user.deleteMany({ where: { id: loginId } });
+    await prisma.group.deleteMany({ where: { code: { in: ["IWL-TST-0177", "IWL-TST-0178"] } } });
+  });
 
   beforeEach(async () => {
     await prisma.user.update({ where: { id: loginId }, data: { phone: null, status: "ACTIVE" } });

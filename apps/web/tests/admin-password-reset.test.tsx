@@ -31,6 +31,8 @@ describe("an admin resetting someone's password", () => {
 
     expect(await screen.findByText(/Reset code texted to \*+123/)).toBeInTheDocument();
     expect(calls.find((call) => call.url.includes("/password"))?.body).toEqual({ mode: "SEND_CODE" });
+    // The server refuses another within a minute; the button says when instead.
+    expect(screen.getByRole("button", { name: /Send again in \d+s/ })).toBeDisabled();
   });
 
   it("sets a password only once it meets the rule", async () => {

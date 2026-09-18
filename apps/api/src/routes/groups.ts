@@ -61,28 +61,33 @@ function routeParam(value: string | string[] | undefined, name: string) {
   throw new ApiHttpError(400, "INVALID_ROUTE_PARAM", `Missing route parameter: ${name}.`);
 }
 
+// Optional text and GPS fields accept `null`, which is what the console sends
+// for a box left empty — and what clears a value on update. These used to be
+// `.optional()` only, so saving any group with one blank field (most imported
+// groups have no GPS) failed validation, and a group's location could not be
+// set at all.
 const groupCreateSchema = z.object({
   name: z.string().trim().min(2),
   code: z.string().trim().min(2),
   county: z.string().trim().min(2),
   phase: z.enum(groupPhases).default("MOBILISATION"),
-  subCounty: z.string().trim().optional(),
-  location: z.string().trim().optional(),
-  composition: z.string().trim().optional(),
-  objective: z.string().trim().optional(),
-  contactPersonName: z.string().trim().optional(),
-  contactPhone: z.string().trim().optional(),
-  onboardingFeedback: z.string().trim().optional(),
-  meetingDay: z.string().trim().optional(),
-  gpsLatitude: z.number().optional(),
-  gpsLongitude: z.number().optional(),
+  subCounty: z.string().trim().nullish(),
+  location: z.string().trim().nullish(),
+  composition: z.string().trim().nullish(),
+  objective: z.string().trim().nullish(),
+  contactPersonName: z.string().trim().nullish(),
+  contactPhone: z.string().trim().nullish(),
+  onboardingFeedback: z.string().trim().nullish(),
+  meetingDay: z.string().trim().nullish(),
+  gpsLatitude: z.number().min(-90).max(90).nullish(),
+  gpsLongitude: z.number().min(-180).max(180).nullish(),
   gpsRadiusMeters: z.number().int().min(1).optional(),
   shareValueCents: z.number().int().min(1).optional(),
   maxSharesPerMemberPerMeeting: z.number().int().min(1).max(100).optional(),
   constitutionVersion: z.string().trim().optional(),
   cycleNumber: z.number().int().min(1).optional(),
   programmeIds: z.array(z.string()).default([]),
-  villageAgentId: z.string().optional()
+  villageAgentId: z.string().nullish()
 });
 
 const groupUpdateSchema = groupCreateSchema.partial().extend({
@@ -1200,6 +1205,37 @@ router.get("/meetings", requireAuth("meetings:read"), async (req, res, next) => 
   }
 });
 
+/**
+ * The credit score a group page shows must be the one the agent report and the
+ * lender views use.
+ *
+ * Rows written before the rating contract (seed fixtures, the FTMA workbook
+ * import) carry only a legacy weighted breakdown. `latestCreditRating` already
+ * re-rates those against the current contract — the pages used to show the raw
+ * stored number instead, so one group read "76" on its page and "not rated" in
+ * its agent's caseload. A legacy row is now replaced by the current rating, or
+ * dropped when the current contract cannot rate the group yet ("Pending").
+ */
+async function withCurrentRating<
+  T extends { id: string; creditScores: Array<{ score: number; breakdownJson: string }> }
+>(group: T): Promise<T> {
+  const latest = group.creditScores[0];
+  if (!latest) return group;
+
+  let legacy = true;
+  try {
+    const parsed = JSON.parse(latest.breakdownJson) as { band?: unknown; factors?: unknown };
+    legacy = !(parsed.band && parsed.factors);
+  } catch {
+    legacy = true;
+  }
+  if (!legacy) return group;
+
+  const rating = await latestCreditRating(group.id);
+  if (!rating || !rating.rated) return { ...group, creditScores: [] };
+  return { ...group, creditScores: [{ ...latest, score: rating.score }] };
+}
+
 router.get("/groups", requireAuth("groups:read"), async (req, res, next) => {
   try {
     const groups = await prisma.group.findMany({
@@ -1207,7 +1243,7 @@ router.get("/groups", requireAuth("groups:read"), async (req, res, next) => {
       orderBy: { createdAt: "desc" },
       include: groupInclude
     });
-    ok(res, groups);
+    ok(res, await Promise.all(groups.map((group) => withCurrentRating(group))));
   } catch (error) {
     next(error);
   }
@@ -1275,7 +1311,7 @@ router.get("/groups/:id", requireAuth("groups:read"), async (req, res, next) => 
       include: groupInclude
     });
     if (!group) throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
-    ok(res, group);
+    ok(res, await withCurrentRating(group));
   } catch (error) {
     next(error);
   }

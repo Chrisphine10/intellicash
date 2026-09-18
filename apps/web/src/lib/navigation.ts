@@ -41,7 +41,10 @@ export interface NavigationItem {
   priority: NavigationPriority;
 }
 
-const allRoles: Role[] = ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY"];
+// VILLAGE_AGENT was missing here and from every item below, so an agent on
+// the web could open nothing but a dashboard — and the page guard sent every
+// other address back to it.
+const allRoles: Role[] = ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY", "VILLAGE_AGENT"];
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -64,18 +67,18 @@ export const navigationItems: NavigationItem[] = [
     label: "Meetings",
     href: "/dashboard/meetings",
     icon: Activity,
-    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "READ_ONLY"],
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "READ_ONLY", "VILLAGE_AGENT"],
     section: "work",
-    priority: { default: 30, IWL_ADMIN: 30, PARTNER_OFFICER: 30, GROUP_ACCOUNT: 10, MEMBER: 20, READ_ONLY: 40 }
+    priority: { default: 30, IWL_ADMIN: 30, PARTNER_OFFICER: 30, GROUP_ACCOUNT: 10, MEMBER: 20, READ_ONLY: 40, VILLAGE_AGENT: 20 }
   },
   {
     label: "Groups",
-    labelByRole: { GROUP_ACCOUNT: "My Group" },
+    labelByRole: { GROUP_ACCOUNT: "My Group", VILLAGE_AGENT: "My groups" },
     href: "/dashboard/groups",
     icon: UsersRound,
-    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "LENDER", "READ_ONLY"],
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "LENDER", "READ_ONLY", "VILLAGE_AGENT"],
     section: "work",
-    priority: { default: 20, IWL_ADMIN: 10, PARTNER_OFFICER: 20, GROUP_ACCOUNT: 5, LENDER: 20, READ_ONLY: 30 }
+    priority: { default: 20, IWL_ADMIN: 10, PARTNER_OFFICER: 20, GROUP_ACCOUNT: 5, LENDER: 20, READ_ONLY: 30, VILLAGE_AGENT: 10 }
   },
   {
     label: "Programs",
@@ -89,7 +92,7 @@ export const navigationItems: NavigationItem[] = [
     label: "Intelli-Store",
     href: "/dashboard/intelli-store",
     icon: ShoppingBag,
-    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY"],
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "MEMBER", "LENDER", "READ_ONLY", "VILLAGE_AGENT"],
     section: "work",
     priority: { default: 60, IWL_ADMIN: 60, PARTNER_OFFICER: 60, GROUP_ACCOUNT: 20, MEMBER: 30, LENDER: 30, READ_ONLY: 70 }
   },
@@ -107,9 +110,11 @@ export const navigationItems: NavigationItem[] = [
     icon: MapPinned,
     // Not READ_ONLY or LENDER: visit records carry free text about named
     // individuals, materially wider than the ledger totals those roles see.
-    roles: ["IWL_ADMIN", "PARTNER_OFFICER"],
+    // An agent sees their own visits; the server scopes the list.
+    labelByRole: { VILLAGE_AGENT: "My visits" },
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "VILLAGE_AGENT"],
     section: "work",
-    priority: { default: 55, IWL_ADMIN: 55, PARTNER_OFFICER: 45 }
+    priority: { default: 55, IWL_ADMIN: 55, PARTNER_OFFICER: 45, VILLAGE_AGENT: 30 }
   },
   {
     label: "Scorecard",

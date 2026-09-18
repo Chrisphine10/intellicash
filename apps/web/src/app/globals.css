@@ -9448,27 +9448,165 @@ html[data-theme="dark"] .pwa-splash-screen {
    from the access form because it saves the moment it is pressed. */
 .admin-password-reset {
   display: grid;
-  gap: 10px;
-  margin: 0 0 14px;
-  padding: 14px 16px;
+  /* Inset like the access form below it, so the two read as one dialog. */
+  margin: 16px 16px 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.admin-password-reset > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 .admin-password-reset h4 {
   margin: 0;
+  color: var(--ink);
   font-size: 14px;
 }
 
-.admin-password-reset-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 14px;
+.admin-password-reset > header span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.admin-password-reset-row > .card-note,
-.admin-password-reset-row > .credential-field {
-  flex: 1 1 240px;
+/* One row per way of resetting: what it does on the left, its action on the
+   right, so the two options are compared side by side rather than read as
+   one run-on paragraph. */
+.admin-password-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 16px;
+}
+
+.admin-password-option + .admin-password-option {
+  border-top: 1px solid var(--line-soft);
+}
+
+.admin-password-option-text {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-password-option-text strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.admin-password-option-text span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-password-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-password-set .credential-field {
   margin: 0;
+}
+
+.admin-password-set .credential-field input {
+  width: 220px;
+}
+
+.admin-password-reset > .notice {
+  margin: 0 16px 14px;
+}
+
+@media (max-width: 640px) {
+  .admin-password-option {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-password-set {
+    flex-wrap: wrap;
+  }
+
+  .admin-password-set .credential-field,
+  .admin-password-set .credential-field input {
+    width: 100%;
+  }
+}
+
+/* Scorecard version page. Built on the shared card pieces; these are only the
+   bits specific to editing bands and reading question weights. */
+.data-table th.numeric,
+.data-table td.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-bands input {
+  width: 110px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-bands input:focus {
+  border-color: var(--green);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.scorecard-bands input:disabled {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  color: var(--ink);
+}
+
+.scorecard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.scorecard-questions td {
+  vertical-align: top;
+}
+
+.scorecard-prompt {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.scorecard-questions .card-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.scorecard-issues {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.scorecard-detail > .page-heading .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
