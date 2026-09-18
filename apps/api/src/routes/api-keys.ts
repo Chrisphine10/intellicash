@@ -71,7 +71,7 @@ router.get("/api-keys", requireAuth("api-keys:read"), requireAdmin, async (req, 
 router.post("/api-keys", requireAuth("api-keys:write"), requireAdmin, async (req, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+      throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
     }
 
     const body = apiKeyCreateSchema.parse(req.body);

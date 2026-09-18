@@ -1720,7 +1720,7 @@ router.get("/members/me", requireAuth("members:read"), async (req, res, next) =>
 router.get("/members/me/overview", requireAuth("members:read"), async (req, res, next) => {
   try {
     const userId = req.user?.id;
-    if (!userId) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (!userId) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
     if (req.user?.role !== "MEMBER") {
       throw new ApiHttpError(
         400,

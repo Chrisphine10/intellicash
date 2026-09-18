@@ -131,7 +131,7 @@ function normalisePhone(phone: string) {
 router.get("/members/me/memberships", requireAuth("members:read"), async (req, res, next) => {
   try {
     const user = req.user;
-    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
     ok(res, await listMemberships(user.id));
   } catch (error) {
     next(asApiError(error));
@@ -142,7 +142,7 @@ router.get("/members/me/memberships", requireAuth("members:read"), async (req, r
 router.post("/members/me/active-membership", requireAuth("members:read"), async (req, res, next) => {
   try {
     const user = req.user;
-    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
     const body = activeSchema.parse(req.body);
     const membership = await setActiveMembership(user.id, body.groupId);
     // Not one of theirs — refuse rather than reveal whether the group exists.
@@ -163,14 +163,14 @@ router.post(
   async (req, res, next) => {
   try {
     const user = req.user;
-    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
     const body = requestSchema.parse(req.body);
 
     const account = await prisma.user.findUnique({
       where: { id: user.id },
       select: { name: true, phone: true }
     });
-    if (!account) throw new ApiHttpError(401, "UNAUTHENTICATED", "Sign in first.");
+    if (!account) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
 
     const phone = normalisePhone(account.phone ?? "");
     // A roster entry cannot exist without a phone, and matching to existing

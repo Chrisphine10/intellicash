@@ -85,7 +85,7 @@ async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: st
  * a new permission would never reach existing template rows.
  */
 function assertMayConfigure(user: AuthenticatedUser | undefined, groupId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
   if (user.permissions.includes("groups:write")) return;
   if (user.role === "GROUP_ACCOUNT" && user.groupId === groupId) return;
 

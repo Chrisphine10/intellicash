@@ -71,7 +71,7 @@ export class ApiClientError extends Error {
     path?: string;
     method?: string;
   }) {
-    super(formatErrorMessage(options.message, options.traceId));
+    super(friendlyErrorMessage(options));
     this.name = "ApiClientError";
     this.status = options.status;
     this.code = options.code;
@@ -100,8 +100,60 @@ function createClientTraceId() {
   return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function formatErrorMessage(message: string, traceId?: string) {
-  return traceId ? `${message} (Trace ID: ${traceId})` : message;
+/**
+ * What a person reads when something fails.
+ *
+ * Every error used to end in "(Trace ID: 5f32dfcb-4d19-4545-a145-1693e167f8e5)"
+ * — on a wrong password, a missing field, anything. That is a support tool, not
+ * a message: it made routine mistakes look like crashes. The trace ID is still
+ * on the error object (and sent to the log), and a short reference is shown
+ * only where support genuinely needs it — when the fault is ours or the network.
+ *
+ * The server's message is used when it has written one for people. A few codes
+ * whose server text is generic, and anything with no text at all, get wording
+ * here instead.
+ */
+const GENERIC_SERVER_TEXT = new Set([
+  "",
+  "API request failed",
+  "Request validation failed.",
+  "Invalid credentials.",
+  "An unexpected server error occurred.",
+  "Internal Server Error"
+]);
+
+const BY_CODE: Record<string, string> = {
+  INVALID_CREDENTIALS:
+    "That phone number (or email) and password do not match an account. Check them and try again, or sign in with a code sent by SMS.",
+  VALIDATION_ERROR: "Some details are missing or not valid. Check the form and try again.",
+  UNAUTHENTICATED: "Please sign in to continue. If you were signed in, your session has ended.",
+  FORBIDDEN: "Your account does not have access to this. Ask an administrator if you need it.",
+  RATE_LIMITED: "Too many attempts. Wait a few minutes and try again.",
+  NOT_FOUND: "We could not find that. It may have been removed, or the link is out of date."
+};
+
+function byStatus(status: number) {
+  if (status === 0) return "We could not reach IntelliCash. Check your internet connection and try again.";
+  if (status === 401) return BY_CODE.UNAUTHENTICATED;
+  if (status === 403) return BY_CODE.FORBIDDEN;
+  if (status === 404) return BY_CODE.NOT_FOUND;
+  if (status === 409) return "This conflicts with something that already exists. Refresh the page and check.";
+  if (status === 413) return "That file is too large to upload.";
+  if (status === 429) return BY_CODE.RATE_LIMITED;
+  if (status >= 500) return "Something went wrong on our side. Please try again in a moment.";
+  return "That did not work. Check the details and try again.";
+}
+
+export function friendlyErrorMessage(options: { status: number; code: string; message: string; traceId?: string }) {
+  const serverText = (options.message ?? "").trim();
+  const base = !GENERIC_SERVER_TEXT.has(serverText)
+    ? serverText
+    : (BY_CODE[options.code] ?? byStatus(options.status));
+
+  // A reference only helps when support has to look something up: our fault,
+  // or a request that never arrived. Never on a wrong password or empty field.
+  const needsReference = options.status === 0 || options.status >= 500;
+  return needsReference && options.traceId ? `${base} (Reference: ${options.traceId.slice(0, 8)})` : base;
 }
 
 function requestMethod(init: RequestInit) {
@@ -174,7 +226,7 @@ function createNetworkError(error: unknown, traceId: string, path: string, metho
   return new ApiClientError({
     status: 0,
     code: "NETWORK_ERROR",
-    message: "Network request failed. Check the API server or your connection.",
+    message: "",
     details: error instanceof Error ? error.message : String(error),
     traceId,
     path,

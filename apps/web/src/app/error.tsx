@@ -29,17 +29,14 @@ export default function AppError({
         <div>
           <p className="eyebrow">Something needs attention</p>
           <h1 id="app-error-title">This page could not finish loading.</h1>
-          <p>
-            The error has been captured with a trace reference. Retry the page, or share the trace ID
-            with support if it continues.
-          </p>
+          <p>Please try again. If it keeps happening, send the reference below to IntelliCash support.</p>
         </div>
         <div className="app-error-actions">
           <button type="button" className="primary-action" onClick={reset}>
             <RefreshCw size={16} />
             Try again
           </button>
-          <span className="trace-pill">Trace ID: {traceId}</span>
+          <span className="trace-pill">Reference: {traceId.slice(0, 8)}</span>
         </div>
       </section>
     </main>

@@ -39,7 +39,7 @@ import { smsBroadcastsRouter } from "./routes/sms-broadcasts";
 import { uploadsRouter } from "./routes/uploads";
 import { webhooksRouter } from "./routes/webhooks";
 import { welfareExpensesRouter } from "./routes/welfare-expenses";
-import { ApiHttpError, fail, ok } from "./lib/http";
+import { ApiHttpError, fail, ok, validationMessage } from "./lib/http";
 import { PUBLICLY_SERVED_UPLOAD_KINDS, ensureUploadDirectory, uploadRoot } from "./lib/uploads";
 import { requestTracingMiddleware } from "./middleware/request-tracing";
 
@@ -186,7 +186,7 @@ export function createApp(
 
   if (options.includeNotFoundHandler ?? true) {
     app.use((_req, _res, next) => {
-      next(new ApiHttpError(404, "NOT_FOUND", "Route not found."));
+      next(new ApiHttpError(404, "NOT_FOUND", "That page or action does not exist."));
     });
   }
 
@@ -194,7 +194,7 @@ export function createApp(
     if (error instanceof ZodError) {
       return fail(
         res,
-        new ApiHttpError(400, "VALIDATION_ERROR", "Request validation failed.", error.flatten())
+        new ApiHttpError(400, "VALIDATION_ERROR", validationMessage(error), error.flatten())
       );
     }
 

@@ -36,7 +36,7 @@ describe("API client traceability", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     try {
-      await apiFetch("/broken", {
+      await apiFetch<never>("/broken", {
         method: "POST",
         headers: { "X-Request-Id": traceId },
         body: JSON.stringify({ ok: false })
@@ -51,8 +51,55 @@ describe("API client traceability", () => {
         path: "/broken",
         method: "POST"
       });
-      expect((error as Error).message).toContain(`Trace ID: ${traceId}`);
+      // A server fault carries a short reference for support, not the raw trace.
+      expect((error as Error).message).toBe(`The request failed. (Reference: ${traceId.slice(0, 8)})`);
     }
+  });
+
+  it("shows a person what to do on a wrong password, with no trace ID", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials.", traceId: "5f32dfcb-4d19" } }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    const error = await apiFetch<never>("/auth/login", { method: "POST" }).catch((caught: unknown) => caught as Error);
+    expect(error.message).toMatch(/do not match an account/);
+    expect(error.message).toMatch(/code sent by SMS/);
+    expect(error.message).not.toMatch(/Trace|Reference|5f32dfcb/);
+    expect(error).toMatchObject({ traceId: "5f32dfcb-4d19" });
+  });
+
+  it("names the problem when the server only says validation failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: { code: "VALIDATION_ERROR", message: "Request validation failed." } }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+
+    const error = await apiFetch<never>("/x", { method: "POST" }).catch((caught: unknown) => caught as Error);
+    expect(error.message).toBe("Some details are missing or not valid. Check the form and try again.");
+  });
+
+  it("tells an offline user to check their connection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      })
+    );
+    const error = await apiFetch<never>("/x", { headers: { "X-Request-Id": "abcdef1234" } }).catch((caught: unknown) => caught as Error);
+    expect(error.message).toBe(
+      "We could not reach IntelliCash. Check your internet connection and try again. (Reference: abcdef12)"
+    );
   });
 
   it("wraps network failures with a trace ID", async () => {

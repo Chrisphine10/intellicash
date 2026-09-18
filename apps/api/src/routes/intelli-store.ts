@@ -594,7 +594,7 @@ async function assertFinancierPartnerAccess({
   user: Express.Request["user"];
 }) {
   if (!user) {
-    throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+    throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
   }
 
   if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") {

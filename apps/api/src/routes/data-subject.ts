@@ -45,7 +45,7 @@ export const dataSubjectRouter = Router();
  * administer a member's personal data.
  */
 async function loadMemberForSubjectRequest(user: AuthenticatedUser | undefined, memberId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
 
   const member = await prisma.member.findFirst({
     where: { AND: [{ id: memberId }, { group: scopeGroupWhere(user) }] },

@@ -140,13 +140,31 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
             )
         : null;
 
-    if (!user || user.status !== "ACTIVE") {
-      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid credentials.");
-    }
+    // One message for "no such account" and "wrong password", so the form
+    // cannot be used to find out which numbers have accounts. It still has to
+    // tell a person what to do next — the old "Invalid credentials." did not.
+    const wrongDetails = () =>
+      new ApiHttpError(
+        401,
+        "INVALID_CREDENTIALS",
+        "That phone number (or email) and password do not match an account. Check them and try again, or sign in with a code sent by SMS."
+      );
+
+    if (!user) throw wrongDetails();
 
     const valid = await bcrypt.compare(body.password, user.passwordHash);
-    if (!valid) {
-      throw new ApiHttpError(401, "INVALID_CREDENTIALS", "Invalid credentials.");
+    if (!valid) throw wrongDetails();
+
+    // Only said once the password is right: by then the person has proved the
+    // account is theirs, and "closed" is the one thing that explains why they
+    // cannot get in. Lumping it in with a wrong password sent people round in
+    // circles resetting a password that was never the problem.
+    if (user.status !== "ACTIVE") {
+      throw new ApiHttpError(
+        403,
+        "ACCOUNT_NOT_ACTIVE",
+        "This account is not active, so it cannot sign in. Ask your programme officer or IntelliCash support to reopen it."
+      );
     }
 
     const session = await createSession(user.id);

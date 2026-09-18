@@ -206,11 +206,11 @@ export function requireAuth(permission?: Permission) {
       const user = await resolveUserFromRequest(req);
 
       if (!user) {
-        throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+        throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
       }
 
       if (permission && !user.permissions.includes(permission)) {
-        throw new ApiHttpError(403, "FORBIDDEN", "You do not have permission for this action.");
+        throw new ApiHttpError(403, "FORBIDDEN", "Your account does not have access to this. Ask an administrator if you need it.");
       }
 
       req.user = user;
@@ -224,7 +224,7 @@ export function requireAuth(permission?: Permission) {
 export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
   try {
     if (!req.user) {
-      throw new ApiHttpError(401, "UNAUTHENTICATED", "Authentication is required.");
+      throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
     }
 
     if (req.user.role !== "IWL_ADMIN") {
