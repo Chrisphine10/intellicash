@@ -15,6 +15,7 @@ import { DEFAULT_AVATAR_PLACEHOLDER } from "../../../lib/placeholders";
 import { DataTable } from "../../../components/dashboard/data-table";
 import { FallbackImage } from "../../../components/fallback-image";
 import { StatCard } from "../../../components/dashboard/stat-card";
+import { AdminPasswordReset } from "../../../components/dashboard/admin-password-reset";
 import type { GroupRow, Member, PartnerRow, User } from "../../../components/dashboard/types";
 
 interface UserFormState {
@@ -1035,6 +1036,11 @@ export default function UsersPage() {
                 </button>
               </div>
             </header>
+            {/* Outside the access form on purpose: resetting a password is its
+                own action, saved the moment it is pressed, not with "Save access". */}
+            {editingUser.status !== "CLOSED" ? (
+              <AdminPasswordReset hasPhone={Boolean(editingUser.phone)} userId={editingUser.id} />
+            ) : null}
             {closingUser?.id === editingUser.id ? (
               <div className="notice warning close-account-panel">
                 <h4>Close this account</h4>

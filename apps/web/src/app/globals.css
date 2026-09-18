@@ -9443,3 +9443,32 @@ html[data-theme="dark"] .pwa-splash-screen {
 .login-alternatives .link-button {
   font-size: 13px;
 }
+
+/* An admin resetting someone's password, inside the user editor. Framed apart
+   from the access form because it saves the moment it is pressed. */
+.admin-password-reset {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.admin-password-reset h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.admin-password-reset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.admin-password-reset-row > .card-note,
+.admin-password-reset-row > .credential-field {
+  flex: 1 1 240px;
+  margin: 0;
+}

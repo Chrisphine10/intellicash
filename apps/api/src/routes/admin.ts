@@ -26,6 +26,8 @@ import { linkMembership, MemberAlreadyLinkedError } from "../services/membership
 import { prisma } from "../lib/prisma";
 import { normalisePhone } from "../lib/phone";
 import { planUserAccountClosure } from "../domain/data-subject";
+import { requestLoginOtp } from "../services/login-otp-service";
+import { dispatchAfterResponse, dispatchSms } from "../services/outbound-sms-service";
 
 const router = Router();
 
@@ -764,6 +766,150 @@ router.delete("/users/:id", requireAuth("users:write"), async (req, res, next) =
     });
 
     ok(res, { user: closed, closed: true, retained: plan.retain });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const userPasswordSchema = z.discriminatedUnion("mode", [
+  z.object({
+    /** The admin chooses the new password and hands it over. */
+    mode: z.literal("SET"),
+    // The same rule as a person changing their own password: an admin reset
+    // must not be the easy way round the policy.
+    newPassword: z.string().min(8).max(128)
+  }),
+  z.object({
+    /** A reset code is texted to the account's own phone; the person chooses. */
+    mode: z.literal("SEND_CODE")
+  })
+]);
+
+/**
+ * An administrator resetting somebody else's password.
+ *
+ * Two ways, because they suit different situations:
+ *
+ * - **SEND_CODE** texts a reset code to the account's own phone and the person
+ *   picks their password. The admin never learns it. Prefer this whenever the
+ *   account has a phone.
+ * - **SET** is for the account with no phone, or a person standing in front of
+ *   the admin. Every session on the account is ended, so whoever was signed in
+ *   with the old password is out, and — where there is a phone — the owner is
+ *   texted that it changed, so a reset they did not ask for does not go
+ *   unnoticed.
+ *
+ * Refused for the admin's own account (that goes through /auth/me/password,
+ * which asks for the current password) and for closed accounts.
+ */
+router.post("/users/:id/password", requireAuth("users:write"), async (req, res, next) => {
+  try {
+    const body = userPasswordSchema.parse(req.body ?? {});
+    const userId = String(req.params.id ?? "");
+
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, phone: true, role: true, status: true }
+    });
+    if (!target) {
+      throw new ApiHttpError(404, "USER_NOT_FOUND", "User account does not exist.");
+    }
+    if (target.status === "CLOSED") {
+      throw new ApiHttpError(409, "USER_ACCOUNT_CLOSED", "That account has been closed.");
+    }
+    if (req.user?.id === target.id) {
+      throw new ApiHttpError(
+        400,
+        "USE_OWN_PASSWORD_CHANGE",
+        "Change your own password from My account, where your current password is asked for."
+      );
+    }
+
+    if (body.mode === "SEND_CODE") {
+      if (!target.phone) {
+        throw new ApiHttpError(
+          400,
+          "USER_HAS_NO_PHONE",
+          "This account has no phone number to text a code to. Add one, or set a password instead."
+        );
+      }
+      const result = await requestLoginOtp(target.phone, {
+        purpose: "PASSWORD_RESET",
+        requestedByUserId: req.user?.id
+      });
+
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "USER",
+        entityId: target.id,
+        type: "USER_PASSWORD_UPDATED",
+        payload: { method: "ADMIN_SENT_RESET_CODE", outcome: result.reason, phone: result.maskedPhone ?? null }
+      });
+
+      // Unlike the public endpoint, an admin may be told what happened: they
+      // already know the account exists, and "the code did not go" is the
+      // thing they need to act on.
+      if (result.reason === "TOO_SOON") {
+        throw new ApiHttpError(
+          429,
+          "CODE_RECENTLY_SENT",
+          "A code was sent to this number less than a minute ago. Wait a moment before sending another."
+        );
+      }
+      if (result.reason === "SMS_FAILED") {
+        throw new ApiHttpError(
+          502,
+          "SMS_NOT_SENT",
+          "The reset code could not be texted. Check the SMS provider, or set a password instead."
+        );
+      }
+
+      ok(res, {
+        mode: "SEND_CODE",
+        sentTo: result.maskedPhone ?? null,
+        expiresInMinutes: 10,
+        ...(result.devCode ? { devCode: result.devCode } : {})
+      });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 12);
+    const endedSessions = await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: target.id }, data: { passwordHash } });
+      await tx.userLoginOtp.deleteMany({ where: { userId: target.id } });
+      const { count } = await tx.session.deleteMany({ where: { userId: target.id } });
+      return count;
+    });
+
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "USER",
+      entityId: target.id,
+      type: "USER_PASSWORD_UPDATED",
+      // Never the password.
+      payload: { method: "ADMIN_SET", role: target.role, endedSessions }
+    });
+
+    if (target.phone) {
+      const phone = target.phone;
+      dispatchAfterResponse(() =>
+        dispatchSms({
+          kind: "SYSTEM_NOTIFICATION",
+          label: "Password changed",
+          requestedByUserId: req.user?.id,
+          recipients: [
+            {
+              memberName: target.name,
+              phone,
+              message:
+                "Your Intelli-Cash password was changed by an administrator. If you did not ask for this, contact your field officer."
+            }
+          ]
+        })
+      );
+    }
+
+    ok(res, { mode: "SET", endedSessions, ownerNotified: Boolean(target.phone) });
   } catch (error) {
     next(error);
   }

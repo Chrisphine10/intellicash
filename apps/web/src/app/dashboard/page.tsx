@@ -18,6 +18,7 @@ import { apiFetch, formatKes, humanizeEnum } from "../../lib/api";
 import { SavingsTrendChart } from "../../components/savings-trend-chart";
 import { StatCard } from "../../components/dashboard/stat-card";
 import { getNavigationItemsForRole } from "../../lib/navigation";
+import { CredentialButton } from "../../components/dashboard/credential-button";
 import type {
   AuditEvent,
   GroupRow,
@@ -656,10 +657,7 @@ function MemberDashboard({
               <span className={`pill ${currentMember?.pinSet ? "blue" : "gold"}`}>
                 {currentMember?.pinSet ? "PIN set" : "Needs PIN"}
               </span>
-              <button className="button compact" disabled={pinSaving} onClick={requestOwnPin} type="button">
-                <KeyRound size={16} />
-                {pinSaving ? "Sending" : "Send PIN"}
-              </button>
+              <CredentialButton busy={pinSaving} compact kind="sms" label="Send PIN" onClick={requestOwnPin} />
             </div>
           </header>
           {pinMessage ? <div className={pinMessage.ok ? "notice success" : "notice warning"}>{pinMessage.text}</div> : null}

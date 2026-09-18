@@ -50,7 +50,13 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'set -e
              ENV=/var/www/intellicash/app/apps/api/.env
-             cp -p "$ENV" "$ENV.before-bonga-$(date +%Y%m%d-%H%M%S)"
+             # Backups go OUTSIDE the repo. A copy inside it is an untracked file,
+             # and the deploy refuses to run over a dirty working tree.
+             BK=/var/www/intellicash/data/env-backups
+             mkdir -p "$BK" && chmod 700 "$BK"
+             # Sweep any copy an earlier run left inside the repo.
+             for stray in "$ENV".before-*; do [ -f "$stray" ] && mv "$stray" "$BK/"; done
+             cp -p "$ENV" "$BK/.env.before-bonga-$(date +%Y%m%d-%H%M%S)"
              while IFS= read -r line; do
                key="${line%%=*}"
                [ -z "$key" ] && continue

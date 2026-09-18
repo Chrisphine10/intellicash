@@ -402,4 +402,134 @@ describe("administering user accounts", () => {
         .expect(403);
     });
   });
+
+  describe("resetting someone else's password", () => {
+    it("sets a new password that works, and the old one stops", async () => {
+      const user = await makeUser({ phone: `2547${String(Date.now()).slice(-8)}` });
+
+      const response = await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "chosen-by-admin-1" })
+        .expect(200);
+      expect(response.body.data.mode).toBe("SET");
+
+      await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: user.email, password: "chosen-by-admin-1" })
+        .expect(200);
+      await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: user.email, password: "A-long-enough-password-1" })
+        .expect(401);
+    });
+
+    it("ends every session on the account", async () => {
+      // Whoever was signed in with the old password must not stay signed in.
+      const user = await makeUser();
+      await prisma.session.create({
+        data: { userId: user.id, tokenHash: `old-${Date.now()}`, expiresAt: new Date(Date.now() + 3_600_000) }
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "chosen-by-admin-2" })
+        .expect(200);
+
+      expect(response.body.data.endedSessions).toBeGreaterThanOrEqual(1);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+    });
+
+    it("never writes the password into the audit trail", async () => {
+      const user = await makeUser();
+      await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "secret-never-logged" })
+        .expect(200);
+
+      const event = await prisma.auditEvent.findFirstOrThrow({
+        where: { entityId: user.id, type: "USER_PASSWORD_UPDATED" },
+        orderBy: { createdAt: "desc" }
+      });
+      expect(event.actorUserId).toBe(adminId);
+      expect(event.payloadJson).toContain("ADMIN_SET");
+      expect(event.payloadJson).not.toContain("secret-never-logged");
+    });
+
+    it("tells the admin when the reset code could not be texted", async () => {
+      // No SMS provider in tests, so nothing leaves. Saying "sent" here would
+      // leave an admin telling someone to wait for a text that is never coming.
+      const phone = `2547${String(Date.now() + 1).slice(-8)}`;
+      const user = await makeUser({ phone });
+
+      const response = await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SEND_CODE" })
+        .expect(502);
+      expect(response.body.error.code).toBe("SMS_NOT_SENT");
+
+      const event = await prisma.auditEvent.findFirstOrThrow({
+        where: { entityId: user.id, type: "USER_PASSWORD_UPDATED" },
+        orderBy: { createdAt: "desc" }
+      });
+      expect(event.payloadJson).toContain("ADMIN_SENT_RESET_CODE");
+    });
+
+    it("says plainly when there is no phone to text", async () => {
+      const user = await makeUser();
+      const response = await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SEND_CODE" })
+        .expect(400);
+      expect(response.body.error.code).toBe("USER_HAS_NO_PHONE");
+    });
+
+    it("refuses a password shorter than the normal rule", async () => {
+      const user = await makeUser();
+      await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "short" })
+        .expect(400);
+    });
+
+    it("sends the admin's own account to My account instead", async () => {
+      const response = await request(app)
+        .post(`/api/v1/users/${adminId}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "would-skip-current" })
+        .expect(400);
+      expect(response.body.error.code).toBe("USE_OWN_PASSWORD_CHANGE");
+    });
+
+    it("refuses a closed account", async () => {
+      const user = await makeUser();
+      await request(app)
+        .delete(`/api/v1/users/${user.id}`)
+        .set("Cookie", admin)
+        .send({ confirmEmail: user.email, reason: "Left" })
+        .expect(200);
+      await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", admin)
+        .send({ mode: "SET", newPassword: "reopen-attempt-1" })
+        .expect(409);
+    });
+
+    it("is refused to somebody without users:write", async () => {
+      const user = await makeUser();
+      const readOnly = demoAccounts.find((entry) => entry.role === "READ_ONLY");
+      if (!readOnly) return;
+      const cookies = await signIn(readOnly.phone);
+      await request(app)
+        .post(`/api/v1/users/${user.id}/password`)
+        .set("Cookie", cookies)
+        .send({ mode: "SET", newPassword: "not-allowed-1" })
+        .expect(403);
+    });
+  });
 });

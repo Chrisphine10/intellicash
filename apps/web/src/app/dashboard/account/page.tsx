@@ -30,6 +30,7 @@ import { DataTable } from "../../../components/dashboard/data-table";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import { FallbackImage } from "../../../components/fallback-image";
 import { DEFAULT_AVATAR_PLACEHOLDER } from "../../../lib/placeholders";
+import { CredentialButton } from "../../../components/dashboard/credential-button";
 import type {
   GroupRow,
   Member,
@@ -541,14 +542,21 @@ function MemberAccountPage({ initialUser }: { initialUser: User }) {
             </div>
           </div>
           <div className="credential-actions">
-            <button className="button" disabled={Boolean(credentialSaving)} onClick={() => requestCredential("pin")} type="button">
-              <KeyRound size={16} />
-              {credentialSaving === "pin" ? "Sending" : "Send PIN"}
-            </button>
-            <button className="button secondary" disabled={Boolean(credentialSaving)} onClick={() => requestCredential("otp")} type="button">
-              <Smartphone size={16} />
-              {credentialSaving === "otp" ? "Sending" : "Send OTP"}
-            </button>
+            <CredentialButton
+              busy={credentialSaving === "pin"}
+              disabled={Boolean(credentialSaving)}
+              kind="sms"
+              label="Send PIN"
+              onClick={() => requestCredential("pin")}
+            />
+            <CredentialButton
+              busy={credentialSaving === "otp"}
+              disabled={Boolean(credentialSaving)}
+              emphasis="secondary"
+              kind="sms"
+              label="Send OTP"
+              onClick={() => requestCredential("otp")}
+            />
           </div>
         </section>
 
@@ -592,10 +600,7 @@ function MemberAccountPage({ initialUser }: { initialUser: User }) {
               value={passwordForm.confirmPassword}
             />
           </label>
-          <button className="button" disabled={passwordSaving} type="submit">
-            <LockKeyhole size={16} />
-            {passwordSaving ? "Saving" : "Update password"}
-          </button>
+          <CredentialButton busy={passwordSaving} kind="password" label="Update password" type="submit" />
         </form>
       </section>
 

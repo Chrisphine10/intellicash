@@ -10,6 +10,7 @@ import { apiFetch, humanizeEnum } from "../../../../../lib/api";
 import { CollectionView } from "../../../../../components/dashboard/collection-view";
 import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { Member, User } from "../../../../../components/dashboard/types";
+import { CredentialButton } from "../../../../../components/dashboard/credential-button";
 
 interface GroupSummary {
   id: string;
@@ -516,10 +517,7 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
               </label>
             </div>
             <div className="credential-actions">
-              <button className="button" disabled={saving} type="submit">
-                <KeyRound size={16} />
-                  {saving ? "Sending" : "Send default PIN"}
-              </button>
+              <CredentialButton busy={saving} kind="sms" label="Send PIN" type="submit" />
             </div>
           </form>
         </section>
@@ -550,10 +548,7 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
               </label>
             </div>
             <div className="credential-actions">
-              <button className="button" disabled={saving} type="submit">
-                <KeyRound size={16} />
-                {saving ? "Sending" : "Send OTP"}
-              </button>
+              <CredentialButton busy={saving} kind="sms" label="Send OTP" type="submit" />
             </div>
           </form>
         </section>
