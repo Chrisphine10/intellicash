@@ -17,6 +17,7 @@ import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/pho
 import { loginRateLimit, otpRequestRateLimit, otpVerifyRateLimit, registerRateLimit } from "../middleware/rate-limit";
 import { prisma } from "../lib/prisma";
 import { generateGroupCode } from "../services/group-code";
+import { ensureGroupForLogin } from "../services/group-login-link";
 
 const router = Router();
 
@@ -168,6 +169,10 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
       );
     }
 
+    // A group login with no group behind it gets one before it lands on an
+    // empty app — see services/group-login-link.
+    const groupId = (await ensureGroupForLogin(user.id)).groupId ?? user.groupId;
+
     const session = await createSession(user.id);
     const permissions = await permissionsForRoleFromStore(user.role);
     res.setHeader("Set-Cookie", serializeSessionCookie(session));
@@ -190,7 +195,7 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
       avatarUrl: user.avatarUrl,
       languagePreference: user.languagePreference,
       partnerId: user.partnerId,
-      groupId: user.groupId,
+      groupId,
       memberId: user.memberId,
       villageAgentId: user.villageAgentId
     });
@@ -400,6 +405,7 @@ router.post("/otp/verify", otpVerifyRateLimit, async (req, res, next) => {
     }
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: result.userId } });
+    const groupId = (await ensureGroupForLogin(user.id)).groupId ?? user.groupId;
     const session = await createSession(user.id);
     const permissions = await permissionsForRoleFromStore(user.role);
     res.setHeader("Set-Cookie", serializeSessionCookie(session));
@@ -422,7 +428,7 @@ router.post("/otp/verify", otpVerifyRateLimit, async (req, res, next) => {
       avatarUrl: user.avatarUrl,
       languagePreference: user.languagePreference,
       partnerId: user.partnerId,
-      groupId: user.groupId,
+      groupId,
       memberId: user.memberId,
       villageAgentId: user.villageAgentId
     });
@@ -484,6 +490,7 @@ router.post("/password/reset", otpVerifyRateLimit, async (req, res, next) => {
       await tx.session.deleteMany({ where: { userId: result.userId } });
       return tx.user.update({ where: { id: result.userId }, data: { passwordHash } });
     });
+    const groupId = (await ensureGroupForLogin(user.id)).groupId ?? user.groupId;
 
     await appendAuditEvent({
       actorUserId: user.id,
@@ -507,7 +514,7 @@ router.post("/password/reset", otpVerifyRateLimit, async (req, res, next) => {
       avatarUrl: user.avatarUrl,
       languagePreference: user.languagePreference,
       partnerId: user.partnerId,
-      groupId: user.groupId,
+      groupId,
       memberId: user.memberId,
       villageAgentId: user.villageAgentId
     });

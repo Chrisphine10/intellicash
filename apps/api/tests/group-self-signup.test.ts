@@ -52,7 +52,8 @@ describe("a group signing itself up", () => {
     expect(group._count.fundAccounts).toBeGreaterThan(0);
 
     // And the account can see it.
-    const cookie = response.headers["set-cookie"];
+    const setCookie = response.headers["set-cookie"];
+    const cookie = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
     const groups = await request(app).get("/api/v1/groups").set("Cookie", cookie).expect(200);
     expect(groups.body.data.map((g: { id: string }) => g.id)).toContain(groupId);
   });

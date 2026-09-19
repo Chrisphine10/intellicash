@@ -211,7 +211,7 @@ async function normalizeUserBinding(input: {
 
   if (input.role === "GROUP_ACCOUNT") {
     if (!input.groupId) {
-      throw new ApiHttpError(400, "GROUP_REQUIRED", "Group accounts require a group.");
+      throw new ApiHttpError(400, "GROUP_REQUIRED", "Choose the group this login opens. A group login with no group signs in to an empty app.");
     }
 
     const group = await prisma.group.findUnique({

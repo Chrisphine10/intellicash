@@ -422,6 +422,7 @@ export type IntelliAuditReportStandard = (typeof intelliAuditReportStandards)[nu
 export const auditEventTypes = [
   "AUTH_LOGIN",
   "GROUP_CHAMPION_LINKED",
+  "GROUP_LOGIN_AUTO_LINKED",
   "AUTH_OTP_REQUESTED",
   "AUTH_REGISTERED",
   "MEMBER_ACCOUNT_CREATED",

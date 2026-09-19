@@ -1,0 +1,38 @@
+name: Link unlinked group logins
+
+# Manual. Gives every group login that has no group the group it should open:
+# the one group recording its phone as champion, else the one group with the
+# same name, else a new group of its own marked for staff review (see
+# apps/api/src/services/group-login-link.ts). Dry run unless "apply" is ticked;
+# a real run backs up the database first.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Write the links (leave unticked for a dry run)"
+        type: boolean
+        default: false
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Back up the database
+        if: ${{ inputs.apply }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            '/usr/local/bin/intellicash-backup.sh && echo "Backup taken."'
+
+      - name: Link
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /var/www/intellicash/app/apps/api/prisma/run-with-service-env.sh prisma/link-unlinked-group-logins.ts APPLY=${{ inputs.apply && '1' || '0' }}'
