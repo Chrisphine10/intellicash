@@ -1388,6 +1388,74 @@ router.get("/groups/:id/members", requireAuth("members:read"), async (req, res, 
   }
 });
 
+/**
+ * A member the phone knows about, sent up by the app's automatic sync.
+ *
+ * Members created on a handset were never sent to the server, so every one of
+ * them became a "not linked to the backend" conflict and their attendance and
+ * money stayed on the phone — the reason a group's records could be full on
+ * the phone and empty in the console.
+ *
+ * Built to be retried by a phone with a bad signal: it finds the member it
+ * already made (by phone, else by name within the group) rather than making a
+ * second. A phone number is optional here, because groups set up on the phone
+ * often enter members by name alone; such a member is stored with no number
+ * and simply cannot receive SMS until one is added. No PIN is texted — these
+ * people already use the phone, and a first sync must not send a burst of SMS.
+ */
+const memberSyncSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  phone: z.string().trim().max(32).nullish(),
+  role: z.enum(memberRoles).optional()
+});
+
+router.post("/groups/:id/members/sync", requireAuth("members:write"), async (req, res, next) => {
+  try {
+    const payload = memberSyncSchema.parse(req.body);
+    const groupId = routeParam(req.params.id, "id");
+    await assertGroupAccess(req.user, groupId);
+
+    const phone = normalisePhone(payload.phone ?? "");
+    const wantedName = payload.fullName.trim().toLowerCase().replace(/\s+/g, " ");
+    const roster = await prisma.member.findMany({
+      where: { groupId },
+      select: { id: true, fullName: true, phone: true }
+    });
+    const existing =
+      (phone ? roster.find((member) => normalisePhone(member.phone) === phone) : undefined) ??
+      roster.find((member) => member.fullName.trim().toLowerCase().replace(/\s+/g, " ") === wantedName);
+
+    if (existing) {
+      ok(res, { id: existing.id, matched: true });
+      return;
+    }
+
+    const member = await prisma.member.create({
+      data: {
+        groupId,
+        fullName: payload.fullName.trim(),
+        phone,
+        role: payload.role ?? "MEMBER",
+        kycStatus: "PENDING",
+        status: "ACTIVE"
+      },
+      select: { id: true }
+    });
+
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "MEMBER",
+      entityId: member.id,
+      type: "MEMBER_REGISTERED",
+      payload: { groupId, memberId: member.id, source: "PHONE_SYNC" }
+    });
+
+    ok(res.status(201), { id: member.id, matched: false });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/groups/:id/members", requireAuth("members:write"), async (req, res, next) => {
   try {
     const payload = memberCreateSchema.parse(req.body);
