@@ -8830,6 +8830,51 @@ html[data-theme="dark"] .pwa-splash-screen {
   opacity: 0.55;
 }
 
+/* A button that reads as a link: "Forgot password?", "Sign in with a code".
+   Nine places used this class and only its modifiers were ever defined, so
+   each rendered as the browser's grey default button. */
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--green-700);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+html[data-theme="dark"] .link-button {
+  color: var(--green);
+}
+
+.link-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link-button:focus-visible {
+  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  text-decoration: none;
+}
+
+.login-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .link-button.danger {
   color: var(--red);
 }

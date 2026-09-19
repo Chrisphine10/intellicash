@@ -193,7 +193,11 @@ export function LoginExperience({
         <form className="login-form" onSubmit={onSubmit}>
           <h2>{mode === "reset" ? "Reset your password" : formTitle}</h2>
           <label>
-            <Smartphone size={16} /> {mode === "password" ? "Phone number or group email" : "Phone number"}
+            {/* One inline unit: the label lays its children out as rows, which
+                left the icon alone on a line above the text. */}
+            <span className="login-label">
+              <Smartphone size={14} /> {mode === "password" ? "Phone number or group email" : "Phone number"}
+            </span>
             <input
               autoComplete={mode === "password" ? "username" : "tel"}
               disabled={codeSent}
