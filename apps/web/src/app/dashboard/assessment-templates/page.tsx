@@ -143,7 +143,7 @@ export default function AssessmentTemplatesPage() {
         </table>
       </article>
 
-      <p className="eyebrow">
+      <p className="card-note">
         A published version can never be edited — assessments already scored against
         it have to keep meaning what they meant. Clone it instead; the old version
         stays exactly as it was.

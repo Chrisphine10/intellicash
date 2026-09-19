@@ -9706,3 +9706,77 @@ html[data-theme="dark"] .pwa-splash-screen {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
+/* Group enterprise form: a card built from bare labels and inputs. Given the
+   same padding and field treatment as `.credential-field`, so it reads like
+   every other form in the console instead of raw browser controls. */
+.enterprise-form {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+.enterprise-form > :not(header) {
+  margin-inline: 20px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 16px;
+}
+
+.enterprise-form h4 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.enterprise-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.enterprise-form input,
+.enterprise-form select,
+.enterprise-form textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+}
+
+.enterprise-form input:focus,
+.enterprise-form select:focus,
+.enterprise-form textarea:focus {
+  border-color: var(--green);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Used by the SMS page and never defined: its sections sat with no spacing,
+   and the message box meant to span the form was squeezed into one column. */
+.page-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.credential-grid > .span-2 {
+  grid-column: 1 / -1;
+}
+
+/* Quick-amount chips on the meeting entry form (+500, +1000 …). */
+.meeting-entry-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

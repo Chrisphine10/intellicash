@@ -240,7 +240,7 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
           <h2>
             <Building2 size={19} /> Enterprises
           </h2>
-          <p className="eyebrow">
+          <p className="card-note">
             The businesses this group runs together. Each one keeps its own figures and its
             own history, because a poultry unit and a cereal store do not share a margin.
           </p>
@@ -255,8 +255,12 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
       ) : null}
 
       {editing ? (
-        <form className="data-card" onSubmit={save}>
-          <h3>{editing === "new" ? "New enterprise" : "Edit enterprise"}</h3>
+        <form className="data-card enterprise-form" onSubmit={save}>
+          <header>
+            <div>
+              <h3>{editing === "new" ? "New enterprise" : "Edit enterprise"}</h3>
+            </div>
+          </header>
 
           <label>
             What is it called

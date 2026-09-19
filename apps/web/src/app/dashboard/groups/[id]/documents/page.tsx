@@ -198,7 +198,7 @@ export default function GroupDocumentsPage({ params }: { params: Promise<{ id: s
         </table>
       </article>
 
-      <p className="eyebrow">
+      <p className="card-note">
         &ldquo;Expired&rdquo; is worked out from the expiry date each time this page loads, so it
         can never be out of step with the calendar — and a document that has lapsed still records
         that it was once verified.

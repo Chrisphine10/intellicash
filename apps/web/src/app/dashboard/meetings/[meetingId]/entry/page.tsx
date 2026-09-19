@@ -984,7 +984,7 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                               />
                               <div className="meeting-entry-presets">
                                 {field.presets.map((preset) => (
-                                  <button
+                                  <button className="button secondary compact"
                                     key={preset}
                                     onClick={() => applyPreset(activeEntryMember.id, field.key, preset)}
                                     type="button"
@@ -1066,7 +1066,7 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
                                   />
                                   <div className="meeting-entry-presets">
                                     {field.presets.map((preset) => (
-                                      <button
+                                      <button className="button secondary compact"
                                         key={preset}
                                         onClick={() => applyPreset(member.id, field.key, preset)}
                                         type="button"

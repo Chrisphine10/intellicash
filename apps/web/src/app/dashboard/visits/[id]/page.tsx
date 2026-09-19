@@ -876,7 +876,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
           <p className="eyebrow">No photographs were taken during this visit.</p>
         ) : (
           <>
-            <p className="eyebrow">
+            <p className="card-note">
               {attachments.length} photo{attachments.length === 1 ? "" : "s"}, grouped by the
               question each one answers. A photograph with no claim attached to it is not
               evidence of anything, so every one here names what it was taken to show.
@@ -910,7 +910,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
         )}
       </article>
 
-      <p className="eyebrow">
+      <p className="card-note">
         A submitted visit is immutable. Corrections are recorded as amendments, which keep the
         original report readable alongside them.
       </p>

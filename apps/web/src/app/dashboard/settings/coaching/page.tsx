@@ -283,7 +283,7 @@ export default function CoachingSettingsPage() {
               placeholder="Optional — shown under the title on the phone"
             />
           </label>
-          <p className="eyebrow">
+          <p className="card-note">
             Lower-case letters, digits and underscores. Choose the key carefully: it can never be
             changed, and reusing a retired one would make past sessions ambiguous.
           </p>
