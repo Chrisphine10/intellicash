@@ -1970,6 +1970,18 @@ export default function ReportsPage() {
       </section>
 
       <div className="dashboard-module-grid">
+        {/* First, because it is the one partners come here for. Not offered to
+            a group or member account: the server refuses them, since it
+            compares CBTs and groups across the programme. */}
+        {user && !["GROUP_ACCOUNT", "MEMBER"].includes(user.role) ? (
+          <Link className="dashboard-module-link" href="/dashboard/reports/programme">
+            <TrendingUp size={18} />
+            <span>
+              <strong>Programme performance</strong>
+              <em>Group results and CBT mentoring, by period</em>
+            </span>
+          </Link>
+        ) : null}
         <Link className="dashboard-module-link" href="/dashboard/reports/insights">
           <BarChart3 size={18} />
           <span>

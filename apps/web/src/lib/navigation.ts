@@ -138,9 +138,9 @@ export const navigationItems: NavigationItem[] = [
     label: "Reports",
     href: "/dashboard/reports",
     icon: ClipboardList,
-    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "LENDER", "READ_ONLY"],
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "LENDER", "READ_ONLY", "VILLAGE_AGENT"],
     section: "review",
-    priority: { default: 70, IWL_ADMIN: 70, PARTNER_OFFICER: 70, GROUP_ACCOUNT: 30, LENDER: 40, READ_ONLY: 10 }
+    priority: { default: 70, IWL_ADMIN: 70, PARTNER_OFFICER: 70, GROUP_ACCOUNT: 30, LENDER: 40, READ_ONLY: 10, VILLAGE_AGENT: 40 }
   },
   {
     label: "IntelliAudit",

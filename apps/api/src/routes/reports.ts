@@ -9,7 +9,8 @@ import {
   villageAgentScopeForUser,
   demoExclusionForUser
 } from "../services/account-scope";
-import { ok } from "../lib/http";
+import { ApiHttpError, ok } from "../lib/http";
+import { buildProgrammePerformanceReport } from "../services/programme-performance-report";
 import { latestCreditRating } from "../services/credit-rating-service";
 import { buildMemberPassbook } from "../services/member-passbook-service";
 import { prisma } from "../lib/prisma";
@@ -99,6 +100,68 @@ function reportAccountScope(user?: AuthenticatedUser) {
     permissions: user.permissions
   };
 }
+
+/**
+ * The programme performance pack — see `services/programme-performance-report`
+ * for what it contains and how it keeps members unidentifiable.
+ *
+ * Period defaults to the last 90 days, the usual quarterly reporting window.
+ */
+const PROGRAMME_REPORT_ROLES = ["IWL_ADMIN", "PARTNER_OFFICER", "LENDER", "READ_ONLY", "VILLAGE_AGENT"];
+
+router.get("/reports/programme-performance", requireAuth("analytics:read"), async (req, res, next) => {
+  try {
+    if (!req.user || !PROGRAMME_REPORT_ROLES.includes(req.user.role)) {
+      throw new ApiHttpError(
+        403,
+        "FORBIDDEN",
+        "This report is for programme staff and partners. Your group's own reports are under My Group."
+      );
+    }
+
+    const parseDate = (value: unknown) => {
+      if (typeof value !== "string" || !value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+    const to = parseDate(req.query.to);
+    const from = parseDate(req.query.from);
+    if (to === undefined || from === undefined) {
+      throw new ApiHttpError(400, "INVALID_PERIOD", "The report period dates are not valid. Use the date pickers.");
+    }
+    const periodTo = to ?? new Date();
+    // End of the chosen day, so "to 30 Sep" includes the 30th.
+    if (to) periodTo.setUTCHours(23, 59, 59, 999);
+    const periodFrom = from ?? new Date(periodTo.getTime() - 90 * 24 * 60 * 60 * 1000);
+    if (periodFrom > periodTo) {
+      throw new ApiHttpError(400, "INVALID_PERIOD", "The start of the period is after its end.");
+    }
+
+    const groups = await prisma.group.findMany({
+      where: { AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)] },
+      select: { id: true }
+    });
+
+    ok(
+      res,
+      await buildProgrammePerformanceReport(
+        groups.map((group) => group.id),
+        { from: periodFrom, to: periodTo }
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Roles that read programme results but do not serve members directly. They get
+ * ledger totals, never who paid what: a partner or lender judging a programme
+ * has no need for a named member's individual savings, and the Data Protection
+ * Act's minimisation principle says they should not receive it. Field agents
+ * and the group itself keep names — they work with those members.
+ */
+const MEMBER_IDENTITY_WITHHELD_ROLES = ["PARTNER_OFFICER", "LENDER", "READ_ONLY"];
 
 router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res, next) => {
   try {
@@ -222,7 +285,9 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
         importedKpis: canReadKpis
       },
       fundAccounts,
-      ledgerEntries,
+      ledgerEntries: MEMBER_IDENTITY_WITHHELD_ROLES.includes(req.user?.role ?? "")
+        ? ledgerEntries.map((entry) => ({ ...entry, memberId: null, member: null }))
+        : ledgerEntries,
       users,
       meetings,
       votes,
