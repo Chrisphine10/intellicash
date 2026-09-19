@@ -115,6 +115,27 @@ describe("the programme performance report", () => {
     expect(JSON.stringify(response.body)).not.toContain("asked about the cash book");
   });
 
+  it("counts a meeting as held when things were recorded in it, even if it was never opened", async () => {
+    // A group that keeps its book on the phone records attendance and money
+    // against a meeting without the server's open/seal steps, so the meeting
+    // stays SCHEDULED. Counting only opened meetings reported an active group
+    // as having held none, with a 0% attendance rate.
+    const first = await request(app).get("/api/v1/reports/programme-performance").set("Cookie", partner).expect(200);
+    const group = first.body.data.performance.groups.find((row: { meetingsScheduled: number }) => row.meetingsScheduled >= 0);
+    const member = await prisma.member.findFirstOrThrow({ where: { groupId: group.id, status: "ACTIVE" }, select: { id: true } });
+    const meeting = await prisma.meeting.create({
+      data: { groupId: group.id, title: "Phone-recorded meeting", scheduledAt: new Date(), status: "SCHEDULED" }
+    });
+    const before = group.meetingsHeld as number;
+
+    await prisma.attendance.create({ data: { meetingId: meeting.id, memberId: member.id, status: "PRESENT" } });
+
+    const after = await request(app).get("/api/v1/reports/programme-performance").set("Cookie", partner).expect(200);
+    const row = after.body.data.performance.groups.find((entry: { id: string }) => entry.id === group.id);
+    expect(row.meetingsHeld).toBe(before + 1);
+    expect(row.meetingsScheduled).toBe(group.meetingsScheduled + 1);
+  });
+
   it("is not a member's report", async () => {
     const member = await signIn("MEMBER");
     const response = await request(app).get("/api/v1/reports/programme-performance").set("Cookie", member).expect(403);

@@ -8,7 +8,9 @@ import {
   memberScopeForUser,
   scopeGroupWhere
 } from "../services/account-scope";
+import { repaymentRatePercent } from "../domain/loan-math";
 import { ok } from "../lib/http";
+import { loadLoanPositions } from "../services/loan-position-service";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -22,7 +24,7 @@ router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, re
       AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)]
     };
     const [groups, members, activeMeetings, fundAccounts, creditScores, credentialContext] = await Promise.all([
-      prisma.group.findMany({ where: groupWhere, select: { phase: true } }),
+      prisma.group.findMany({ where: groupWhere, select: { id: true, phase: true } }),
       prisma.member.count({ where: memberScopeForUser(req.user) }),
       prisma.meeting.count({ where: { status: "IN_PROGRESS", group: groupWhere } }),
       prisma.fundAccount.findMany({
@@ -61,12 +63,24 @@ router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, re
             creditScores.reduce((sum, score) => sum + score.score, 0) / creditScores.length
           );
 
+    // Measured from the loans and what has been paid on them, through the same
+    // balance maths as the passbook. This used to be the constant 91, shown to
+    // partners as if it were a measurement.
+    const now = new Date();
+    const positions = await loadLoanPositions(prisma, { groupIds: groups.map((group) => group.id) }, now);
+    const repaymentRate = repaymentRatePercent(
+      [...positions.values()].flatMap((position) =>
+        position.loans.map((entry) => ({ ...entry, dueAt: entry.loan.dueAt }))
+      ),
+      now
+    );
+
     const summary: PortfolioSummary = {
       groups: groups.length,
       members,
       activeMeetings,
       totalSavingsCents,
-      repaymentRate: 91,
+      repaymentRate,
       averageCreditScore,
       phaseDistribution,
       integrationConfigured: integrationHealth.configured,

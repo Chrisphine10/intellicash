@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { latestCreditRating } from "./credit-rating-service";
-import { loanBalance } from "../domain/loan-math";
+import { loadLoanPositions } from "./loan-position-service";
 
 /**
  * The programme performance pack: what a partner reads to judge whether groups
@@ -41,6 +41,21 @@ export const SMALL_GROUP_THRESHOLD = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const OPENED_MEETING_STATUSES = ["IN_PROGRESS", "SEALED", "SYNC_CONFLICT"];
+
+/**
+ * A meeting was HELD if it was formally opened, or if anything was recorded in
+ * it. A group that keeps its book on the phone records attendance and money
+ * against a meeting without ever running the open/seal steps on the server, so
+ * its meetings stay SCHEDULED — and counting only opened ones reported active
+ * groups as having held no meetings at all, with an attendance rate of zero.
+ */
+function wasHeld(meeting: { status: string; attendance: unknown[]; _count: { ledgerEntries: number } }) {
+  return (
+    OPENED_MEETING_STATUSES.includes(meeting.status) ||
+    meeting.attendance.length > 0 ||
+    meeting._count.ledgerEntries > 0
+  );
+}
 const PRESENT_STATUSES = ["PRESENT", "LATE"];
 
 export interface ReportPeriod {
@@ -79,7 +94,8 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
         select: {
           groupId: true,
           status: true,
-          attendance: { select: { status: true } }
+          attendance: { select: { status: true } },
+          _count: { select: { ledgerEntries: true } }
         }
       }),
       // Totals by group and type. Grouped in the database: no individual line,
@@ -147,36 +163,19 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
   // same balance maths the passbook uses. A ratio of repayments to
   // disbursements reads above 100% as soon as interest is paid or a loan
   // predates the ledger, which tells a partner nothing true.
-  const activeLoans = await prisma.loan.findMany({
-    where: { groupId: { in: groupIds }, status: "ACTIVE" },
-    select: {
-      groupId: true,
-      principalCents: true,
-      interestRateBps: true,
-      termMonths: true,
-      disbursedAt: true,
-      dueAt: true,
-      repayments: { select: { amountCents: true } }
-    }
-  });
+  const positions = await loadLoanPositions(prisma, { groupIds }, now);
   const loanStats = new Map<string, { active: number; outstanding: number; atRisk: number; pastDue: number }>();
-  for (const loan of activeLoans) {
-    const balance = loanBalance({
-      principalCents: loan.principalCents,
-      interestRateBps: loan.interestRateBps,
-      termMonths: loan.termMonths,
-      disbursedAt: loan.disbursedAt,
-      repaidCents: loan.repayments.reduce((sum, entry) => sum + entry.amountCents, 0),
-      asOf: now
-    });
-    if (balance.settled) continue;
-    const stats = loanStats.get(loan.groupId) ?? { active: 0, outstanding: 0, atRisk: 0, pastDue: 0 };
-    stats.active += 1;
-    stats.outstanding += balance.outstandingCents;
-    if (loan.dueAt < now) stats.pastDue += 1;
-    // PAR30: balance on loans more than 30 days past their due date.
-    if (now.getTime() - loan.dueAt.getTime() > 30 * DAY_MS) stats.atRisk += balance.outstandingCents;
-    loanStats.set(loan.groupId, stats);
+  for (const position of positions.values()) {
+    for (const { loan, ...balance } of position.loans) {
+      if (balance.settled) continue;
+      const stats = loanStats.get(loan.groupId) ?? { active: 0, outstanding: 0, atRisk: 0, pastDue: 0 };
+      stats.active += 1;
+      stats.outstanding += balance.outstandingCents;
+      if (loan.dueAt < now) stats.pastDue += 1;
+      // PAR30: balance on loans more than 30 days past their due date.
+      if (now.getTime() - loan.dueAt.getTime() > 30 * DAY_MS) stats.atRisk += balance.outstandingCents;
+      loanStats.set(loan.groupId, stats);
+    }
   }
 
   const lastVisits = await prisma.groupVisit.groupBy({
@@ -201,7 +200,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
     const suppressed = activeMembers < SMALL_GROUP_THRESHOLD;
 
     const groupMeetings = meetings.filter((meeting) => meeting.groupId === group.id);
-    const held = groupMeetings.filter((meeting) => OPENED_MEETING_STATUSES.includes(meeting.status));
+    const held = groupMeetings.filter(wasHeld);
     const attendanceRows = held.flatMap((meeting) => meeting.attendance);
     const present = attendanceRows.filter((row) => PRESENT_STATUSES.includes(row.status)).length;
 
@@ -260,7 +259,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
     }),
     { active: 0, outstanding: 0, atRisk: 0, pastDue: 0 }
   );
-  const allHeld = meetings.filter((meeting) => OPENED_MEETING_STATUSES.includes(meeting.status));
+  const allHeld = meetings.filter(wasHeld);
   const allAttendance = allHeld.flatMap((meeting) => meeting.attendance);
 
   const bandCounts = new Map<string, number>();

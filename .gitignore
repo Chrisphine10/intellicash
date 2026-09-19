@@ -35,3 +35,7 @@ apps/api/shadow-*.db
 # Python bytecode from the scripts in this folder.
 __pycache__/
 *.pyc
+apps/api/prisma/qa.db
+apps/api/prisma/qa.db-journal
+qa/results.json
+qa/world.json

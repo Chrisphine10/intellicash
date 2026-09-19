@@ -1,13 +1,23 @@
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import request from "supertest";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { demoAccounts, demoPassword } from "@intellicash/shared";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { seedDatabase } from "../prisma/seed";
 import { MAX_ATTACHMENTS_PER_VISIT } from "../src/routes/attachments";
 import { resolveAttachmentPath } from "../src/services/attachment-storage";
+
+// These tests are about who may attach what, not about the machine's disk. The
+// real guard refuses uploads below 15% free space, so on a developer laptop with
+// a fairly full drive every upload came back 503 and 17 unrelated tests failed.
+// The guard's own thresholds are covered, without a full disk, in
+// storage-guard.test.ts.
+vi.mock("../src/services/storage-guard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/services/storage-guard")>();
+  return { ...actual, checkUploadStorage: async () => actual.judgeStorage(50, 100) };
+});
 
 const app = createApp();
 

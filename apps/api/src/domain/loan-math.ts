@@ -142,3 +142,174 @@ export function allocateFifo(
 
   return applied;
 }
+
+export interface MemberLoanInput {
+  id: string;
+  principalCents: number;
+  interestRateBps: number;
+  termMonths: number;
+  disbursedAt: Date;
+}
+
+/** One repayment by the member, whichever loan the ledger row happens to point at. */
+export interface MemberRepayment {
+  id?: string;
+  at: Date;
+  amountCents: number;
+}
+
+/** Which loan a slice of a repayment went to. */
+export interface LoanAllocation {
+  repaymentId: string | null;
+  loanId: string;
+  cents: number;
+}
+
+export interface MemberLoanPositionEntry<L extends MemberLoanInput> extends LoanBalance {
+  id: string;
+  loan: L;
+  /**
+   * The moment the loan was paid off, or null while it still owes something.
+   * Interest is charged up to this moment and no further.
+   */
+  settledAt: Date | null;
+}
+
+export interface MemberLoanPosition<L extends MemberLoanInput> {
+  /** Oldest first. `repaidCents` is what was APPLIED to that loan. */
+  loans: MemberLoanPositionEntry<L>[];
+  outstandingCents: number;
+  /** Paid beyond everything owed at the time — refundable, not a debt. */
+  overpaidCents: number;
+  /** Every slice of every repayment, in the order it was applied. */
+  allocations: LoanAllocation[];
+}
+
+/**
+ * One member's loans, taken TOGETHER, with time respected.
+ *
+ * Two mistakes are easy to make here and both were made once:
+ *
+ * 1. Judging each loan on its own. A repayment row points at a single loan —
+ *    the oldest that still owed something. When a repayment is bigger than that
+ *    loan (paying two loans at once, or a share-out netting a whole debt) the
+ *    surplus cannot be split across rows, because the ledger is append-only, so
+ *    per-loan arithmetic clamped it at zero and the surplus vanished: a member
+ *    who had paid 550.00 against 550.00 of debt was still shown owing 300.00
+ *    on the newer loan, and would have been charged it again at the next
+ *    share-out.
+ *
+ * 2. Charging interest up to today on a loan that was paid off long ago. Flat
+ *    monthly interest is worked out from the date, so a loan settled in month
+ *    two and looked at in month three came back owing a third month.
+ *
+ * So the member's repayments are replayed in the order they were made. Each one
+ * clears the oldest loan that existed at that moment and still owed something,
+ * at what that loan owed ON THAT DAY; the surplus rolls on to the next loan. A
+ * loan that is covered is SETTLED on that day and its interest stops there.
+ * Whatever no loan could take (nothing owed, or no loan yet) is an overpayment,
+ * held against the newest loan that existed so per-loan figures stay honest. A
+ * repayment never pays a loan that had not been taken yet.
+ *
+ * `asOf` also bounds the replay: repayments after it are ignored, so the same
+ * function answers "what was owed at share-out" months later.
+ */
+export function memberLoanPosition<L extends MemberLoanInput>(
+  loans: L[],
+  repayments: MemberRepayment[],
+  asOf: Date
+): MemberLoanPosition<L> {
+  const ordered = [...loans].sort(
+    (a, b) => a.disbursedAt.getTime() - b.disbursedAt.getTime() || a.id.localeCompare(b.id)
+  );
+  const events = repayments
+    .map((repayment, order) => ({ repayment, order }))
+    .filter(({ repayment }) => repayment.amountCents > 0 && repayment.at.getTime() <= asOf.getTime())
+    .sort((a, b) => a.repayment.at.getTime() - b.repayment.at.getTime() || a.order - b.order)
+    .map(({ repayment }) => repayment);
+
+  const state = new Map(
+    ordered.map((loan) => [loan.id, { applied: 0, surplus: 0, settledAt: null as Date | null }])
+  );
+  const allocations: LoanAllocation[] = [];
+
+  for (const repayment of events) {
+    let remaining = repayment.amountCents;
+    let newestExisting: L | undefined;
+
+    for (const loan of ordered) {
+      if (loan.disbursedAt.getTime() > repayment.at.getTime()) break;
+      newestExisting = loan;
+      const position = state.get(loan.id)!;
+      if (position.settledAt || remaining <= 0) continue;
+
+      const owed =
+        loan.principalCents + accruedInterestCents({ ...loan, asOf: repayment.at }) - position.applied;
+      if (owed <= 0) {
+        position.settledAt = repayment.at;
+        continue;
+      }
+      const take = Math.min(remaining, owed);
+      position.applied += take;
+      remaining -= take;
+      allocations.push({ repaymentId: repayment.id ?? null, loanId: loan.id, cents: take });
+      if (take === owed) position.settledAt = repayment.at;
+    }
+
+    if (remaining > 0 && newestExisting) state.get(newestExisting.id)!.surplus += remaining;
+  }
+
+  const entries = ordered.map((loan): MemberLoanPositionEntry<L> => {
+    const position = state.get(loan.id)!;
+    const balance = loanBalance({
+      ...loan,
+      repaidCents: position.applied,
+      asOf: position.settledAt ?? asOf
+    });
+    return {
+      ...balance,
+      id: loan.id,
+      loan,
+      settledAt: position.settledAt,
+      repaidCents: balance.repaidCents + position.surplus,
+      overpaidCents: balance.overpaidCents + position.surplus
+    };
+  });
+
+  return {
+    loans: entries,
+    outstandingCents: entries.reduce((sum, entry) => sum + entry.outstandingCents, 0),
+    overpaidCents: entries.reduce((sum, entry) => sum + entry.overpaidCents, 0),
+    allocations
+  };
+}
+
+/**
+ * Repayment rate across a set of loans, as a whole percent — or null when there
+ * is nothing to measure.
+ *
+ * Of everything owed (principal + interest to date) on loans that have FALLEN
+ * DUE or been settled, the share that has been paid. A loan still inside its
+ * term is left out: it has not had the chance to be repaid, and counting it
+ * would make every freshly lent shilling look like a default. Overpayments do
+ * not count as extra collected.
+ *
+ * Null, not zero, when no loan qualifies: "0% repaid" and "nothing has fallen
+ * due yet" are different statements and a partner reads them differently.
+ */
+export function repaymentRatePercent(
+  loans: Array<
+    Pick<LoanBalance, "principalCents" | "interestCents" | "outstandingCents" | "settled"> & { dueAt: Date }
+  >,
+  asOf: Date
+): number | null {
+  let owed = 0;
+  let collected = 0;
+  for (const loan of loans) {
+    if (!loan.settled && loan.dueAt.getTime() > asOf.getTime()) continue;
+    const total = loan.principalCents + loan.interestCents;
+    owed += total;
+    collected += total - loan.outstandingCents;
+  }
+  return owed === 0 ? null : Math.round((collected / owed) * 100);
+}

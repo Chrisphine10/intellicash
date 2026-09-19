@@ -79,6 +79,20 @@ describe("validation messages name the field", () => {
     if (!result.success) expect(validationMessage(result.error)).toBe("Group name must be at least 3 characters.");
   });
 
+  it("uses a written sentence as it is, rather than gluing it to the field name", () => {
+    const schema = z.object({ amountCents: z.number().int().max(100, "That amount is too large to record.") });
+    const result = schema.safeParse({ amountCents: 500 });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(validationMessage(result.error)).toBe("That amount is too large to record.");
+  });
+
+  it("calls a money field an amount, not 'amount cents'", () => {
+    const schema = z.object({ amountCents: z.number().int().min(1) });
+    const result = schema.safeParse({ amountCents: 0 });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(validationMessage(result.error)).toBe("Amount must be at least 1.");
+  });
+
   it("reaches the API response instead of 'Request validation failed.'", async () => {
     const response = await request(app).post("/api/v1/auth/login").send({ password: 5 }).expect(400);
     expect(response.body.error.message).not.toBe("Request validation failed.");

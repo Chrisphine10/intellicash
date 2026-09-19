@@ -21,7 +21,10 @@ import {
   computeCreditRating,
   latestCreditRating
 } from "../services/credit-rating-service";
-import { canDisburse, loanBalance } from "../domain/loan-math";
+import { canDisburse } from "../domain/loan-math";
+import { AMOUNT_TOO_LARGE_MESSAGE, MAX_CENTS, MAX_CENTS_LABEL } from "../domain/money";
+import { proRataShareCents } from "../domain/share-out";
+import { loadLoanPositions } from "../services/loan-position-service";
 import {
   assertMeetingWritable,
   ensureActiveCycle
@@ -67,18 +70,18 @@ function routeParam(value: string | string[] | undefined, name: string) {
 // groups have no GPS) failed validation, and a group's location could not be
 // set at all.
 const groupCreateSchema = z.object({
-  name: z.string().trim().min(2),
-  code: z.string().trim().min(2),
-  county: z.string().trim().min(2),
+  name: z.string().trim().min(2).max(120),
+  code: z.string().trim().min(2).max(40),
+  county: z.string().trim().min(2).max(80),
   phase: z.enum(groupPhases).default("MOBILISATION"),
-  subCounty: z.string().trim().nullish(),
-  location: z.string().trim().nullish(),
-  composition: z.string().trim().nullish(),
-  objective: z.string().trim().nullish(),
-  contactPersonName: z.string().trim().nullish(),
-  contactPhone: z.string().trim().nullish(),
-  onboardingFeedback: z.string().trim().nullish(),
-  meetingDay: z.string().trim().nullish(),
+  subCounty: z.string().trim().max(80).nullish(),
+  location: z.string().trim().max(200).nullish(),
+  composition: z.string().trim().max(300).nullish(),
+  objective: z.string().trim().max(1000).nullish(),
+  contactPersonName: z.string().trim().max(120).nullish(),
+  contactPhone: z.string().trim().max(30).nullish(),
+  onboardingFeedback: z.string().trim().max(2000).nullish(),
+  meetingDay: z.string().trim().max(30).nullish(),
   gpsLatitude: z.number().min(-90).max(90).nullish(),
   gpsLongitude: z.number().min(-180).max(180).nullish(),
   gpsRadiusMeters: z.number().int().min(1).optional(),
@@ -95,8 +98,8 @@ const groupUpdateSchema = groupCreateSchema.partial().extend({
 });
 
 const memberCreateSchema = z.object({
-  fullName: z.string().trim().min(2),
-  phone: z.string().trim().min(7),
+  fullName: z.string().trim().min(2).max(120),
+  phone: z.string().trim().min(7).max(30),
   role: z.enum(memberRoles).default("MEMBER"),
   kycStatus: z.enum(["PENDING", "VERIFIED", "REJECTED"]).default("PENDING"),
   status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).default("ACTIVE"),
@@ -107,13 +110,13 @@ const memberUpdateSchema = memberCreateSchema.partial();
 const pinRequestSchema = z.object({}).strict();
 
 const meetingCreateSchema = z.object({
-  title: z.string().trim().min(2),
+  title: z.string().trim().min(2).max(200),
   scheduledAt: z.string().datetime(),
   gpsCompliant: z.boolean().default(false)
 });
 
 const meetingUpdateSchema = z.object({
-  title: z.string().trim().min(2).optional(),
+  title: z.string().trim().min(2).max(200).optional(),
   scheduledAt: z.string().datetime().optional(),
   gpsCompliant: z.boolean().optional()
 });
@@ -174,10 +177,10 @@ const ledgerCreateSchema = z.object({
   meetingId: z.string().optional(),
   fundAccountId: z.string(),
   type: z.enum(ledgerEntryTypes),
-  amountCents: z.number().int().min(1),
+  amountCents: z.number().int().min(1).max(MAX_CENTS, AMOUNT_TOO_LARGE_MESSAGE),
   direction: z.enum(["CREDIT", "DEBIT"]),
-  description: z.string().trim().min(2),
-  externalReference: z.string().optional(),
+  description: z.string().trim().min(2).max(500),
+  externalReference: z.string().max(120).optional(),
   clientRequestId: z.string().trim().min(4).max(120).optional()
 });
 
@@ -195,9 +198,9 @@ const meetingLedgerEntryTypes = [
 const meetingLedgerEntrySchema = z.object({
   memberId: z.string(),
   type: z.enum(meetingLedgerEntryTypes),
-  amountCents: z.number().int().min(1),
-  description: z.string().trim().optional(),
-  externalReference: z.string().optional(),
+  amountCents: z.number().int().min(1).max(MAX_CENTS, AMOUNT_TOO_LARGE_MESSAGE),
+  description: z.string().trim().max(500).optional(),
+  externalReference: z.string().max(120).optional(),
   clientRequestId: z.string().trim().min(4).max(120).optional()
 });
 
@@ -238,7 +241,7 @@ const offlineSyncSchema = z.object({
 });
 
 const shareOutPreviewSchema = z.object({
-  poolAmountCents: z.number().int().min(1),
+  poolAmountCents: z.number().int().min(1).max(MAX_CENTS, AMOUNT_TOO_LARGE_MESSAGE),
   /**
    * Whether what REMAINS in the welfare fund is shared out too.
    *
@@ -720,6 +723,21 @@ export async function appendLedgerEntry(
     throw new ApiHttpError(404, "FUND_ACCOUNT_NOT_FOUND", "Fund account does not exist or is outside this group.");
   }
 
+  // A type has one meaning: which way the money moves and which fund it moves
+  // in. The meeting route sets both from the type; this route lets the caller
+  // choose them, so a share purchase could be booked as money OUT, a loan
+  // "disbursement" as money IN (creating a loan the fund never paid), or a
+  // social contribution into the loan fund. Enforced here so every caller is
+  // held to it.
+  const rule = (meetingLedgerRules as Partial<Record<string, { fundType: FundType; direction: "CREDIT" | "DEBIT"; label: string }>>)[input.type];
+  if (rule && (input.direction !== rule.direction || fundAccount.type !== rule.fundType)) {
+    throw new ApiHttpError(
+      400,
+      "LEDGER_ENTRY_MISMATCH",
+      `${rule.label} must be recorded as money ${rule.direction === "CREDIT" ? "into" : "out of"} the ${rule.fundType === "SOCIAL" ? "social" : "loan"} fund.`
+    );
+  }
+
   if (input.memberId) {
     const member = await tx.member.findFirst({ where: { id: input.memberId, groupId: input.groupId }, select: { id: true } });
     if (!member) {
@@ -743,6 +761,13 @@ export async function appendLedgerEntry(
 
   if (nextBalance < 0) {
     throw new ApiHttpError(400, "INSUFFICIENT_FUND_BALANCE", "This debit would make the fund balance negative.");
+  }
+  if (nextBalance > MAX_CENTS) {
+    throw new ApiHttpError(
+      400,
+      "FUND_BALANCE_LIMIT",
+      `This would take the fund above ${MAX_CENTS_LABEL}, the most it can hold.`
+    );
   }
 
   const payload = {
@@ -844,57 +869,37 @@ async function projectLoanFromEntry(
 
   if (entry.type !== "LOAN_REPAYMENT") return;
 
-  // Attribute the repayment to the member's oldest loan that still owes
-  // something — the same FIFO rule the backfill uses, so a database built by
-  // either route reports identical balances.
-  const loans = await tx.loan.findMany({
-    where: { groupId: entry.groupId, memberId: entry.memberId, status: "ACTIVE" },
-    orderBy: { disbursedAt: "asc" },
-    include: { repayments: { select: { amountCents: true } } }
-  });
-  if (loans.length === 0) return;
+  // The member's loans are judged TOGETHER, oldest first, at what each owed on
+  // the day of each repayment — the same replay the passbook and the share-out
+  // use, so all of them report identical balances. Judging only the loan this
+  // row points at dropped any surplus (a share-out netting two loans in one
+  // row), and left the second loan owing money already paid.
+  const position = (
+    await loadLoanPositions(tx, { memberIds: [entry.memberId] }, entry.createdAt)
+  ).get(entry.memberId);
+  if (!position || position.loans.length === 0) return;
 
-  const asOf = entry.createdAt;
-  const owed = loans.map((loan) => ({
-    id: loan.id,
-    owedCents: loanBalance({
-      principalCents: loan.principalCents,
-      interestRateBps: loan.interestRateBps,
-      termMonths: loan.termMonths,
-      disbursedAt: loan.disbursedAt,
-      repaidCents: loan.repayments.reduce((sum, r) => sum + r.amountCents, 0),
-      asOf
-    }).outstandingCents
-  }));
-
-  const target = owed.find((loan) => loan.owedCents > 0) ?? owed[0];
-  if (!target) return;
-
-  // A repayment larger than the oldest loan stays whole on that loan rather
-  // than being split: a ledger row points at one loan, and the member's TOTAL
-  // outstanding — which is what every report shows — is unaffected either way.
+  // Back-link the row to the loan that took its first cent — or, when no loan
+  // could take any (a pure overpayment), the newest loan that then existed.
   // Back-link only: the guard refuses this the moment it touches an amount, a
   // direction or a party. Declaring the change rather than trusting the line
   // below to keep being harmless.
-  const backLink = { loanId: target.id };
-  assertAppendOnlyOperation("update", Object.keys(backLink));
-  await tx.ledgerEntry.update({ where: { id: entry.id }, data: backLink });
+  const firstSlice = position.allocations.find((slice) => slice.repaymentId === entry.id);
+  const targetId =
+    firstSlice?.loanId ??
+    [...position.loans].reverse().find((loan) => loan.loan.disbursedAt <= entry.createdAt)?.id;
+  if (targetId) {
+    const backLink = { loanId: targetId };
+    assertAppendOnlyOperation("update", Object.keys(backLink));
+    await tx.ledgerEntry.update({ where: { id: entry.id }, data: backLink });
+  }
 
-  const settled = loans.find((loan) => loan.id === target.id)!;
-  const repaidNow =
-    settled.repayments.reduce((sum, r) => sum + r.amountCents, 0) + entry.amountCents;
-  const remaining = loanBalance({
-    principalCents: settled.principalCents,
-    interestRateBps: settled.interestRateBps,
-    termMonths: settled.termMonths,
-    disbursedAt: settled.disbursedAt,
-    repaidCents: repaidNow,
-    asOf
-  }).outstandingCents;
-
-  if (remaining <= 0) {
-    // Closing the loan stops interest accruing on a debt already settled.
-    await tx.loan.update({ where: { id: settled.id }, data: { status: "REPAID" } });
+  // Closing a loan stops interest accruing on a debt already settled. A large
+  // repayment can close several loans at once.
+  for (const settled of position.loans) {
+    if (settled.settledAt && settled.loan.status === "ACTIVE") {
+      await tx.loan.update({ where: { id: settled.id }, data: { status: "REPAID" } });
+    }
   }
 }
 
@@ -1035,7 +1040,7 @@ async function computeShareOutPreview(
     const payoutCents =
       index === filteredRows.length - 1
         ? poolAmountCents - allocated
-        : Math.floor((poolAmountCents * sharePurchaseCents) / totalShareCents);
+        : proRataShareCents(poolAmountCents, sharePurchaseCents, totalShareCents);
     allocated += payoutCents;
     const member = membersById.get(row.memberId!);
     const welfareCents = welfareShares[index] ?? 0;
@@ -1085,7 +1090,12 @@ function allocateEqually(totalCents: number, count: number) {
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
-/** Interest-aware outstanding per member, from the Loan projection. */
+/**
+ * Interest-aware outstanding per member, from the Loan projection.
+ *
+ * Every loan the member has ever taken goes in, not only the ACTIVE ones: a
+ * loan is settled by the replay, and the status column only follows it.
+ */
 async function shareOutLoanOffsets(
   tx: Prisma.TransactionClient,
   groupId: string,
@@ -1094,22 +1104,9 @@ async function shareOutLoanOffsets(
   const offsets = new Map<string, number>();
   if (memberIds.length === 0) return offsets;
 
-  const loans = await tx.loan.findMany({
-    where: { groupId, memberId: { in: memberIds }, status: "ACTIVE" },
-    include: { repayments: { select: { amountCents: true } } }
-  });
-
-  const asOf = new Date();
-  for (const loan of loans) {
-    const balance = loanBalance({
-      principalCents: loan.principalCents,
-      interestRateBps: loan.interestRateBps,
-      termMonths: loan.termMonths,
-      disbursedAt: loan.disbursedAt,
-      repaidCents: loan.repayments.reduce((sum, r) => sum + r.amountCents, 0),
-      asOf
-    });
-    offsets.set(loan.memberId, (offsets.get(loan.memberId) ?? 0) + balance.outstandingCents);
+  const positions = await loadLoanPositions(tx, { memberIds, groupIds: [groupId] }, new Date());
+  for (const [memberId, position] of positions) {
+    if (position.outstandingCents > 0) offsets.set(memberId, position.outstandingCents);
   }
 
   return offsets;

@@ -286,4 +286,69 @@ describe("loans are projected from the ledger as money moves", () => {
     // existed for every loan before this projection ran.
     expect(passbook!.summary.loanOutstandingCents).toBe(1_000_000);
   });
+  it("a repayment bigger than the oldest loan pays the next loan too", async () => {
+    // Found in QA: a share-out netted 550.00 owed across two loans in ONE row.
+    // The row can only point at one loan, the surplus was dropped, and the
+    // member was left owing the newer loan money they had already paid — to be
+    // charged a second time at the next share-out.
+    const fresh = await prisma.member.create({
+      data: { groupId, fullName: "Owes Two Loans", phone: "254788111006", status: "ACTIVE" }
+    });
+    await disburse(500_000, fresh.id);
+    await disburse(300_000, fresh.id);
+
+    const repayment = await repay(800_000, fresh.id);
+
+    const loans = await prisma.loan.findMany({
+      where: { memberId: fresh.id },
+      orderBy: { disbursedAt: "asc" }
+    });
+    expect(loans).toHaveLength(2);
+    expect(loans.map((loan) => loan.status)).toEqual(["REPAID", "REPAID"]);
+
+    const passbook = await buildMemberPassbook(fresh.id);
+    expect(passbook!.summary.loanOutstandingWithInterestCents).toBe(0);
+    expect(passbook!.loans.map((loan) => loan.outstandingCents)).toEqual([0, 0]);
+
+    // The row is still back-linked to the oldest loan, the first that took money.
+    const stored = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: repayment.id } });
+    expect(stored.loanId).toBe(loans[0]!.id);
+  });
+
+  it("a settled loan stays settled as time passes", async () => {
+    // Also found in QA: interest is worked out from the date, so a loan paid
+    // off in month two and looked at in month three came back owing a third
+    // month — while its own status said REPAID and the share-out ignored it.
+    const fresh = await prisma.member.create({
+      data: { groupId, fullName: "Paid It Off Early", phone: "254788111007", status: "ACTIVE" }
+    });
+    const disbursement = await disburse(1_000_000, fresh.id);
+    const day = 24 * 3600 * 1000;
+    await prisma.loan.update({
+      where: { disbursementEntryId: disbursement.id },
+      data: { disbursedAt: new Date(Date.now() - 65 * day) }
+    });
+
+    // Two whole months have passed: 10,000.00 + 2,000.00 of interest.
+    const repayment = await repay(1_200_000, fresh.id);
+    let passbook = await buildMemberPassbook(fresh.id);
+    expect(passbook!.summary.loanOutstandingWithInterestCents).toBe(0);
+    expect(passbook!.loans[0]!.status).toBe("REPAID");
+
+    // A month goes by: the loan and its repayment both move a month into the past.
+    await prisma.loan.update({
+      where: { disbursementEntryId: disbursement.id },
+      data: { disbursedAt: new Date(Date.now() - 95 * day) }
+    });
+    await prisma.ledgerEntry.update({
+      where: { id: repayment.id },
+      data: { createdAt: new Date(Date.now() - 30 * day) }
+    });
+
+    passbook = await buildMemberPassbook(fresh.id);
+    expect(passbook!.summary.loanOutstandingWithInterestCents).toBe(0);
+    expect(passbook!.summary.loanInterestCents).toBe(200_000); // two months, not three
+    expect(passbook!.loans[0]!.settled).toBe(true);
+    expect(passbook!.loans[0]!.overdue).toBe(false);
+  });
 });

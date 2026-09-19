@@ -1,4 +1,4 @@
-import { loanBalance } from "../domain/loan-math";
+import { loadLoanPositions } from "./loan-position-service";
 import {
   buildMeetingSummarySms,
   buildSharePurchaseSms,
@@ -173,7 +173,7 @@ export async function sendMeetingSummaries(
   const policy = await smsPolicyFor(meeting.groupId);
   if (!policy.meetingSummary) return null;
 
-  const [members, byMemberType, loans] = await Promise.all([
+  const [members, byMemberType, positions] = await Promise.all([
     prisma.member.findMany({
       where: { groupId: meeting.groupId, status: "ACTIVE" },
       orderBy: { joinedAt: "asc" },
@@ -185,37 +185,15 @@ export async function sendMeetingSummaries(
       _sum: { amountCents: true }
     }),
     // Loans as the projection sees them, so the balance quoted includes
-    // interest. A loan disbursed before the projection existed has no row, and
-    // that member is told no balance rather than a wrong one.
-    prisma.loan.findMany({
-      where: { groupId: meeting.groupId, status: "ACTIVE" },
-      select: {
-        memberId: true,
-        principalCents: true,
-        interestRateBps: true,
-        termMonths: true,
-        disbursedAt: true,
-        repayments: { select: { amountCents: true } }
-      }
-    })
+    // interest and agrees with the passbook and the share-out. A loan
+    // disbursed before the projection existed has no row, and that member is
+    // told no balance rather than a wrong one.
+    loadLoanPositions(prisma, { groupIds: [meeting.groupId] }, new Date())
   ]);
 
-  const asOf = new Date();
   const outstandingByMember = new Map<string, number>();
-  for (const loan of loans) {
-    const repaid = loan.repayments.reduce((sum, row) => sum + row.amountCents, 0);
-    const balance = loanBalance({
-      principalCents: loan.principalCents,
-      interestRateBps: loan.interestRateBps,
-      termMonths: loan.termMonths,
-      disbursedAt: loan.disbursedAt,
-      repaidCents: repaid,
-      asOf
-    });
-    outstandingByMember.set(
-      loan.memberId,
-      (outstandingByMember.get(loan.memberId) ?? 0) + balance.outstandingCents
-    );
+  for (const [memberId, position] of positions) {
+    outstandingByMember.set(memberId, position.outstandingCents);
   }
 
   const totalFor = (memberId: string, type: string) =>

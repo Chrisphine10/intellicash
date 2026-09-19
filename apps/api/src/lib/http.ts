@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import type { ZodError } from "zod";
+import { AMOUNT_TOO_LARGE_MESSAGE, isIntegerOverflow } from "../domain/money";
 import { traceIdFromResponse } from "../middleware/request-tracing";
 
 export class ApiHttpError extends Error {
@@ -36,6 +37,15 @@ export function fail(res: Response, error: unknown) {
     });
   }
 
+  // A figure too large for its column is the caller's input, not a fault on our
+  // side — and the write it interrupted was rolled back, so nothing half-saved.
+  if (isIntegerOverflow(error)) {
+    logApiFailure(400, "AMOUNT_TOO_LARGE", AMOUNT_TOO_LARGE_MESSAGE, traceId);
+    return res.status(400).json({
+      error: { code: "AMOUNT_TOO_LARGE", message: AMOUNT_TOO_LARGE_MESSAGE, ...(traceId ? { traceId } : {}) }
+    });
+  }
+
   logApiFailure(500, "INTERNAL_ERROR", error instanceof Error ? error.message : "Unknown API error", traceId, error);
   return res.status(500).json({
     error: {
@@ -63,11 +73,21 @@ export function validationMessage(error: ZodError) {
         .toLowerCase()
         // "programmeIds" reads as "Programme", not "Programme ids".
         .replace(/\s+ids?$/, "")
+        // Money fields are named in cents; the person typed an amount.
+        .replace(/\s+cents$/, "")
         .replace(/\b(id|pin|otp|gps|url|va|sms)\b/g, (word) => word.toUpperCase())
         .replace(/^./, (first) => first.toUpperCase())
     : null;
 
   const more = error.issues.length > 1 ? " Check the other fields too." : "";
+
+  // A message somebody wrote for people (a full sentence ending in a full stop)
+  // beats anything assembled from the field name — zod's own defaults never end
+  // that way. "Amount cents That amount is too large…" would be worse than none.
+  if (issue.code !== "invalid_type" && /^[A-Z].*\.$/.test(issue.message) && !/ Expected /.test(issue.message)) {
+    return `${issue.message}${more}`;
+  }
+
   const reason = issueInWords(issue);
 
   if (!label) return `Some details are not valid: ${reason}.${more}`;

@@ -638,7 +638,8 @@ export interface PortfolioSummary {
   members: number;
   activeMeetings: number;
   totalSavingsCents: number;
-  repaymentRate: number;
+  /** Percent of what has fallen due that has been repaid; null when nothing has fallen due yet. */
+  repaymentRate: number | null;
   averageCreditScore: number;
   phaseDistribution: Record<GroupPhase, number>;
   integrationConfigured: number;

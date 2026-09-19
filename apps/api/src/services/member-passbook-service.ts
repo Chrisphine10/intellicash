@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma";
-import { loanBalance } from "../domain/loan-math";
+import { loadLoanPositions } from "./loan-position-service";
 
 /**
  * One member's passbook, aggregated on the server.
@@ -35,7 +35,8 @@ export async function buildMemberPassbook(memberId: string) {
   });
   if (!member) return null;
 
-  const [byType, attendance, recent, loans, welfareReceived, shareOuts] = await Promise.all([
+  const asOf = new Date();
+  const [byType, attendance, recent, positions, welfareReceived, shareOuts] = await Promise.all([
     prisma.ledgerEntry.groupBy({
       by: ["type"],
       where: { memberId },
@@ -60,13 +61,10 @@ export async function buildMemberPassbook(memberId: string) {
         createdAt: true
       }
     }),
-    // Loans as the projection sees them, with their repayments, so interest
-    // can be computed rather than ignored.
-    prisma.loan.findMany({
-      where: { memberId },
-      orderBy: { disbursedAt: "desc" },
-      include: { repayments: { select: { amountCents: true } } }
-    }),
+    // Loans as the projection sees them, judged together with every repayment
+    // the member made, so interest is computed rather than ignored and a
+    // settled loan stays settled.
+    loadLoanPositions(prisma, { memberIds: [memberId] }, asOf),
     // Welfare a member RECEIVED. Distinct from what they contributed — a
     // passbook showing only contributions misses half the relationship.
     prisma.ledgerEntry.findMany({
@@ -96,28 +94,20 @@ export async function buildMemberPassbook(memberId: string) {
   // Per-loan balances, interest included. The previous figure was simply
   // disbursed minus repaid, which IGNORES INTEREST and understates what a
   // member owes — on a flat monthly loan that gap widens every month.
-  const asOf = new Date();
-  const loanDetail = loans.map((loan) => {
-    const repaid = loan.repayments.reduce((sum, r) => sum + r.amountCents, 0);
-    const balance = loanBalance({
-      principalCents: loan.principalCents,
-      interestRateBps: loan.interestRateBps,
-      termMonths: loan.termMonths,
-      disbursedAt: loan.disbursedAt,
-      repaidCents: repaid,
-      asOf
-    });
-    return {
-      id: loan.id,
-      status: loan.status,
+  // Newest first, as this list has always been shown.
+  const loanDetail = [...(positions.get(memberId)?.loans ?? [])]
+    .reverse()
+    .map(({ loan, id, settledAt, ...balance }) => ({
+      id,
+      status: settledAt ? "REPAID" : loan.status,
       disbursedAt: loan.disbursedAt.toISOString(),
       dueAt: loan.dueAt.toISOString(),
       termMonths: loan.termMonths,
       interestRateBps: loan.interestRateBps,
       ...balance,
-      overdue: loan.status === "ACTIVE" && loan.dueAt < asOf && balance.outstandingCents > 0
-    };
-  });
+      settledAt: settledAt ? settledAt.toISOString() : null,
+      overdue: !balance.settled && loan.dueAt < asOf && balance.outstandingCents > 0
+    }));
   const loanInterestCents = loanDetail.reduce((s, l) => s + l.interestCents, 0);
   const ledgerOnlyOutstandingCents = Math.max(0, loansReceivedCents - loansRepaidCents);
   /**
