@@ -400,3 +400,58 @@ describe("resetting a forgotten password with a code", () => {
     expect(response.body.error.details).toMatchObject({ canSignInWithCode: true, canResetPassword: true });
   });
 });
+
+describe("changing your own password while signed in", () => {
+  const PHONE_SELF = "254799001144";
+  const OLD = "old-password-1";
+
+  async function signInCookie(password: string) {
+    const response = await request(app).post("/api/v1/auth/login").send({ phone: PHONE_SELF, password }).expect(200);
+    const cookie = response.headers["set-cookie"];
+    return Array.isArray(cookie) ? cookie : [cookie as unknown as string];
+  }
+
+  beforeAll(async () => {
+    await prisma.user.upsert({
+      where: { email: "self.change@intellicash.test" },
+      create: {
+        name: "Self Change",
+        email: "self.change@intellicash.test",
+        phone: PHONE_SELF,
+        passwordHash: await bcrypt.hash(OLD, 10),
+        role: "GROUP_ACCOUNT"
+      },
+      update: { phone: PHONE_SELF, status: "ACTIVE", passwordHash: await bcrypt.hash(OLD, 10) },
+      select: { id: true }
+    });
+  }, 120000);
+
+  it("keeps this phone signed in, signs the other one out, and the new password works", async () => {
+    const thisPhone = await signInCookie(OLD);
+    const otherPhone = await signInCookie(OLD);
+
+    const response = await request(app)
+      .post("/api/v1/auth/me/password")
+      .set("Cookie", thisPhone)
+      .send({ currentPassword: OLD, newPassword: "new-password-2" })
+      .expect(200);
+    expect(response.body.data.endedSessions).toBeGreaterThanOrEqual(1);
+
+    await request(app).get("/api/v1/auth/me").set("Cookie", thisPhone).expect(200);
+    await request(app).get("/api/v1/auth/me").set("Cookie", otherPhone).expect(401);
+
+    await request(app).post("/api/v1/auth/login").send({ phone: PHONE_SELF, password: "new-password-2" }).expect(200);
+    await request(app).post("/api/v1/auth/login").send({ phone: PHONE_SELF, password: OLD }).expect(401);
+  });
+
+  it("says what to do when the current password is wrong, and changes nothing", async () => {
+    const cookie = await signInCookie("new-password-2");
+    const response = await request(app)
+      .post("/api/v1/auth/me/password")
+      .set("Cookie", cookie)
+      .send({ currentPassword: "not-it", newPassword: "another-password-3" })
+      .expect(400);
+    expect(response.body.error.message).toMatch(/reset it with a code/);
+    await request(app).post("/api/v1/auth/login").send({ phone: PHONE_SELF, password: "new-password-2" }).expect(200);
+  });
+});

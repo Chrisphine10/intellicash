@@ -540,13 +540,31 @@ router.post("/me/password", requireAuth(), async (req, res, next) => {
 
     const valid = await bcrypt.compare(body.currentPassword, user.passwordHash);
     if (!valid) {
-      throw new ApiHttpError(400, "CURRENT_PASSWORD_INVALID", "Current password is incorrect.");
+      throw new ApiHttpError(
+        400,
+        "CURRENT_PASSWORD_INVALID",
+        "That current password is not right. If you have forgotten it, reset it with a code sent to your phone."
+      );
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash: await bcrypt.hash(body.newPassword, 12) },
-      select: { id: true }
+    // Every OTHER device is signed out; this one stays in. A password is most
+    // often changed because somebody else has it — on a group's shared phone,
+    // the previous holder — and leaving their session alive would make the
+    // new password decorative. Same rule as the code-based reset.
+    const endedSessions = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await bcrypt.hash(body.newPassword, 12) },
+        select: { id: true }
+      });
+      await tx.userLoginOtp.deleteMany({ where: { userId: user.id } });
+      const ended = await tx.session.deleteMany({
+        where: {
+          userId: user.id,
+          ...(req.sessionTokenHash ? { tokenHash: { not: req.sessionTokenHash } } : {})
+        }
+      });
+      return ended.count;
     });
 
     await appendAuditEvent({
@@ -554,10 +572,11 @@ router.post("/me/password", requireAuth(), async (req, res, next) => {
       entityType: "USER",
       entityId: user.id,
       type: "USER_PASSWORD_UPDATED",
-      payload: { email: user.email, role: user.role }
+      // Never the password.
+      payload: { email: user.email, role: user.role, method: "SELF_CHANGE", endedSessions }
     });
 
-    ok(res, { updated: true });
+    ok(res, { updated: true, endedSessions });
   } catch (error) {
     next(error);
   }
