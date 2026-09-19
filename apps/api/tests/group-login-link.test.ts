@@ -126,4 +126,12 @@ describe("linking group logins to their groups", () => {
     const result = await ensureGroupForLogin(login.id);
     expect(result).toEqual({ outcome: "ALREADY_LINKED", groupId: target.id });
   });
+
+  it("leaves a closed account alone — it cannot sign in, and a group for it is clutter", async () => {
+    const login = await orphan(`${PREFIX} Closed Login`);
+    await prisma.user.update({ where: { id: login.id }, data: { status: "CLOSED" } });
+    const result = await ensureGroupForLogin(login.id);
+    expect(result.outcome).toBe("CLOSED_SKIPPED");
+    expect(result.groupId).toBeNull();
+  });
 });

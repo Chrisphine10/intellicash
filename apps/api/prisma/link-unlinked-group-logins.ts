@@ -31,13 +31,19 @@ async function main() {
     const result = await ensureGroupForLogin(login.id, { apply: APPLY });
     tally.set(result.outcome, (tally.get(result.outcome) ?? 0) + 1);
     const target =
-      result.outcome === "GROUP_CREATED" ? `new group "${result.groupName}"` : `"${result.groupName}"`;
+      result.outcome === "CLOSED_SKIPPED"
+        ? "(closed account — left alone)"
+        : result.outcome === "GROUP_CREATED"
+          ? `new group "${result.groupName}"`
+          : `"${result.groupName}"`;
     const dupes = result.possibleDuplicates?.length ? `  (possible duplicate of: ${[...new Set(result.possibleDuplicates)].join(", ")})` : "";
     console.log(`  ${login.name.slice(0, 34).padEnd(34)} ${mask(login.phone).padEnd(14)} ${login.status.padEnd(8)} ${result.outcome.padEnd(16)} -> ${target}${dupes}`);
   }
 
   console.log("\nSummary:", Object.fromEntries(tally));
-  const remaining = await prisma.user.count({ where: { role: "GROUP_ACCOUNT", groupId: null } });
+  const remaining = await prisma.user.count({
+    where: { role: "GROUP_ACCOUNT", groupId: null, status: { not: "CLOSED" } }
+  });
   console.log(`Group logins still without a group: ${remaining}${APPLY ? "" : " (dry run — unchanged)"}`);
   await prisma.$disconnect();
 }

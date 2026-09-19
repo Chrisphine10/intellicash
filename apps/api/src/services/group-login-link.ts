@@ -30,6 +30,8 @@ import { generateGroupCode } from "./group-code";
 export type GroupLinkOutcome =
   | "NOT_A_GROUP_LOGIN"
   | "ALREADY_LINKED"
+  /** Closed accounts cannot sign in; giving one a group would only add clutter. */
+  | "CLOSED_SKIPPED"
   | "LINKED_BY_PHONE"
   | "LINKED_BY_NAME"
   | "GROUP_CREATED";
@@ -62,10 +64,11 @@ export async function ensureGroupForLogin(
   const apply = options.apply ?? true;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, phone: true, role: true, groupId: true }
+    select: { id: true, name: true, phone: true, role: true, groupId: true, status: true }
   });
   if (!user || user.role !== "GROUP_ACCOUNT") return { outcome: "NOT_A_GROUP_LOGIN", groupId: null };
   if (user.groupId) return { outcome: "ALREADY_LINKED", groupId: user.groupId };
+  if (user.status === "CLOSED") return { outcome: "CLOSED_SKIPPED", groupId: null };
 
   // 1. The champion's number.
   let byPhone: { id: string; name: string }[] = [];
