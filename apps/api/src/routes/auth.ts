@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { languagePreferences } from "@intellicash/shared";
+import { fundTypes, languagePreferences } from "@intellicash/shared";
 import { appendAuditEvent } from "../services/audit-service";
 import {
   createSession,
@@ -16,6 +16,7 @@ import { requestLoginOtp, verifyLoginOtp } from "../services/login-otp-service";
 import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
 import { loginRateLimit, otpRequestRateLimit, otpVerifyRateLimit, registerRateLimit } from "../middleware/rate-limit";
 import { prisma } from "../lib/prisma";
+import { generateGroupCode } from "../services/group-code";
 
 const router = Router();
 
@@ -228,9 +229,64 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
       );
     }
 
+    // A group account has to open a GROUP. Signing up as a group used to make
+    // only the login, with no group behind it — an account that opened onto
+    // nothing. The field team hit this constantly, because most of the groups
+    // they sign up already exist (imported before anyone had a login), so a
+    // group is created here only when it is genuinely new: the champion's
+    // number and the name within the county are checked first, and a match
+    // sends the person to the code sign-in, which reaches that group.
+    if (body.accountType === "GROUP") {
+      const tail = phoneTail(body.phone);
+      const byNumber = (
+        await prisma.group.findMany({
+          where: { contactPhone: { contains: tail } },
+          select: { id: true, contactPhone: true }
+        })
+      ).some((group) => samePhone(group.contactPhone, body.phone));
+
+      const wantedName = body.name.trim().toLowerCase().replace(/\s+/g, " ");
+      const county = body.county?.trim();
+      const byName = (
+        await prisma.group.findMany({
+          where: county ? { county } : {},
+          select: { name: true }
+        })
+      ).some((group) => group.name.trim().toLowerCase().replace(/\s+/g, " ") === wantedName);
+
+      if (byNumber || byName) {
+        throw new ApiHttpError(
+          409,
+          "GROUP_EXISTS",
+          byNumber
+            ? "This group is already registered with this number. Sign in with a code sent to it — that opens the group's existing book."
+            : "A group with this name is already registered in this county. Sign in with a code sent to the group's number, or ask your programme officer to link you to it.",
+          { canSignInWithCode: true }
+        );
+      }
+    }
+
     const passwordHash = await bcrypt.hash(body.password, 12);
 
     const user = await prisma.$transaction(async (tx) => {
+      // The group behind a group account, created with it so the two cannot
+      // exist apart. Unassigned to a programme or CBT until staff place it.
+      const group =
+        body.accountType === "GROUP"
+          ? await tx.group.create({
+              data: {
+                name: body.name.trim(),
+                code: await generateGroupCode(tx, body.county),
+                phase: "MOBILISATION",
+                county: body.county?.trim() || "Not set",
+                contactPhone: phone,
+                sourceSystem: "MOBILE_SELF_SIGNUP",
+                fundAccounts: { create: fundTypes.map((type) => ({ type })) }
+              },
+              select: { id: true }
+            })
+          : null;
+
       // A village agent login must be bound to an agent profile — create one
       // alongside the account (a programme can adopt it later).
       const villageAgent =
@@ -254,7 +310,8 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
           phone,
           passwordHash,
           role,
-          villageAgentId: villageAgent?.id
+          villageAgentId: villageAgent?.id,
+          groupId: group?.id
         }
       });
     });

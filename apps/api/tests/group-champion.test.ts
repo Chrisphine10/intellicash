@@ -84,14 +84,20 @@ describe("linking a champion to an existing group", () => {
   });
 
   it("attaches the orphan login a field sign-up made, so the champion's own password opens the real group", async () => {
-    // Exactly what production has nineteen of.
+    // Exactly what production has nineteen of. Made directly: sign-up now
+    // creates the group with the login, so it can no longer produce one — but
+    // the orphans it made before still need linking.
     const group = await freshGroup();
     const phone = uniquePhone();
-    const signup = await request(app)
-      .post("/api/v1/auth/register")
-      .send({ accountType: "GROUP", name: "Marui Women Group", phone, password: "champion-knows-this" })
-      .expect(201);
-    expect(signup.body.data.groupId).toBeNull();
+    await prisma.user.create({
+      data: {
+        name: "Marui Women Group",
+        email: `${phone}@accounts.intellicash.app`,
+        phone,
+        passwordHash: await bcrypt.hash("champion-knows-this", 10),
+        role: "GROUP_ACCOUNT"
+      }
+    });
 
     const response = await request(app)
       .put(`/api/v1/groups/${group.id}/champion`)

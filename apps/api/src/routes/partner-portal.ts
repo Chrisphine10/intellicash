@@ -7,6 +7,7 @@ import { appendAuditEvent } from "../services/audit-service";
 import { requireAuth } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { generateGroupCode } from "../services/group-code";
 import {
   createPaymentReference,
   initiateIncomingPayment,
@@ -101,24 +102,6 @@ function projectFundingTotals(transactions: Array<{ amountCents: number; type: s
 function compactOptional(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function countyCode(county?: string | null) {
-  const normalized = (county ?? "REG").replace(/[^a-z0-9]/gi, "").toUpperCase();
-  return (normalized || "REG").slice(0, 3).padEnd(3, "X");
-}
-
-async function generateGroupCode(tx: Prisma.TransactionClient, county?: string | null) {
-  const prefix = `IWL-${countyCode(county)}`;
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
-    const code = `${prefix}-${suffix}`;
-    const existing = await tx.group.findUnique({ where: { code }, select: { id: true } });
-    if (!existing) return code;
-  }
-
-  return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
 }
 
 function memberRoleFromChampionRole(role?: string | null) {
