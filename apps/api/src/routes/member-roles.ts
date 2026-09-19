@@ -103,6 +103,40 @@ memberRolesRouter.post(
         const now = new Date();
         let replaced: { fullName: string } | null = null;
 
+        // A member holds one office at a time. Moving them — secretary to key
+        // holder, or back to ordinary member — ends the office they held, so the
+        // history does not show them in two posts at once. This is also what
+        // lets the app set a role with one call when it syncs a change.
+        const previous = await tx.memberRoleAssignment.findMany({
+          where: { groupId: group.id, memberId: member.id, endedAt: null, role: { not: body.role } },
+          select: { id: true }
+        });
+        if (previous.length > 0) {
+          await tx.memberRoleAssignment.updateMany({
+            where: { id: { in: previous.map((p) => p.id) } },
+            data: { endedAt: now }
+          });
+        }
+
+        // Holding it already is not a second term. Checked for every office, not
+        // only the single-holder ones, so a phone retrying a sync cannot record
+        // one key holder twice. The app treats this answer as "done".
+        if (body.role !== "MEMBER") {
+          const already = await tx.memberRoleAssignment.findFirst({
+            where: { groupId: group.id, memberId: member.id, role: body.role, endedAt: null },
+            select: { id: true }
+          });
+          if (already) {
+            throw new ApiHttpError(409, "ALREADY_HOLDS_ROLE", `${member.fullName} already holds this office.`);
+          }
+        }
+
+        // Back to ordinary member: no office to record, only the ones ended.
+        if (body.role === "MEMBER") {
+          await tx.member.update({ where: { id: member.id }, data: { role: "MEMBER" } });
+          return { assignment: null, member, replaced: null };
+        }
+
         if (SINGLETON_ROLES.has(body.role)) {
           // End the incumbent rather than deleting them: the group needs to be
           // able to say who was secretary last March.
@@ -148,12 +182,13 @@ memberRolesRouter.post(
         return { assignment, member, replaced };
       });
 
+      const roleWord = (result.assignment?.role ?? "MEMBER").toLowerCase().replace(/_/g, " ");
       ok(res.status(201), {
         assignment: result.assignment,
         message: result.replaced
-          ? `${result.member.fullName} is now ${result.assignment.role.toLowerCase()}. ` +
+          ? `${result.member.fullName} is now ${roleWord}. ` +
             `${result.replaced.fullName}'s term is recorded as ended, not deleted.`
-          : `${result.member.fullName} is now ${result.assignment.role.toLowerCase()}.`
+          : `${result.member.fullName} is now ${roleWord}.`
       });
     } catch (error) {
       next(error);

@@ -129,4 +129,32 @@ describe("member role assignments", () => {
       .expect(409);
     expect(again.body.error.code).toBe("ALREADY_ENDED");
   });
+
+  it("moving a member to another office ends the one they held", async () => {
+    const third = (await prisma.member.findMany({ where: { groupId }, skip: 2, take: 1 }))[0]!.id;
+    await assign(third, "TREASURER").expect(201);
+    await assign(third, "KEY_HOLDER").expect(201);
+
+    const open = await prisma.memberRoleAssignment.findMany({ where: { groupId, memberId: third, endedAt: null } });
+    expect(open.map((a) => a.role)).toEqual(["KEY_HOLDER"]);
+    expect((await prisma.member.findUniqueOrThrow({ where: { id: third } })).role).toBe("KEY_HOLDER");
+  });
+
+  it("setting a member back to MEMBER ends their office and records no new one", async () => {
+    const third = (await prisma.member.findMany({ where: { groupId }, skip: 2, take: 1 }))[0]!.id;
+    const response = await assign(third, "MEMBER").expect(201);
+    expect(response.body.data.assignment).toBeNull();
+    expect(await prisma.memberRoleAssignment.count({ where: { groupId, memberId: third, endedAt: null } })).toBe(0);
+    expect((await prisma.member.findUniqueOrThrow({ where: { id: third } })).role).toBe("MEMBER");
+  });
+
+  it("a retried key-holder assignment does not record the same office twice", async () => {
+    const fourth = (await prisma.member.findMany({ where: { groupId }, skip: 3, take: 1 }))[0]!.id;
+    await assign(fourth, "KEY_HOLDER").expect(201);
+    const again = await assign(fourth, "KEY_HOLDER").expect(409);
+    expect(again.body.error.code).toBe("ALREADY_HOLDS_ROLE");
+    expect(
+      await prisma.memberRoleAssignment.count({ where: { groupId, memberId: fourth, role: "KEY_HOLDER", endedAt: null } })
+    ).toBe(1);
+  });
 });
