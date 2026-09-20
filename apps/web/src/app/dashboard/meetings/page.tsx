@@ -426,7 +426,10 @@ export default function MeetingsPage() {
             <div>
               <span>Groups</span>
               <strong>{groups.length}</strong>
-              <em>{exactPinCount} GPS, {mapPins.length - exactPinCount} clusters</em>
+              <em>
+                {exactPinCount} GPS, {mapPins.length - exactPinCount}{" "}
+                {mapPins.length - exactPinCount === 1 ? "cluster" : "clusters"}
+              </em>
             </div>
             <div>
               <span>Live</span>

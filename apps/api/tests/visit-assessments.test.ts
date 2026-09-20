@@ -97,6 +97,18 @@ describe("visit assessments", () => {
       expect(data.choices.map((c: { key: string }) => c.key)).toContain("NOT_APPLICABLE");
     });
 
+    it("names its snapshot, so a phone can submit against it", async () => {
+      // The phone used to fall back to the TEMPLATE's id because the response
+      // carried no snapshot id, and the submit then came back 404 every time.
+      const response = await request(app)
+        .get("/api/v1/assessment-templates/current")
+        .set("Cookie", agentCookies)
+        .expect(200);
+
+      expect(response.body.data.snapshotId).toBe(snapshotId);
+      expect(response.body.data.snapshotId).not.toBe(response.body.data.templateId);
+    });
+
     it("computes maxPoints from the questions rather than storing 92", async () => {
       const questions = await prisma.assessmentQuestion.count({
         where: { section: { templateId } }
@@ -157,6 +169,37 @@ describe("visit assessments", () => {
       });
       expect(assessments).toBe(1);
       expect(answers).toBe(1);
+    });
+
+    it("accepts the template's id in place of the snapshot's, as phones already in the field send it", async () => {
+      // Installed apps were never told the snapshot id, so they name the
+      // template they rendered. A template has exactly one snapshot, so the
+      // answers are still scored against the very form the agent saw.
+      const response = await request(app)
+        .put(`/api/v1/visits/${visitId}/assessment`)
+        .set("Cookie", agentCookies)
+        .send({
+          templateSnapshotId: templateId,
+          answers: [{ questionKey: "constitution_written", choice: "YES" }]
+        })
+        .expect(200);
+
+      expect(response.body.data.score.earnedPoints).toBe(2);
+      const stored = await prisma.groupVisitAssessment.findUniqueOrThrow({ where: { visitId } });
+      expect(stored.templateSnapshotId).toBe(snapshotId);
+    });
+
+    it("still refuses an id that names neither a snapshot nor a template", async () => {
+      const response = await request(app)
+        .put(`/api/v1/visits/${visitId}/assessment`)
+        .set("Cookie", agentCookies)
+        .send({
+          templateSnapshotId: "not-a-real-form",
+          answers: [{ questionKey: "constitution_written", choice: "YES" }]
+        })
+        .expect(404);
+
+      expect(response.body.error.code).toBe("TEMPLATE_SNAPSHOT_NOT_FOUND");
     });
 
     it("records a partial assessment rather than refusing it", async () => {

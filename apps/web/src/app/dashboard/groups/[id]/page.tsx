@@ -657,7 +657,7 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
         <div className="data-card">
           <header>
             <h3>Ledger</h3>
-            <span className="pill">{ledger.length} entries</span>
+            <span className="pill">{ledger.length} {ledger.length === 1 ? "entry" : "entries"}</span>
           </header>
           <DataTable
             columns={[

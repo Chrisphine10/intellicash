@@ -68,7 +68,17 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
       apiFetch<Member[]>(`/groups/${id}/members`),
       apiFetch<Meeting[]>(`/groups/${id}/meetings`)
     ]);
-    const open = meetingList.filter((meeting) => meeting.status === "IN_PROGRESS");
+    // The server's own rule, so the console never says "no meeting is open" beside
+    // one the server would accept: a meeting kept on a phone is only ever
+    // SCHEDULED there (it is never opened on the server), and counts as held when
+    // its date is within a day and a half of now.
+    const now = Date.now();
+    const open = meetingList.filter(
+      (meeting) =>
+        meeting.status === "IN_PROGRESS" ||
+        (meeting.status === "SCHEDULED" &&
+          Math.abs(now - new Date(meeting.scheduledAt).getTime()) <= 36 * 60 * 60 * 1000)
+    );
     setOpenMeetings(open);
     // One open meeting is the normal case; preselect it rather than making an
     // official pick from a list of one.
@@ -162,17 +172,7 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
         <header>
           <h3>Record a payment</h3>
         </header>
-        <form onSubmit={record}>
-          <label>
-            Amount (KES)
-            <input
-              min="0"
-              onChange={(event) => setAmount(event.target.value)}
-              step="0.01"
-              type="number"
-              value={amount}
-            />
-          </label>
+        <form className="credential-form" onSubmit={record}>
           {/* Which meeting this payment is being made in. Welfare leaves the
               fund in front of the members it belongs to, so there is no way to
               record one without naming the meeting. */}
@@ -181,53 +181,66 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
               No meeting is open. Welfare is paid out during a meeting, in front of the members —
               open one first, then record the payment there.
             </p>
-          ) : (
-            <label>
-              Recorded in meeting
-              <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
-                {openMeetings.map((meeting) => (
-                  <option key={meeting.id} value={meeting.id}>
-                    {meeting.title} — {formatDate(meeting.scheduledAt)}
+          ) : null}
+
+          <div className="credential-grid">
+            <label className="credential-field">
+              <span>Amount (KES)</span>
+              <input
+                min="0"
+                onChange={(event) => setAmount(event.target.value)}
+                step="0.01"
+                type="number"
+                value={amount}
+              />
+            </label>
+            {openMeetings.length > 0 ? (
+              <label className="credential-field">
+                <span>Recorded in meeting</span>
+                <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
+                  {openMeetings.map((meeting) => (
+                    <option key={meeting.id} value={meeting.id}>
+                      {meeting.title} — {formatDate(meeting.scheduledAt)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="credential-field">
+              <span>What for</span>
+              <select onChange={(event) => setCategory(event.target.value)} value={category}>
+                {CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value.charAt(0) + value.slice(1).toLowerCase()}
                   </option>
                 ))}
               </select>
             </label>
-          )}
-
-          <label>
-            What for
-            <select onChange={(event) => setCategory(event.target.value)} value={category}>
-              {CATEGORIES.map((value) => (
-                <option key={value} value={value}>
-                  {value.charAt(0) + value.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Paid to a member
-            <select onChange={(event) => setPayeeMemberId(event.target.value)} value={payeeMemberId}>
-              <option value="">— not a member —</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            …or a name
-            <input
-              onChange={(event) => setPayeeName(event.target.value)}
-              placeholder="Family, hospital, school"
-              type="text"
-              value={payeeName}
-            />
-          </label>
-          <label>
-            Note
-            <input onChange={(event) => setNote(event.target.value)} type="text" value={note} />
-          </label>
+            <label className="credential-field">
+              <span>Paid to a member</span>
+              <select onChange={(event) => setPayeeMemberId(event.target.value)} value={payeeMemberId}>
+                <option value="">— not a member —</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="credential-field">
+              <span>…or a name</span>
+              <input
+                onChange={(event) => setPayeeName(event.target.value)}
+                placeholder="Family, hospital, school"
+                type="text"
+                value={payeeName}
+              />
+            </label>
+            <label className="credential-field">
+              <span>Note</span>
+              <input onChange={(event) => setNote(event.target.value)} type="text" value={note} />
+            </label>
+          </div>
 
           {exceedsFund && amountCents > 0 ? (
             <p className="dashboard-notice error">
@@ -237,7 +250,7 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
             </p>
           ) : null}
 
-          <div className="form-actions">
+          <div className="credential-actions">
             <button className="button" disabled={saving || exceedsFund || amountCents <= 0} type="submit">
               {saving ? "Recording…" : "Record expense"}
             </button>

@@ -131,10 +131,13 @@ export default function GroupCyclesPage({ params }: { params: Promise<{ id: stri
                 {cycle.editable ? "Open" : "Archived — read only"}
               </span>
             </header>
-            <p>
-              {cycle.meetings} meeting(s) · {cycle.ledgerEntries} ledger entries
-            </p>
-            {cycle.notes ? <p>{cycle.notes}</p> : null}
+            <div className="card-body">
+              <p>
+                {cycle.meetings} {cycle.meetings === 1 ? "meeting" : "meetings"} · {cycle.ledgerEntries}{" "}
+                {cycle.ledgerEntries === 1 ? "ledger entry" : "ledger entries"}
+              </p>
+              {cycle.notes ? <p>{cycle.notes}</p> : null}
+            </div>
           </article>
         ))}
       </div>

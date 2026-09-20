@@ -910,7 +910,7 @@ export default function ReportsPage() {
         description: "Financial transaction records with fund type, member, meeting, direction, signature, and timestamp.",
         audience: "Finance assurance",
         cadence: "On demand",
-        metric: `${formatNumber(ledgerRows.length)} entries`,
+        metric: `${formatNumber(ledgerRows.length)} ${ledgerRows.length === 1 ? "entry" : "entries"}`,
         icon: <FileCheck2 size={22} />
       },
       {

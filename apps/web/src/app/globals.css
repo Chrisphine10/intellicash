@@ -6483,6 +6483,23 @@ tr:last-child td {
     min-width: 0;
   }
 
+  /* The rule above says "136px wide, then share the row". `.page-heading-actions`
+     was also switched to a column earlier in this block, where the same rule
+     means 136px TALL, so every button on a group page (Edit, Meetings, Members,
+     Ledger ...) became a 170px-high slab in a single column. */
+  .app-shell .page-heading-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  /* Stacked, the heading's title and its buttons share one column. The desktop
+     rule centres items across it, which left the title floating ~90px in from
+     the buttons beneath it. */
+  .app-shell .page-heading {
+    align-items: stretch;
+  }
+
   .app-shell .data-table-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -9375,6 +9392,14 @@ html[data-theme="dark"] .link-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* A button does not inherit the cell's nowrap. In a 1%-wide cell the column
+   shrinks to its minimum content width, and with nothing to stop it the labels
+   broke a letter at a time ("M / a / r / k ...") down a 45px column. */
+.data-table td.column-actions .button,
+.row-actions .button {
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------------------

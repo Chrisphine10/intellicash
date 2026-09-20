@@ -323,6 +323,11 @@ export async function currentSnapshot(familyKey = DEFAULT_TEMPLATE_FAMILY) {
   if (!template?.snapshot) return null;
 
   return {
+    // The snapshot's OWN id, which is what a submission has to name. It is not
+    // the template's id, and a phone that had to guess used the template's:
+    // every scorecard it sent came back 404 TEMPLATE_SNAPSHOT_NOT_FOUND, and the
+    // phone swallows that and retries forever, so no assessment ever arrived.
+    snapshotId: template.snapshot.id,
     templateId: template.id,
     version: template.version,
     checksum: template.snapshot.checksum,
@@ -466,8 +471,11 @@ export async function submitVisitAssessment(input: SubmitAssessmentInput) {
  */
 async function resolveSnapshot(templateSnapshotId?: string | null) {
   if (templateSnapshotId) {
-    const row = await prisma.assessmentTemplateSnapshot.findUnique({
-      where: { id: templateSnapshotId }
+    // Either id is accepted. Phones already in the field were never told the
+    // snapshot's id, so they name the TEMPLATE they rendered; a template has
+    // exactly one snapshot (templateId is unique), so that is just as precise.
+    const row = await prisma.assessmentTemplateSnapshot.findFirst({
+      where: { OR: [{ id: templateSnapshotId }, { templateId: templateSnapshotId }] }
     });
     if (!row) {
       throw new ApiHttpError(

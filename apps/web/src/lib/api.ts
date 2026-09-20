@@ -191,7 +191,12 @@ function logClientApiError(error: ApiClientError) {
   // the caller (inline error state or a login redirect) either way.
   if (error.status === 401) return;
 
-  console.error("[intellicash-api]", {
+  // A 4xx is the server answering a question - "enter a valid phone number",
+  // "not found", "already exists" - and the page shows it inline. Only a 5xx or
+  // a failed request is a fault worth an error-level log; a rejected form used
+  // to raise Next's red "1 Issue" overlay for something working as intended.
+  const isFault = error.status >= 500 || error.status === 0;
+  (isFault ? console.error : console.warn)("[intellicash-api]", {
     status: error.status,
     code: error.code,
     traceId: error.traceId,

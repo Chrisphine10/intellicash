@@ -16,6 +16,9 @@ apps/api/prisma/dev.db-journal
 apps/api/prisma/test.db
 apps/api/prisma/test.db-journal
 apps/api/uploads/
+# The API resolves its upload folder from the working directory, so a run started
+# from the repo root writes here instead - visit photos and avatars, never for git.
+/uploads/
 
 # Android
 apps/android/.gradle/

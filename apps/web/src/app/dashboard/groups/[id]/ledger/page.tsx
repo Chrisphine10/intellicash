@@ -141,7 +141,7 @@ export default function GroupLedgerPage({ params }: { params: Promise<{ id: stri
           <h2>{group?.code ?? "Ledger"}</h2>
           <p>Read-only view of fund balances, movement, and append-only ledger records.</p>
         </div>
-        <span className="pill">{ledger.length} entries</span>
+        <span className="pill">{ledger.length} {ledger.length === 1 ? "entry" : "entries"}</span>
       </section>
 
       <section className="stat-grid compact-ledger-stats">
@@ -193,7 +193,7 @@ export default function GroupLedgerPage({ params }: { params: Promise<{ id: stri
                 <div className="ledger-bar-row" key={row.key}>
                   <div>
                     <strong>{row.label}</strong>
-                    <span>{row.count} entries</span>
+                    <span>{row.count} {row.count === 1 ? "entry" : "entries"}</span>
                   </div>
                   <div className="ledger-bar-track" aria-hidden="true">
                     <span style={{ width: `${row.percent}%` }} />
@@ -221,7 +221,7 @@ export default function GroupLedgerPage({ params }: { params: Promise<{ id: stri
                 <div className="ledger-bar-row" key={row.key}>
                   <div>
                     <strong>{row.label}</strong>
-                    <span>{row.count} entries</span>
+                    <span>{row.count} {row.count === 1 ? "entry" : "entries"}</span>
                   </div>
                   <div className="ledger-bar-track green" aria-hidden="true">
                     <span style={{ width: `${row.percent}%` }} />
