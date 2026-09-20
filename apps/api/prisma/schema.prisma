@@ -1584,6 +1584,11 @@ model Cycle {
   /// Set when the cycle is closed by a share-out, so the payout that ended a
   /// cycle is traceable from the cycle itself.
   closedByUserId String?
+  /// The phone share-out that closed this cycle, by the id the phone gave it.
+  /// A phone that lost the reply and sends the same share-out again is answered
+  /// with what was already recorded instead of closing a second cycle. NULL for
+  /// every cycle closed any other way.
+  closedByShareOutId String?
   notes          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1596,6 +1601,7 @@ model Cycle {
   roleAssignments MemberRoleAssignment[]
 
   @@unique([groupId, number])
+  @@unique([groupId, closedByShareOutId])
   @@index([groupId, status])
 }
 

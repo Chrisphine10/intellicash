@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import type { AuthenticatedUser } from "../middleware/auth";
 
 /**
  * Saving cycles.
@@ -108,79 +109,121 @@ export interface CloseCycleResult {
  */
 export async function closeCycleAndOpenNext(
   groupId: string,
-  options: { closedByUserId?: string | null; notes?: string | null } = {}
+  options: CloseCycleOptions = {}
 ): Promise<CloseCycleResult> {
-  return prisma.$transaction(async (tx) => {
-    const current = await ensureActiveCycle(tx, groupId);
+  return prisma.$transaction((tx) => closeCycleWithin(tx, groupId, options));
+}
 
-    // Only a meeting that is happening RIGHT NOW blocks the close.
-    const openMeetings = await tx.meeting.count({
-      where: { cycleId: current.id, status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] } }
-    });
-    if (openMeetings > 0) {
-      throw new ApiHttpError(
-        409,
-        "CYCLE_HAS_OPEN_MEETINGS",
-        `Cycle ${current.number} still has ${openMeetings} meeting(s) that are not sealed. Seal or cancel them before closing the cycle.`
-      );
-    }
+export interface CloseCycleOptions {
+  closedByUserId?: string | null;
+  notes?: string | null;
+  /** Set when a phone's share-out ends the cycle; see `Cycle.closedByShareOutId`. */
+  closedByShareOutId?: string | null;
+}
 
-    // A meeting kept on a phone never passes through the server's open and seal
-    // steps: it stays SCHEDULED although attendance and money were recorded in
-    // it. Blocking the close on those would make it impossible for any group
-    // that keeps its book on a phone. So at close they are what they were —
-    // HELD — and are sealed; a meeting that was only ever planned rolls forward
-    // into the new cycle instead of being locked away unheld.
-    const scheduled = await tx.meeting.findMany({
-      where: { cycleId: current.id, status: "SCHEDULED" },
-      select: { id: true, _count: { select: { attendance: true, ledgerEntries: true } } }
-    });
-    const heldIds = scheduled
-      .filter((meeting) => meeting._count.attendance > 0 || meeting._count.ledgerEntries > 0)
-      .map((meeting) => meeting.id);
-    const plannedIds = scheduled
-      .filter((meeting) => meeting._count.attendance === 0 && meeting._count.ledgerEntries === 0)
-      .map((meeting) => meeting.id);
+/**
+ * The close itself, run inside a transaction the caller already holds.
+ *
+ * A share-out from a phone records its payouts and ends the cycle as ONE step:
+ * if the cycle cannot be closed (a meeting is open on the console) the payouts
+ * must not stay behind, so both have to share a transaction.
+ */
+export async function closeCycleWithin(
+  tx: Prisma.TransactionClient,
+  groupId: string,
+  options: CloseCycleOptions = {}
+): Promise<CloseCycleResult> {
+  const current = await ensureActiveCycle(tx, groupId);
 
-    const now = new Date();
-    await tx.cycle.update({
-      where: { id: current.id },
-      data: {
-        status: CYCLE_CLOSED,
-        closedAt: now,
-        closedByUserId: options.closedByUserId ?? null,
-        notes: options.notes ?? null
-      }
-    });
-
-    const nextNumber = current.number + 1;
-    const opened = await tx.cycle.create({
-      data: {
-        id: `cyc_${groupId}_${nextNumber}`,
-        groupId,
-        number: nextNumber,
-        startedAt: now,
-        status: CYCLE_ACTIVE
-      }
-    });
-
-    await tx.group.update({ where: { id: groupId }, data: { cycleNumber: nextNumber } });
-
-    if (heldIds.length > 0) {
-      await tx.meeting.updateMany({ where: { id: { in: heldIds } }, data: { status: "SEALED", closedAt: now } });
-    }
-    if (plannedIds.length > 0) {
-      await tx.meeting.updateMany({ where: { id: { in: plannedIds } }, data: { cycleId: opened.id } });
-    }
-
-    const archivedMeetings = await tx.meeting.count({ where: { cycleId: current.id } });
-
-    return {
-      closed: { id: current.id, number: current.number },
-      opened: { id: opened.id, number: opened.number },
-      archivedMeetings
-    };
+  // Only a meeting that is happening RIGHT NOW blocks the close.
+  const openMeetings = await tx.meeting.count({
+    where: { cycleId: current.id, status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] } }
   });
+  if (openMeetings > 0) {
+    throw new ApiHttpError(
+      409,
+      "CYCLE_HAS_OPEN_MEETINGS",
+      `Cycle ${current.number} still has ${openMeetings} meeting(s) that are not sealed. Seal or cancel them before closing the cycle.`
+    );
+  }
+
+  // A meeting kept on a phone never passes through the server's open and seal
+  // steps: it stays SCHEDULED although attendance and money were recorded in
+  // it. Blocking the close on those would make it impossible for any group
+  // that keeps its book on a phone. So at close they are what they were —
+  // HELD — and are sealed; a meeting that was only ever planned rolls forward
+  // into the new cycle instead of being locked away unheld.
+  const scheduled = await tx.meeting.findMany({
+    where: { cycleId: current.id, status: "SCHEDULED" },
+    select: { id: true, _count: { select: { attendance: true, ledgerEntries: true } } }
+  });
+  const heldIds = scheduled
+    .filter((meeting) => meeting._count.attendance > 0 || meeting._count.ledgerEntries > 0)
+    .map((meeting) => meeting.id);
+  const plannedIds = scheduled
+    .filter((meeting) => meeting._count.attendance === 0 && meeting._count.ledgerEntries === 0)
+    .map((meeting) => meeting.id);
+
+  const now = new Date();
+  await tx.cycle.update({
+    where: { id: current.id },
+    data: {
+      status: CYCLE_CLOSED,
+      closedAt: now,
+      closedByUserId: options.closedByUserId ?? null,
+      closedByShareOutId: options.closedByShareOutId ?? null,
+      notes: options.notes ?? null
+    }
+  });
+
+  const nextNumber = current.number + 1;
+  const opened = await tx.cycle.create({
+    data: {
+      id: `cyc_${groupId}_${nextNumber}`,
+      groupId,
+      number: nextNumber,
+      startedAt: now,
+      status: CYCLE_ACTIVE
+    }
+  });
+
+  await tx.group.update({ where: { id: groupId }, data: { cycleNumber: nextNumber } });
+
+  if (heldIds.length > 0) {
+    await tx.meeting.updateMany({ where: { id: { in: heldIds } }, data: { status: "SEALED", closedAt: now } });
+  }
+  if (plannedIds.length > 0) {
+    await tx.meeting.updateMany({ where: { id: { in: plannedIds } }, data: { cycleId: opened.id } });
+  }
+
+  const archivedMeetings = await tx.meeting.count({ where: { cycleId: current.id } });
+
+  return {
+    closed: { id: current.id, number: current.number },
+    opened: { id: opened.id, number: opened.number },
+    archivedMeetings
+  };
+}
+
+/**
+ * Closing a cycle archives a whole cycle of records and starts a fresh one.
+ * A platform admin, or the group's own account, may do it. A village agent may
+ * read a group but must not end its cycle.
+ *
+ * A role/scope check rather than a new permission string, because
+ * ensureRolePermissionTemplates upserts with `update: {}` - a new permission
+ * would never reach existing template rows.
+ */
+export function assertMayManageCycles(user: AuthenticatedUser | undefined, groupId: string) {
+  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
+  if (user.permissions.includes("groups:write")) return;
+  if (user.role === "GROUP_ACCOUNT" && user.groupId === groupId) return;
+
+  throw new ApiHttpError(
+    403,
+    "FORBIDDEN",
+    "Only a platform admin or the group's own account may close a cycle."
+  );
 }
 
 /** Cycle history for a group, newest first. */

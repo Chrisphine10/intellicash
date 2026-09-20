@@ -35,6 +35,8 @@ import { partnerPortalRouter } from "./routes/partner-portal";
 import { paymentsRouter } from "./routes/payments";
 import { pollsRouter } from "./routes/polls";
 import { reportsRouter } from "./routes/reports";
+import { restoreBundleRouter } from "./routes/restore-bundle";
+import { shareOutsRouter } from "./routes/share-outs";
 import { smsBroadcastsRouter } from "./routes/sms-broadcasts";
 import { uploadsRouter } from "./routes/uploads";
 import { webhooksRouter } from "./routes/webhooks";
@@ -173,6 +175,8 @@ export function createApp(
   app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", groupPaymentProvidersRouter);
   app.use("/api/v1", cyclesRouter);
+  app.use("/api/v1", shareOutsRouter);
+  app.use("/api/v1", restoreBundleRouter);
   app.use("/api/v1", groupPolicyRouter);
   app.use("/api/v1", publicJoinRouter);
   app.use("/api/v1", memberRolesRouter);

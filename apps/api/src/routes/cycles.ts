@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
-import { closeCycleAndOpenNext, listCycles } from "../services/cycle-service";
+import { assertMayManageCycles, closeCycleAndOpenNext, listCycles } from "../services/cycle-service";
 
 export const cyclesRouter = Router();
 
@@ -16,28 +16,6 @@ async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: st
   });
   if (!group) throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside your access.");
   return group;
-}
-
-/**
- * Closing a cycle archives a whole cycle of records and starts a fresh one.
- * Same rule as changing where a group's money is collected: a platform admin,
- * or the group's own account. A village agent may read a group but must not
- * end its cycle.
- *
- * A role/scope check rather than a new permission string, because
- * ensureRolePermissionTemplates upserts with `update: {}` — a new permission
- * would never reach existing template rows.
- */
-function assertMayManageCycles(user: AuthenticatedUser | undefined, groupId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
-  if (user.permissions.includes("groups:write")) return;
-  if (user.role === "GROUP_ACCOUNT" && user.groupId === groupId) return;
-
-  throw new ApiHttpError(
-    403,
-    "FORBIDDEN",
-    "Only a platform admin or the group's own account may close a cycle."
-  );
 }
 
 cyclesRouter.get("/groups/:groupId/cycles", requireAuth("groups:read"), async (req, res, next) => {
