@@ -113,8 +113,9 @@ export async function closeCycleAndOpenNext(
   return prisma.$transaction(async (tx) => {
     const current = await ensureActiveCycle(tx, groupId);
 
+    // Only a meeting that is happening RIGHT NOW blocks the close.
     const openMeetings = await tx.meeting.count({
-      where: { cycleId: current.id, status: { in: ["SCHEDULED", "KEY_UNLOCK_PENDING", "IN_PROGRESS"] } }
+      where: { cycleId: current.id, status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] } }
     });
     if (openMeetings > 0) {
       throw new ApiHttpError(
@@ -123,6 +124,23 @@ export async function closeCycleAndOpenNext(
         `Cycle ${current.number} still has ${openMeetings} meeting(s) that are not sealed. Seal or cancel them before closing the cycle.`
       );
     }
+
+    // A meeting kept on a phone never passes through the server's open and seal
+    // steps: it stays SCHEDULED although attendance and money were recorded in
+    // it. Blocking the close on those would make it impossible for any group
+    // that keeps its book on a phone. So at close they are what they were —
+    // HELD — and are sealed; a meeting that was only ever planned rolls forward
+    // into the new cycle instead of being locked away unheld.
+    const scheduled = await tx.meeting.findMany({
+      where: { cycleId: current.id, status: "SCHEDULED" },
+      select: { id: true, _count: { select: { attendance: true, ledgerEntries: true } } }
+    });
+    const heldIds = scheduled
+      .filter((meeting) => meeting._count.attendance > 0 || meeting._count.ledgerEntries > 0)
+      .map((meeting) => meeting.id);
+    const plannedIds = scheduled
+      .filter((meeting) => meeting._count.attendance === 0 && meeting._count.ledgerEntries === 0)
+      .map((meeting) => meeting.id);
 
     const now = new Date();
     await tx.cycle.update({
@@ -147,6 +165,13 @@ export async function closeCycleAndOpenNext(
     });
 
     await tx.group.update({ where: { id: groupId }, data: { cycleNumber: nextNumber } });
+
+    if (heldIds.length > 0) {
+      await tx.meeting.updateMany({ where: { id: { in: heldIds } }, data: { status: "SEALED", closedAt: now } });
+    }
+    if (plannedIds.length > 0) {
+      await tx.meeting.updateMany({ where: { id: { in: plannedIds } }, data: { cycleId: opened.id } });
+    }
 
     const archivedMeetings = await tx.meeting.count({ where: { cycleId: current.id } });
 

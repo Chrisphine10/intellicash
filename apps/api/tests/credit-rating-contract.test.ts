@@ -285,3 +285,36 @@ describe("credit rating contract — bands and terms", () => {
     expect(rating.terms.depositRateBps).toBe(1000);
   });
 });
+
+describe("meetings held on a phone count as completed", () => {
+  it("does not score a group that meets on a phone as having completed no meetings", async () => {
+    // Found on the emulator: the agent's rating screen said "0 of 5 meetings
+    // sealed" for a group that had recorded money and attendance in all five —
+    // phone meetings are never sealed on the server — and priced it as Band D.
+    const { prisma } = await import("../src/lib/prisma");
+    const { gatherCreditFacts } = await import("../src/services/credit-rating-service");
+    const group = await prisma.group.create({
+      data: { name: "Phone Kept Group", code: `PKG-${Date.now()}`, county: "Embu", phase: "MOBILISATION" },
+      select: { id: true }
+    });
+    const member = await prisma.member.create({
+      data: { groupId: group.id, fullName: "Phone Kept Member", phone: `2547${String(Date.now()).slice(-8)}`, status: "ACTIVE" },
+      select: { id: true }
+    });
+    const held = await prisma.meeting.create({
+      data: { groupId: group.id, title: "Held on a phone", scheduledAt: new Date(), status: "SCHEDULED" }
+    });
+    await prisma.attendance.create({ data: { meetingId: held.id, memberId: member.id, status: "PRESENT" } });
+    await prisma.meeting.create({
+      data: { groupId: group.id, title: "Only planned", scheduledAt: new Date(Date.now() + 7 * 24 * 3600 * 1000), status: "SCHEDULED" }
+    });
+    await prisma.meeting.create({
+      data: { groupId: group.id, title: "Sealed on the server", scheduledAt: new Date(), status: "SEALED" }
+    });
+
+    const facts = await gatherCreditFacts(group.id);
+    expect(facts.meetingsTotal).toBe(3);
+    // The held one and the sealed one; the merely planned one is not complete.
+    expect(facts.meetingsSealed).toBe(2);
+  }, 60000);
+});

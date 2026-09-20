@@ -63,6 +63,28 @@ describe("members sent up by the phone", () => {
     expect(stored.phone).toBe("");
   });
 
+  it("does not store an unusable number as though it identified someone", async () => {
+    // Found on the emulator: the phone let "12345" through, and the server kept
+    // it verbatim as the member's phone.
+    const response = await request(app)
+      .post(`/api/v1/groups/${group.groupId}/members/sync`)
+      .set("Cookie", group.cookie)
+      .send({ fullName: "Junk Number Member", phone: "12345" })
+      .expect(201);
+    const stored = await prisma.member.findUniqueOrThrow({ where: { id: response.body.data.id }, select: { phone: true, fullName: true } });
+    expect(stored.fullName).toBe("Junk Number Member");
+    expect(stored.phone).toBe("");
+  });
+
+  it("refuses to add a member with a number nobody could dial", async () => {
+    const response = await request(app)
+      .post(`/api/v1/groups/${group.groupId}/members`)
+      .set("Cookie", group.cookie)
+      .send({ fullName: "Short Number", phone: "1234567" })
+      .expect(400);
+    expect(response.body.error.message).toMatch(/valid phone number/i);
+  });
+
   it("matches a member the server already had instead of duplicating them", async () => {
     const known = await prisma.member.findFirstOrThrow({
       where: { groupId: group.groupId, phone: { not: "" } },

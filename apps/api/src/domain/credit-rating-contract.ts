@@ -430,7 +430,7 @@ function rawScores(
     },
     meetingCompletion: {
       value: ratio(f.meetingsSealed, f.meetingsTotal),
-      evidence: `${f.meetingsSealed} of ${f.meetingsTotal} meeting(s) sealed`
+      evidence: `${f.meetingsSealed} of ${f.meetingsTotal} meeting(s) completed`
     },
     socialFundHealth: {
       value: ratio(f.meetingsWithSocialContribution, f.meetingsTotal),

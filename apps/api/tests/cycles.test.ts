@@ -148,6 +148,51 @@ describe("saving cycles", () => {
     await prisma.meeting.delete({ where: { id: meeting.id } });
   });
 
+  it("gives a meeting made through the API the cycle it was made in", async () => {
+    // Found on the emulator: the cycles screen said "0 meetings" for a group
+    // that had held one, because meetings made through this route had no cycle
+    // — so closing a cycle archived none of them either.
+    const cookies = await adminCookies();
+    const response = await request(app)
+      .post(`/api/v1/groups/${groupId}/meetings`)
+      .set("Cookie", cookies)
+      .send({ title: "Made through the API", scheduledAt: new Date().toISOString() })
+      .expect(201);
+    const active = await prisma.cycle.findFirstOrThrow({ where: { groupId, status: "ACTIVE" } });
+    const stored = await prisma.meeting.findUniqueOrThrow({ where: { id: response.body.data.id } });
+    expect(stored.cycleId).toBe(active.id);
+    await prisma.meeting.delete({ where: { id: stored.id } });
+  });
+
+  it("at close, seals meetings a phone held and rolls planned ones into the next cycle", async () => {
+    const active = await prisma.cycle.findFirstOrThrow({ where: { groupId, status: "ACTIVE" } });
+    const member = await prisma.member.findFirstOrThrow({ where: { groupId }, select: { id: true } });
+    // A phone-kept meeting: never opened or sealed on the server, so SCHEDULED,
+    // but attendance was recorded in it.
+    const held = await prisma.meeting.create({
+      data: { groupId, cycleId: active.id, title: "Kept on a phone", status: "SCHEDULED", scheduledAt: new Date() }
+    });
+    await prisma.attendance.create({ data: { meetingId: held.id, memberId: member.id, status: "PRESENT" } });
+    // A meeting that was only ever planned.
+    const planned = await prisma.meeting.create({
+      data: { groupId, cycleId: active.id, title: "Next month", status: "SCHEDULED", scheduledAt: new Date(Date.now() + 30 * 24 * 3600 * 1000) }
+    });
+
+    const result = await closeCycleAndOpenNext(groupId, { notes: "phone-held meetings" });
+
+    const sealed = await prisma.meeting.findUniqueOrThrow({ where: { id: held.id } });
+    expect(sealed.status).toBe("SEALED");
+    expect(sealed.closedAt).not.toBeNull();
+    expect(sealed.cycleId).toBe(result.closed.id);
+
+    const rolled = await prisma.meeting.findUniqueOrThrow({ where: { id: planned.id } });
+    expect(rolled.status).toBe("SCHEDULED");
+    expect(rolled.cycleId).toBe(result.opened.id);
+
+    // The sealed one is now in a closed cycle: it takes no more money.
+    await expect(assertCycleWritable(prisma, sealed.cycleId)).rejects.toMatchObject({ code: "CYCLE_CLOSED" });
+  });
+
   it("exposes cycle history over the API and marks which are editable", async () => {
     const cookies = await adminCookies();
     const response = await request(app)

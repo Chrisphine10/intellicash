@@ -109,6 +109,37 @@ describe("welfare expenses", () => {
     expect(await welfareBalance(groupId)).toBe(available);
   });
 
+  it("accepts the meeting a phone is holding, which the server only ever sees as SCHEDULED today", async () => {
+    // Found on the emulator: welfare said "No meeting is open" for a group whose
+    // meeting was open on its phone, because phone meetings are never opened on
+    // the server.
+    const phoneMeeting = await prisma.meeting.create({
+      data: { groupId, title: "Kept on a phone", scheduledAt: new Date(), status: "SCHEDULED" }
+    });
+    await request(app)
+      .post(`/api/v1/groups/${groupId}/welfare-expenses`)
+      .set("Cookie", cookies)
+      .send({ amountCents: 1_000, category: "MEDICAL", payeeName: "Clinic", meetingId: phoneMeeting.id })
+      .expect(201);
+  });
+
+  it("still refuses a sealed meeting and one scheduled weeks away", async () => {
+    const sealed = await prisma.meeting.create({
+      data: { groupId, title: "Already sealed", scheduledAt: new Date(), status: "SEALED" }
+    });
+    const later = await prisma.meeting.create({
+      data: { groupId, title: "Next month", scheduledAt: new Date(Date.now() + 30 * 24 * 3600 * 1000), status: "SCHEDULED" }
+    });
+    for (const meeting of [sealed, later]) {
+      const response = await request(app)
+        .post(`/api/v1/groups/${groupId}/welfare-expenses`)
+        .set("Cookie", cookies)
+        .send({ amountCents: 1_000, category: "MEDICAL", payeeName: "Clinic", meetingId: meeting.id })
+        .expect(409);
+      expect(response.body.error.code).toBe("MEETING_NOT_OPEN");
+    }
+  });
+
   it("requires a payee, because welfare is paid to someone", async () => {
     const response = await request(app)
       .post(`/api/v1/groups/${groupId}/welfare-expenses`)

@@ -53,7 +53,7 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
   const attendance = meetingIds.length
     ? await prisma.attendance.findMany({
         where: { meetingId: { in: meetingIds } },
-        select: { status: true }
+        select: { meetingId: true, status: true }
       })
     : [];
 
@@ -73,6 +73,17 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
 
   const opened = meetings.filter((m) => OPENED_STATUSES.includes(m.status));
 
+  // A meeting kept on a phone is never sealed on the server — it stays
+  // SCHEDULED although attendance and money were recorded in it — so counting
+  // only SEALED meetings scored a group that meets every week as having
+  // completed none, and priced its store credit accordingly (50% deposit, the
+  // highest interest). Anything that was recorded in a meeting means it was held.
+  const heldByActivity = new Set<string>([
+    ...ledger.filter((e) => e.meetingId).map((e) => e.meetingId as string),
+    ...attendance.map((a) => a.meetingId)
+  ]);
+  const completed = meetings.filter((m) => m.status === "SEALED" || heldByActivity.has(m.id));
+
   return {
     activeMembers: members.length,
     officialRoles: {
@@ -90,7 +101,7 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
     meetingsUnlockCompliant: opened.filter((m) =>
       COMPLIANT_UNLOCK.includes(m.unlockStatus)
     ).length,
-    meetingsSealed: meetings.filter((m) => m.status === "SEALED").length,
+    meetingsSealed: completed.length,
     meetingsWithSharePurchase: meetingsWith("SHARE_PURCHASE"),
     meetingsWithSocialContribution: meetingsWith("SOCIAL_CONTRIBUTION"),
 

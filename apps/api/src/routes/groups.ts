@@ -52,7 +52,7 @@ import {
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, derivePinVerifier, sha256 } from "../lib/crypto";
 import { canViewMemberContact, maskPhone } from "../lib/privacy";
-import { normalisePhone } from "../lib/phone";
+import { looksLikePhone, normalisePhone } from "../lib/phone";
 import { reconcileMembership } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
 
@@ -99,14 +99,20 @@ const groupUpdateSchema = groupCreateSchema.partial().extend({
 
 const memberCreateSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
-  phone: z.string().trim().min(7).max(30),
+  // Digits, not punctuation — the same test sign-up and joining apply. `min(7)`
+  // let "12345" through, and a number nobody can dial is not an identity.
+  phone: z.string().trim().max(30).refine(looksLikePhone, "Enter a valid phone number."),
   role: z.enum(memberRoles).default("MEMBER"),
   kycStatus: z.enum(["PENDING", "VERIFIED", "REJECTED"]).default("PENDING"),
   status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).default("ACTIVE"),
   nationalIdHash: z.string().optional()
 });
 
-const memberUpdateSchema = memberCreateSchema.partial();
+// An edit keeps the older, looser rule: a member imported with a short number
+// must stay editable for their name without being forced to change the number.
+const memberUpdateSchema = memberCreateSchema
+  .extend({ phone: z.string().trim().min(7).max(30) })
+  .partial();
 const pinRequestSchema = z.object({}).strict();
 
 const meetingCreateSchema = z.object({
@@ -1412,7 +1418,11 @@ router.post("/groups/:id/members/sync", requireAuth("members:write"), async (req
     const groupId = routeParam(req.params.id, "id");
     await assertGroupAccess(req.user, groupId);
 
-    const phone = normalisePhone(payload.phone ?? "");
+    // An unusable number ("12345") is not stored as though it identified
+    // someone: the member arrives by name, as if no number had been given, and
+    // the number stays on the phone that typed it. Storing it would let a
+    // junk value be matched against — or collide with — a real member later.
+    const phone = looksLikePhone(payload.phone) ? normalisePhone(payload.phone) : "";
     const wantedName = payload.fullName.trim().toLowerCase().replace(/\s+/g, " ");
     const roster = await prisma.member.findMany({
       where: { groupId },
@@ -1919,9 +1929,16 @@ router.post("/groups/:id/meetings", requireAuth("meetings:write"), async (req, r
     const payload = meetingCreateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
     const meeting = await prisma.$transaction(async (tx) => {
+      // Belongs to the cycle it is made in. Without this every meeting made
+      // through this route had no cycle, so closing a cycle archived none of
+      // them, the "closed cycle refuses new money" rule never applied to them,
+      // and the cycles screen reported "0 meetings" for a group that had held
+      // several.
+      const cycle = await ensureActiveCycle(tx, routeParam(req.params.id, "id"));
       const created = await tx.meeting.create({
         data: {
           groupId: routeParam(req.params.id, "id"),
+          cycleId: cycle.id,
           title: payload.title,
           status: "SCHEDULED",
           scheduledAt: new Date(payload.scheduledAt),

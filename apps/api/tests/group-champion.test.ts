@@ -83,6 +83,43 @@ describe("linking a champion to an existing group", () => {
     expect(signedIn.body.data.groupId).toBe(group.id);
   });
 
+  it("never takes over the number of the login that is already there", async () => {
+    // Found on the emulator: a group that signed itself up, then named a
+    // champion from the app, had its OWN sign-in number replaced by the
+    // champion's — the person who registered the group was locked out.
+    const group = await freshGroup();
+    const ownPhone = uniquePhone();
+    const own = await prisma.user.create({
+      data: {
+        name: group.name,
+        email: `${ownPhone}@accounts.intellicash.app`,
+        phone: ownPhone,
+        passwordHash: await bcrypt.hash("registrant-password", 10),
+        role: "GROUP_ACCOUNT",
+        groupId: group.id
+      }
+    });
+    const championPhone = uniquePhone();
+
+    const response = await request(app)
+      .put(`/api/v1/groups/${group.id}/champion`)
+      .set("Cookie", admin)
+      .send({ championName: "Baraka Mwangi", phone: championPhone })
+      .expect(200);
+    expect(response.body.data.outcome).toBe("LOGIN_CREATED");
+
+    // The registrant still signs in with their own number and password…
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: own.id } })).phone).toBe(ownPhone);
+    const still = await request(app).post("/api/v1/auth/login").send({ phone: ownPhone, password: "registrant-password" }).expect(200);
+    expect(still.body.data.groupId).toBe(group.id);
+
+    // …and the champion gets in to the SAME group with a code.
+    const code = (await request(app).post("/api/v1/auth/otp/request").send({ phone: championPhone })).body.data.devCode;
+    const viaCode = await request(app).post("/api/v1/auth/otp/verify").send({ phone: championPhone, code }).expect(200);
+    expect(viaCode.body.data.groupId).toBe(group.id);
+    expect(await prisma.user.count({ where: { groupId: group.id, role: "GROUP_ACCOUNT" } })).toBe(2);
+  });
+
   it("attaches the orphan login a field sign-up made, so the champion's own password opens the real group", async () => {
     // Exactly what production has nineteen of. Made directly: sign-up now
     // creates the group with the login, so it can no longer produce one — but

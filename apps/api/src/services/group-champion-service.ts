@@ -104,21 +104,31 @@ export async function linkGroupChampion(input: LinkChampionInput): Promise<LinkC
       const login = await tx.user.findFirst({
         where: { groupId: group.id, role: "GROUP_ACCOUNT" },
         orderBy: { createdAt: "asc" },
-        select: { id: true }
+        select: { id: true, phone: true }
       });
 
-      if (login) {
+      // The number goes onto the group's existing login ONLY when that login has
+      // no usable number of its own — the centrally-onboarded shell this was
+      // written for. A group that signed itself up has one: the person who
+      // registered it. Overwriting it (as this used to) locked the registrant
+      // out of their own account the moment they named a champion, from inside
+      // the very app they were signed in to. They get a login of their own.
+      const ownNumber = Boolean(login?.phone && isSendableSmsPhone(login.phone));
+
+      if (login && !ownNumber) {
         await tx.user.update({ where: { id: login.id }, data: { phone } });
         outcome = "PHONE_ATTACHED";
         userId = login.id;
       } else {
-        // A group with no login at all. The password is random and never shown:
-        // the champion gets in with a texted code, and can set a password from
-        // a reset if they want one.
+        // The champion's own login. The password is random and never shown: they
+        // get in with a texted code, and can set a password from a reset. Named
+        // by phone (not group code) so a second champion, later, cannot collide.
         const created = await tx.user.create({
           data: {
             name: group.name,
-            email: `${group.code.toLowerCase()}@groups.intellicash.co.ke`,
+            email: login
+              ? `${phone}@accounts.intellicash.app`
+              : `${group.code.toLowerCase()}@groups.intellicash.co.ke`,
             phone,
             passwordHash: await bcrypt.hash(randomBytes(24).toString("base64url"), 12),
             role: "GROUP_ACCOUNT",

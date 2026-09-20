@@ -96,12 +96,22 @@ welfareExpensesRouter.post(
         // would change what the group already signed off.
         const meeting = await tx.meeting.findFirst({
           where: { id: body.meetingId, groupId: group.id },
-          select: { id: true, status: true, title: true }
+          select: { id: true, status: true, title: true, scheduledAt: true }
         });
         if (!meeting) {
           throw new ApiHttpError(404, "MEETING_NOT_FOUND", "Meeting does not exist in this group.");
         }
-        if (meeting.status !== "IN_PROGRESS") {
+        // A meeting kept on a phone is never opened on the server — it reaches
+        // the server as SCHEDULED, dated today — so "in progress" alone would
+        // make welfare impossible to record for exactly the groups that meet
+        // with a phone. A meeting scheduled within a day and a half of now
+        // counts as the one being held; a sealed one, or one weeks away, does
+        // not.
+        const heldNow =
+          meeting.status === "IN_PROGRESS" ||
+          (meeting.status === "SCHEDULED" &&
+            Math.abs(Date.now() - meeting.scheduledAt.getTime()) <= 36 * 60 * 60 * 1000);
+        if (!heldNow) {
           throw new ApiHttpError(
             409,
             "MEETING_NOT_OPEN",
