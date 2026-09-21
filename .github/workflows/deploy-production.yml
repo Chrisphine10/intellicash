@@ -81,6 +81,15 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      # Only what the data guard needs: the script itself and the list of
+      # migrations this commit ships.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            scripts/prod-data-guard.py
+            apps/api/prisma/migrations
+          sparse-checkout-cone-mode: false
+
       # Without this, missing secrets expand to "" and the failure surfaces as
       # `ssh-keyscan -H ""`, which says nothing about the actual cause.
       - name: Check deploy secrets are configured
@@ -118,6 +127,16 @@ jobs:
           for u in https://hodi-admin.co.ke https://phinetech.co.ke; do
             printf '%-32s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || echo 000)"
           done
+
+      # Read-only. Records what is in the database BEFORE anything changes, so
+      # the step after the deploy can prove nothing was lost. It runs before the
+      # backup on purpose: if it cannot run (or the database is already unhealthy)
+      # the deploy stops here, with the server untouched and no rollback needed.
+      - name: Snapshot production data (read-only)
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'python3 - snapshot' < scripts/prod-data-guard.py
 
       - name: Pre-deploy backup and record rollback point
         id: backup
@@ -184,6 +203,35 @@ jobs:
           done
           echo '::error::IntelliCash did not become healthy'
           exit 1
+
+      # Read-only. Compares the database with the snapshot taken before the
+      # deploy: no group, member, meeting, cycle, loan, fund or ledger entry lost,
+      # no ledger entry altered, every fund still equal to its ledger, the database
+      # intact, every migration this commit ships applied, and the pre-deploy
+      # backup readable and complete. A failure here rolls the code back and says
+      # so; the database is never restored automatically (see the note below).
+      - name: Verify no data was lost
+        run: |
+          EXPECTED=$(ls apps/api/prisma/migrations | grep -v '\.toml$' | paste -sd, -)
+          echo "Migrations this commit ships: $(echo "$EXPECTED" | tr ',' '\n' | wc -l)"
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "python3 - verify --expect-migrations '$EXPECTED'" < scripts/prod-data-guard.py
+
+      # Nothing is written and nobody signs in: these only prove the routes this
+      # release adds are being served. An unauthenticated call must be refused
+      # (401), not missing (404) or broken (5xx).
+      - name: Smoke-test the routes this release adds
+        run: |
+          FAILED=0
+          for route in "GET /api/v1/groups/none/restore-bundle" "POST /api/v1/groups/none/share-outs"; do
+            METHOD=${route%% *}; PATHNAME=${route#* }
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X "$METHOD" \
+              -H 'content-type: application/json' -d '{}' "https://intellicash.co.ke$PATHNAME" || echo 000)
+            echo "$METHOD $PATHNAME -> $CODE (expected 401)"
+            [ "$CODE" = "401" ] || FAILED=1
+          done
+          [ "$FAILED" = "0" ] || { echo '::error::A route this release adds is not being served correctly'; exit 1; }
 
       - name: Assert the co-hosted sites are unharmed
         run: |
