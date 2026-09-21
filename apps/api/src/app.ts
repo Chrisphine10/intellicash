@@ -188,6 +188,16 @@ export function createApp(
   app.use("/api/v1", smsBroadcastsRouter);
   app.use("/api/v1", webhooksRouter);
 
+  // The API's own namespace is never the web app's. In the combined server an
+  // unknown /api/v1 path used to fall through to Next.js, which waits for a
+  // request body that express.json() had already consumed - so a POST with a
+  // JSON body to a route that does not exist hung until the client gave up
+  // (found on production, 21 Sep 2026): a connection anyone could hold open for
+  // free. Refuse it here, in the API's own error shape.
+  app.use("/api/v1", (_req, _res, next) => {
+    next(new ApiHttpError(404, "NOT_FOUND", "That page or action does not exist."));
+  });
+
   if (options.includeNotFoundHandler ?? true) {
     app.use((_req, _res, next) => {
       next(new ApiHttpError(404, "NOT_FOUND", "That page or action does not exist."));
