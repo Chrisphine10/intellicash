@@ -1,3 +1,11 @@
+/**
+ * Watches free disk space and refuses uploads when it runs low.
+ *
+ * A phone that cannot upload a photograph must still be able to file the
+ * visit, so storage pressure is checked before the bytes are accepted and the
+ * upload is refused early with a clear error rather than failing mid-write.
+ */
+
 import { statfs } from "node:fs/promises";
 import { uploadRoot } from "../lib/uploads";
 

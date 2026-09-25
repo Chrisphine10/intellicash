@@ -1,3 +1,12 @@
+/**
+ * Multi-group membership.
+ *
+ * A person can belong to several VSLAs at once, which is normal here. This
+ * reconciles the account's "membership currently in view" with the groups it
+ * actually belongs to, promotes legacy single-pointers, and lets a member
+ * switch between their groups.
+ */
+
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 

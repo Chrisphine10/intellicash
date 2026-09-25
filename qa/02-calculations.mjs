@@ -237,10 +237,18 @@ const exact = (memberId, s) => Number((BigInt(POOL) * BigInt(s)) / BigInt(totalS
 const byMember = Object.fromEntries(Object.entries(M).map(([k, v]) => [v, k]));
 const lastRow = rows[rows.length - 1];
 const others = rows.slice(0, -1);
-check("C7.02", "each member's pro-rata payout = floor(pool x their shares / all shares)", others.map((r) => exact(r.memberId, shares[byMember[r.memberId]])), others.map((r) => r.payoutCents));
+// Largest remainder: every payout is the exact pro-rata share rounded down,
+// or down plus one cent for the members with the largest remainders.
+check("C7.02", "each member's pro-rata payout is floor(pool x their shares / all shares), or one cent more", true,
+  rows.every((r) => {
+    const over = r.payoutCents - exact(r.memberId, shares[byMember[r.memberId]]);
+    return over === 0 || over === 1;
+  }),
+  rows.map((r) => `${r.payoutCents} vs ${exact(r.memberId, shares[byMember[r.memberId]])}`).join(", "));
+void others;
 check("C7.03", "the payouts add up to the pool exactly (every cent allocated)", POOL, rows.reduce((s, r) => s + r.payoutCents, 0));
 const lastIdeal = exact(lastRow.memberId, shares[byMember[lastRow.memberId]]);
-check("C7.04", "the member who takes the rounding remainder gets it within n-1 cents of their ideal share", true, lastRow.payoutCents - lastIdeal >= 0 && lastRow.payoutCents - lastIdeal <= rows.length - 1, `ideal ${lastIdeal}, got ${lastRow.payoutCents}`);
+check("C7.04", "no member is more than one cent from their ideal share", true, lastRow.payoutCents - lastIdeal >= 0 && lastRow.payoutCents - lastIdeal <= 1, `ideal ${lastIdeal}, got ${lastRow.payoutCents}`);
 const W = model.SOCIAL;
 const base = Math.floor(W / rows.length), rem = W - base * rows.length;
 check("C7.05", "welfare left in the fund is split EQUALLY (remainder cents to the earliest), not by shares",

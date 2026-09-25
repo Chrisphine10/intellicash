@@ -125,6 +125,7 @@ describe("web smoke helpers", () => {
       "My Group",
       "Meetings",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "Help & Docs"
     ]);
@@ -144,6 +145,7 @@ describe("web smoke helpers", () => {
       "Field visits",
       "Scorecard",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "IntelliAudit",
       "Audit",
@@ -164,6 +166,7 @@ describe("web smoke helpers", () => {
       "Field visits",
       "Partners",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "Help & Docs"
     ]);
@@ -180,6 +183,7 @@ describe("web smoke helpers", () => {
       "Programs",
       "Groups",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "Help & Docs"
     ]);
@@ -191,6 +195,7 @@ describe("web smoke helpers", () => {
       "Partners",
       "VA / CBT",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "Help & Docs"
     ]);
@@ -222,6 +227,7 @@ describe("web smoke helpers", () => {
       "Field visits",
       "Scorecard",
       "Intelli-Store",
+      "Financials",
       "Reports",
       "IntelliAudit",
       "Audit",
@@ -1993,8 +1999,8 @@ describe("web smoke helpers", () => {
     },
     {
       role: "PARTNER_OFFICER",
-      heading: "Partner service dashboard",
-      cards: ["Programmes", "Groups reached", "Live sessions", "Service quality", "Reports", "VA / CBT support"],
+      heading: "Partner reporting workspace",
+      cards: ["Programmes", "Groups reached", "Meeting activity", "Reports", "VA / CBT support"],
       hidesSavings: true
     },
     {

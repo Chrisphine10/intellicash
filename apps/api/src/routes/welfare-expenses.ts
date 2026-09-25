@@ -96,21 +96,25 @@ welfareExpensesRouter.post(
         // would change what the group already signed off.
         const meeting = await tx.meeting.findFirst({
           where: { id: body.meetingId, groupId: group.id },
-          select: { id: true, status: true, title: true, scheduledAt: true }
+          select: { id: true, status: true, title: true, scheduledAt: true, source: true, openedAt: true }
         });
         if (!meeting) {
           throw new ApiHttpError(404, "MEETING_NOT_FOUND", "Meeting does not exist in this group.");
         }
-        // A meeting kept on a phone is never opened on the server — it reaches
-        // the server as SCHEDULED, dated today — so "in progress" alone would
-        // make welfare impossible to record for exactly the groups that meet
-        // with a phone. A meeting scheduled within a day and a half of now
-        // counts as the one being held; a sealed one, or one weeks away, does
-        // not.
-        const heldNow =
-          meeting.status === "IN_PROGRESS" ||
-          (meeting.status === "SCHEDULED" &&
-            Math.abs(Date.now() - meeting.scheduledAt.getTime()) <= 36 * 60 * 60 * 1000);
+        // Only a meeting someone has started counts as being held. Phones now
+        // report the start (phone-lifecycle), so the server sees IN_PROGRESS.
+        //
+        // Phones on build 24 and earlier never report it: their meetings reach
+        // the server as SCHEDULED, dated today. For those alone - a meeting a
+        // person made (MANUAL), never opened, within a day and a half of now -
+        // the old allowance stays. Remove it once those builds are retired.
+        // A meeting the reminder planner made is only a plan and never counts.
+        const legacyPhoneMeeting =
+          meeting.status === "SCHEDULED" &&
+          meeting.source === "MANUAL" &&
+          meeting.openedAt === null &&
+          Math.abs(Date.now() - meeting.scheduledAt.getTime()) <= 36 * 60 * 60 * 1000;
+        const heldNow = meeting.status === "IN_PROGRESS" || legacyPhoneMeeting;
         if (!heldNow) {
           throw new ApiHttpError(
             409,

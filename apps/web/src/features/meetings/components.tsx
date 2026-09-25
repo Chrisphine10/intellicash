@@ -20,6 +20,7 @@ import {
   markerColor,
   markerTextColor,
   meetingStatusClass,
+  meetingStatusLabel,
   shiftCalendarDate,
   startOfMonth,
   startOfWeek
@@ -311,7 +312,7 @@ export function MeetingCalendar({
                   type="button"
                 >
                   <strong>{meeting.title}</strong>
-                  <span>{formatMeetingTime(meeting.scheduledAt)} - {humanizeEnum(meeting.status)}</span>
+                  <span>{formatMeetingTime(meeting.scheduledAt)} - {meetingStatusLabel(meeting)}</span>
                 </button>
               ))}
               {focusedMeetings.length === 0 ? <div className="empty-state">No meetings this day</div> : null}
@@ -544,7 +545,7 @@ export function MeetingDetailDialog({
         </header>
         <div className="meeting-detail-body">
           <div className="meeting-detail-summary">
-            <span className={meetingStatusClass(meeting.status)}>{humanizeEnum(meeting.status)}</span>
+            <span className={meetingStatusClass(meeting.status, meeting.scheduledAt)}>{meetingStatusLabel(meeting)}</span>
             <div>
               <span>Scheduled</span>
               <strong>{formatMeetingDate(meeting.scheduledAt)} at {formatMeetingTime(meeting.scheduledAt)}</strong>

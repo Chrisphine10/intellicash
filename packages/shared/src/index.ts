@@ -175,17 +175,12 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "meetings:read",
     "ledger:read",
     "payments:read",
-    "payments:write",
     "store:read",
-    "store:write",
     "votes:read",
     // Programme staff oversee the agents doing the visiting, so they read
     // visit records. They do not conduct visits and cannot amend them.
     "visits:read",
-    // Back-office verification of a group's documents is exactly this role's
-    // job — deciding whether the certificate on file is genuine.
     "documents:read",
-    "documents:write",
     "analytics:read"
   ],
   GROUP_ACCOUNT: [
@@ -295,7 +290,9 @@ export const meetingStatuses = [
   "KEY_UNLOCK_PENDING",
   "IN_PROGRESS",
   "SEALED",
-  "SYNC_CONFLICT"
+  "SYNC_CONFLICT",
+  /** A scheduled meeting that did not happen, cancelled by an official. */
+  "CANCELLED"
 ] as const;
 export type MeetingStatus = (typeof meetingStatuses)[number];
 
@@ -512,6 +509,10 @@ export const auditEventTypes = [
   "PERSONAL_DATA_ERASED",
   "MEETING_SCHEDULED",
   "MEETING_UPDATED",
+  "MEETING_CANCELLED",
+  "MEETING_STARTED_ON_PHONE",
+  "MEETING_CLOSED_ON_PHONE",
+  "MEETING_SCHEDULE_UPDATED",
   "ATTENDANCE_RECORDED",
   "INTELLIAUDIT_EVIDENCE_UPLOADED",
   "INTELLIAUDIT_EVIDENCE_EXTRACTED",
@@ -637,7 +638,16 @@ export interface PortfolioSummary {
   groups: number;
   members: number;
   activeMeetings: number;
+  /** Shares members bought in the current cycle (share capital). Not the loan fund's cash, which falls whenever a loan goes out. */
   totalSavingsCents: number;
+  /** The loan fund's cash: share capital plus repayments, less loans out and share-outs paid. */
+  loanFundCents?: number;
+  /** Principal plus interest still owed on unsettled loans. */
+  loansOutstandingCents?: number;
+  /** Share of the outstanding balance more than 30 days past due, 0-100; null when nothing is outstanding. */
+  par30Rate?: number | null;
+  /** Sum of SOCIAL fund balances — welfare contributions net of expenses and welfare share-outs. Reported separately from savings. */
+  totalSocialFundCents: number;
   /** Percent of what has fallen due that has been repaid; null when nothing has fallen due yet. */
   repaymentRate: number | null;
   averageCreditScore: number;

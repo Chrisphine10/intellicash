@@ -1,3 +1,15 @@
+/**
+ * Saving cycles.
+ *
+ * `Group.cycleNumber` was only ever a label — nothing was scoped to it, so a
+ * closed cycle could still be written to. A `Cycle` row now owns the meetings
+ * and ledger entries of one cycle, and closing it makes those rows read-only
+ * while leaving them fully visible to history and reports.
+ *
+ * Everything here is designed so a group that never starts a new cycle behaves
+ * exactly as it did before.
+ */
+
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";

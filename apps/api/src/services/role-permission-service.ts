@@ -1,6 +1,16 @@
+/**
+ * The permission map: which roles may do what.
+ *
+ * A template per role lives in `RolePermissionTemplate` so a programme can
+ * tune who may approve join requests, edit settings, view money and so on
+ * without a code change. `permissionsForRoleFromStore` is the single
+ * authority; every route guard resolves through it.
+ */
+
 import { permissions, rolePermissions, roles, type Permission, type Role } from "@intellicash/shared";
 import { isRole } from "../domain/authorization";
 import { prisma } from "../lib/prisma";
+import { appendAuditEvent } from "./audit-service";
 
 const permissionSet = new Set<string>(permissions);
 const protectedAdminPermissions: Permission[] = ["users:read", "users:write"];
@@ -169,6 +179,7 @@ async function ensureRolePermissionTemplatesOnce() {
   );
 
   await pruneReservedPermissionsFromNonAdminTemplates();
+  await correctPartnerMeetingPermissions();
 
   // A database with no rows was just seeded with current defaults; there is
   // nothing older to bring forward.
@@ -177,6 +188,64 @@ async function ensureRolePermissionTemplatesOnce() {
   for (const batch of permissionBackfills) {
     await deliverPermissionBatch(rowsBeforeBootstrap, batch);
   }
+}
+
+/**
+ * Marks the partner read-only correction as done. Kept in the audit trail
+ * because there is no settings table, and because a change of who may write
+ * belongs in the audit trail anyway.
+ */
+export const PARTNER_READ_ONLY_MARKER = "partner-read-only-2026-09";
+
+/**
+ * Partner officers became read-only: the operational writes they used to
+ * hold by default (payments, store, documents, meetings…) now belong to IWL
+ * staff and group officials. `rolePermissions` says so for a fresh database;
+ * this brings an existing one in line.
+ *
+ * It runs ONCE per database. Running it on every boot would silently revoke
+ * any write an administrator later grants to partners on purpose, which is the
+ * one thing a permission template editable from the console must never do.
+ * Only write-type permissions the new default denies are taken away; anything
+ * the default still grants is left alone.
+ */
+async function correctPartnerMeetingPermissions() {
+  const done = await prisma.auditEvent.findFirst({
+    where: {
+      type: "ROLE_PERMISSIONS_UPDATED",
+      entityType: "RolePermissionTemplate",
+      entityId: "PARTNER_OFFICER",
+      payloadJson: { contains: PARTNER_READ_ONLY_MARKER }
+    },
+    select: { id: true }
+  });
+  if (done) return;
+
+  const partner = await prisma.rolePermissionTemplate.findUnique({
+    where: { role: "PARTNER_OFFICER" }
+  });
+  if (!partner) return;
+
+  const defaults = new Set<Permission>(rolePermissions.PARTNER_OFFICER);
+  const held = readPermissionValues(partner.permissionsJson) ?? [];
+  const isWrite = (permission: Permission) =>
+    permission.endsWith(":write") || permission.endsWith(":approve") || permission === "visits:amend";
+  const removed = held.filter((permission) => isWrite(permission) && !defaults.has(permission));
+
+  if (removed.length > 0) {
+    await prisma.rolePermissionTemplate.update({
+      where: { role: "PARTNER_OFFICER" },
+      data: {
+        permissionsJson: JSON.stringify(normalizePermissionList(held.filter((permission) => !removed.includes(permission))))
+      }
+    });
+  }
+  await appendAuditEvent({
+    entityType: "RolePermissionTemplate",
+    entityId: "PARTNER_OFFICER",
+    type: "ROLE_PERMISSIONS_UPDATED",
+    payload: { reason: PARTNER_READ_ONLY_MARKER, removed }
+  });
 }
 
 /**

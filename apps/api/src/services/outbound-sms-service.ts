@@ -1,3 +1,17 @@
+/**
+ * Everything the platform texts on its own initiative.
+ *
+ * Share-purchase confirmations, end-of-meeting summaries, and every system
+ * notification that also appears in the console bell. One dispatcher, so a
+ * message the system sends can never disagree with a broadcast an admin types
+ * about which account is live or how a failure is recorded.
+ *
+ * Three rules hold everywhere:
+ * 1. It never throws — every caller has already committed what matters.
+ * 2. It is never awaited by the request — Bonga takes one recipient per call.
+ * 3. Every send is recorded.
+ */
+
 import { prisma } from "../lib/prisma";
 import { smsSegments } from "../domain/member-sms-messages";
 import { findSmsIntegration } from "./sms-provider";
@@ -33,6 +47,8 @@ export type OutboundSmsKind =
   | "SHARE_PURCHASE"
   | "MEETING_SUMMARY"
   | "SYSTEM_NOTIFICATION"
+  /** The day-before and two-hours-before reminders for a scheduled meeting. */
+  | "MEETING_REMINDER"
   /** A sign-in code. Its own kind so it can be found — and audited — apart
    *  from ordinary notifications. */
   | "LOGIN_OTP";

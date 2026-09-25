@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = [
   "GROUP_JOIN_APPROVED",
   "GROUP_JOIN_REJECTED",
   "MEETING_ACTIVE",
+  "MEETING_REMINDER",
   "STORE_REQUEST_SUBMITTED",
   "STORE_REQUEST_UPDATED",
   "STORE_REPAYMENT_POSTED",
@@ -57,6 +58,12 @@ export const NOTIFICATION_CATALOGUE: NotificationTypeInfo[] = [
     label: "A meeting opens",
     audience: "Every member and group login in that group",
     volume: "The heaviest one: a 30-member group is 30 texts every meeting."
+  },
+  {
+    type: "MEETING_REMINDER",
+    label: "A meeting is coming up",
+    audience: "Every active member and group login in that group",
+    volume: "Two texts per member per meeting: the day before and two hours before."
   },
   {
     type: "STORE_REQUEST_SUBMITTED",

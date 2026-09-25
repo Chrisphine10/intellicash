@@ -146,7 +146,7 @@ fun DashboardScreen(
                             modifier = Modifier.weight(1f)
                         )
                         StatCard(
-                            label = "Total Savings",
+                            label = "Total Savings (Loan Fund)",
                             value = formatKes(s.summary.totalSavingsCents),
                             modifier = Modifier.weight(1f)
                         )
@@ -155,10 +155,19 @@ fun DashboardScreen(
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         StatCard(
+                            label = "Social Fund",
+                            value = formatKes(s.summary.totalSocialFundCents),
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
                             label = "Repayment Rate",
                             value = "${s.summary.repaymentRate.toInt()}%",
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         StatCard(
                             label = "Avg Credit Score",
                             value = s.summary.averageCreditScore.toInt().toString(),

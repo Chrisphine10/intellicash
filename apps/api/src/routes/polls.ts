@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { appendAuditEvent } from "../services/audit-service";
 import { requireAuth, type AuthenticatedUser } from "../middleware/auth";
 import { scopeGroupWhere } from "../services/account-scope";
+import { assertModuleEnabled } from "../services/module-service";
 import { signLedgerEntry } from "../domain/ledger";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -174,6 +175,7 @@ router.post("/groups/:id/polls", requireAuth("votes:write"), async (req, res, ne
     if (!group) {
       throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
     }
+    await assertModuleEnabled(req.user, "voting", { groupId: group.id });
 
     if (body.type === "ROLE_ELECTION" && !body.targetRole) {
       throw new ApiHttpError(400, "ROLE_REQUIRED", "An election must say which position is being filled.");
@@ -269,6 +271,7 @@ router.get("/groups/:id/polls", requireAuth("votes:read"), async (req, res, next
     if (!group) {
       throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
     }
+    await assertModuleEnabled(req.user, "voting", { groupId: group.id });
 
     const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : undefined;
     const polls = await prisma.poll.findMany({
@@ -292,6 +295,7 @@ router.get("/groups/:id/polls", requireAuth("votes:read"), async (req, res, next
 router.get("/polls/:pollId", requireAuth("votes:read"), async (req, res, next) => {
   try {
     const poll = await loadPoll(req.user, routeParam(req.params.pollId, "pollId"));
+    await assertModuleEnabled(req.user, "voting", { groupId: poll.groupId });
     ok(res, serializePoll(poll));
   } catch (error) {
     next(error);
@@ -326,6 +330,7 @@ router.post("/polls/:pollId/vote", requireAuth("votes:write"), async (req, res, 
     if (!poll) {
       throw new ApiHttpError(404, "POLL_NOT_FOUND", "Vote not found or outside this account.");
     }
+    await assertModuleEnabled(user, "voting", { groupId: poll.groupId });
 
     assertPollAcceptsVotes(poll);
 
@@ -454,6 +459,7 @@ router.post("/polls/:pollId/close", requireAuth("votes:write"), async (req, res,
     if (!existing) {
       throw new ApiHttpError(404, "POLL_NOT_FOUND", "Vote not found or outside this account.");
     }
+    await assertModuleEnabled(user, "voting", { groupId: existing.groupId });
     if (existing.status === "CLOSED") {
       throw new ApiHttpError(409, "ALREADY_CLOSED", "This vote is already closed.");
     }

@@ -1,3 +1,12 @@
+/**
+ * Append-only audit trail.
+ *
+ * Every state-changing operation writes one `AuditEvent` here: who did what,
+ * to which entity, with a hash of the payload so the record can be verified
+ * later. Nothing in this file ever updates or deletes — the audit trail is the
+ * one table where immutability is the point, not a limitation.
+ */
+
 import type { AuditEventType } from "@intellicash/shared";
 import { hashPayload } from "../lib/crypto";
 import { prisma } from "../lib/prisma";

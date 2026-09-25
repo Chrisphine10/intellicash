@@ -1,3 +1,11 @@
+/**
+ * Which SMS provider to send through, and with what credentials.
+ *
+ * Lifted out when automatic member notifications became a second caller. One
+ * implementation, so a broadcast an admin types and a meeting summary the
+ * system sends can never disagree about which account is live.
+ */
+
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { decryptCredentials } from "./integration-credentials";

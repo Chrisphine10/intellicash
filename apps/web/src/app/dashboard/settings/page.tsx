@@ -7,6 +7,7 @@ import { Database, Download, KeyRound, ServerCog, ShieldCheck, Smartphone } from
 import { languagePreferenceLabels, type LanguagePreference } from "@intellicash/shared";
 import { API_BASE_URL, apiFetch, humanizeEnum } from "../../../lib/api";
 import { StatCard } from "../../../components/dashboard/stat-card";
+import { ProgrammeModulesCard } from "../../../features/settings/programme-modules-card";
 import type { IntegrationHealth, User } from "../../../components/dashboard/types";
 
 export default function SettingsPage() {
@@ -74,6 +75,8 @@ export default function SettingsPage() {
         <StatCard icon={<ShieldCheck size={20} />} label="Language" note="Account preference" value={languageLabel} />
         <StatCard icon={<ShieldCheck size={20} />} label="Integrations" note={integrations ? "Sandbox providers ready" : "Restricted for this account"} value={integrations ? `${integrations.configured}/${integrations.total}` : "Scoped"} />
       </section>
+
+      <ProgrammeModulesCard />
 
       <section className="two-column">
         <div className="data-card">

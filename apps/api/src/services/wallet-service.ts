@@ -1,3 +1,13 @@
+/**
+ * Centralised, overdraw-safe partner-wallet operations.
+ *
+ * Every mutation uses Prisma atomic `increment`/`decrement` operators (never a
+ * read-modify-write of an absolute value) so concurrent updates cannot lose
+ * writes. Availability checks are performed inside the caller's interactive
+ * transaction so the check and the reservation are part of the same atomic
+ * unit.
+ */
+
 import type { Prisma } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 

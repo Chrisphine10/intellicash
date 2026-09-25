@@ -537,7 +537,8 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
       }
       await apiFetch(`/groups/${group.id}/meetings/${meetingId}/ledger/batch`, {
         method: "POST",
-        body: JSON.stringify({ entries })
+        // Typed here, so the group's own rules are checked (phone syncs are not).
+        body: JSON.stringify({ entries, source: "WEB" })
       });
       setAmounts(Object.fromEntries(members.map((member) => [member.id, emptyAmounts()])));
       await refresh(group.id);

@@ -5,6 +5,8 @@ import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
+import { normaliseInterestType } from "../domain/loan-math";
+import { memberAccountsEnabledFor } from "../services/member-accounts-service";
 
 export const groupPolicyRouter = Router();
 
@@ -62,6 +64,15 @@ export async function policyFor(groupId: string) {
     smsSharePurchaseEnabled: row?.smsSharePurchaseEnabled ?? POLICY_DEFAULTS.smsSharePurchaseEnabled,
     smsMeetingSummaryEnabled:
       row?.smsMeetingSummaryEnabled ?? POLICY_DEFAULTS.smsMeetingSummaryEnabled,
+    /** FLAT unless the group chose reducing balance. */
+    interestType: normaliseInterestType(row?.interestType),
+    /** The group's own rules; null where the group never set one. */
+    shareValueCents: row?.shareValueCents ?? null,
+    maxSharesPerMeeting: row?.maxSharesPerMeeting ?? null,
+    socialFundCents: row?.socialFundCents ?? null,
+    loanMultiplierBps: row?.loanMultiplierBps ?? null,
+    /** Effective: an undecided group keeps what it has (see member-accounts-service). */
+    memberAccountsEnabled: await memberAccountsEnabledFor(groupId),
     /** False when the group is running on defaults — useful to a UI. */
     configured: Boolean(row),
     updatedByUserId: row?.updatedByUserId ?? null,
@@ -121,7 +132,17 @@ const updateSchema = z.object({
   // (1000). The ceiling is deliberate: a typo of 10000 for "10%" would charge
   // 100% a month and, on a flat rate over a 12-month term, bill a member
   // twelve times what they borrowed.
-  loanInterestRateBps: z.number().int().min(0).max(2000).optional(),
+  // Raised from 2000 to 5000 (50%) on 24 Sep 2026: the phone lets a group set
+  // up to 50%, and a rate the server refused left that group at 0% online.
+  loanInterestRateBps: z.number().int().min(0).max(5000).optional(),
+  interestType: z.enum(["FLAT", "REDUCING"]).optional(),
+  // The group's own rules, pushed from its phone. Bounds are generous sanity
+  // limits, not policy: the group decides its rules.
+  shareValueCents: z.number().int().min(1).max(100_000_000).nullable().optional(),
+  maxSharesPerMeeting: z.number().int().min(1).max(1000).nullable().optional(),
+  socialFundCents: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  loanMultiplierBps: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  memberAccountsEnabled: z.boolean().optional(),
   // Outbound member SMS. See POLICY_DEFAULTS for why both start off.
   smsSharePurchaseEnabled: z.boolean().optional(),
   smsMeetingSummaryEnabled: z.boolean().optional()
@@ -137,10 +158,25 @@ groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), asy
       throw new ApiHttpError(400, "NOTHING_TO_UPDATE", "Send at least one setting to change.");
     }
 
-    await prisma.groupPolicy.upsert({
-      where: { groupId: group.id },
-      create: { groupId: group.id, ...body, updatedByUserId: req.user?.id ?? null },
-      update: { ...body, updatedByUserId: req.user?.id ?? null }
+    await prisma.$transaction(async (tx) => {
+      await tx.groupPolicy.upsert({
+        where: { groupId: group.id },
+        create: { groupId: group.id, ...body, updatedByUserId: req.user?.id ?? null },
+        update: { ...body, updatedByUserId: req.user?.id ?? null }
+      });
+      // One share value for the group, wherever it is read: the console's
+      // meeting page and every phone take it from the group row.
+      if (typeof body.shareValueCents === "number" || typeof body.maxSharesPerMeeting === "number") {
+        await tx.group.update({
+          where: { id: group.id },
+          data: {
+            ...(typeof body.shareValueCents === "number" ? { shareValueCents: body.shareValueCents } : {}),
+            ...(typeof body.maxSharesPerMeeting === "number"
+              ? { maxSharesPerMemberPerMeeting: body.maxSharesPerMeeting }
+              : {})
+          }
+        });
+      }
     });
 
     const policy = await policyFor(group.id);
@@ -151,7 +187,8 @@ groupPolicyRouter.put("/groups/:groupId/policy", requireAuth("groups:read"), asy
       // changing policy can never reprice money already lent.
       message:
         `Saved. New loans default to ${policy.defaultLoanTermMonths} month(s) at ` +
-        `${(policy.loanInterestRateBps / 100).toFixed(2)}% a month; ` +
+        `${(policy.loanInterestRateBps / 100).toFixed(2)}% a month ` +
+        `(${policy.interestType === "REDUCING" ? "reducing balance" : "flat"}); ` +
         `existing loans keep the term and rate they were agreed with.` +
         (policy.smsSharePurchaseEnabled || policy.smsMeetingSummaryEnabled
           ? ` Members will now be texted${

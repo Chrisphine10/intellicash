@@ -27,6 +27,9 @@ describe("store purchases tied to the meeting that agreed them", () => {
 
   beforeAll(async () => {
     await seedDatabase();
+    // These tests exercise the store and voting themselves, not the module
+    // switch (tests/programme-modules.test.ts covers that): open both.
+    await prisma.programme.updateMany({ data: { storeEnabled: true, votingEnabled: true } });
 
     const group = await prisma.group.findFirstOrThrow({ where: { code: "IWL-KBU-0001" } });
     groupId = group.id;

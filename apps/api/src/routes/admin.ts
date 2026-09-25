@@ -1230,6 +1230,62 @@ router.post("/programmes", requireAuth("programmes:write"), async (req, res, nex
   }
 });
 
+const programmeModulesSchema = z
+  .object({
+    storeEnabled: z.boolean().optional(),
+    votingEnabled: z.boolean().optional()
+  })
+  .refine((body) => body.storeEnabled !== undefined || body.votingEnabled !== undefined, {
+    message: "Say which module to switch."
+  });
+
+/**
+ * Switches Intelli-Store and Voting on or off for one programme. IWL admins
+ * only: a module reaches every group in the programme, its phones and the
+ * public storefront, so it is a platform decision, not a partner's.
+ */
+router.patch("/programmes/:id/modules", requireAuth("programmes:write"), async (req, res, next) => {
+  try {
+    if (req.user?.role !== "IWL_ADMIN") {
+      throw new ApiHttpError(403, "FORBIDDEN", "Only IWL admins switch programme modules.");
+    }
+    const programmeId = z.string().parse(req.params.id);
+    const body = programmeModulesSchema.parse(req.body);
+    const existing = await prisma.programme.findUnique({
+      where: { id: programmeId },
+      select: { id: true, name: true, storeEnabled: true, votingEnabled: true }
+    });
+    if (!existing) {
+      throw new ApiHttpError(404, "PROGRAMME_NOT_FOUND", "Program does not exist.");
+    }
+
+    const updated = await prisma.programme.update({
+      where: { id: programmeId },
+      data: {
+        ...(body.storeEnabled !== undefined ? { storeEnabled: body.storeEnabled } : {}),
+        ...(body.votingEnabled !== undefined ? { votingEnabled: body.votingEnabled } : {})
+      },
+      select: { id: true, name: true, storeEnabled: true, votingEnabled: true }
+    });
+
+    await appendAuditEvent({
+      actorUserId: req.user.id,
+      entityType: "PROGRAMME",
+      entityId: programmeId,
+      type: "PROGRAMME_UPDATED",
+      payload: {
+        change: "modules",
+        before: { storeEnabled: existing.storeEnabled, votingEnabled: existing.votingEnabled },
+        after: { storeEnabled: updated.storeEnabled, votingEnabled: updated.votingEnabled }
+      }
+    });
+
+    ok(res, updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch("/programmes/:id", requireAuth("programmes:write"), async (req, res, next) => {
   try {
     const programmeId = z.string().parse(req.params.id);

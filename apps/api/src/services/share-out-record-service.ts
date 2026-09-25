@@ -1,3 +1,11 @@
+/**
+ * The closing act of a saving cycle: distributing the fund.
+ *
+ * Reconciles the phone's share-out with the server's ledger view, records the
+ * result, and checks the arithmetic for discrepancies so a share-out that
+ * does not balance is caught before it closes a cycle.
+ */
+
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { FundType, LedgerEntryType } from "@intellicash/shared";

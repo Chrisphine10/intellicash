@@ -12,6 +12,7 @@ import {
 import { createNotification, createNotifications } from "../services/notification-service";
 import { ApiHttpError, ok } from "../lib/http";
 import { joinRequestRateLimit } from "../middleware/rate-limit";
+import { groupsWithMemberAccounts, memberAccountsEnabledFor } from "../services/member-accounts-service";
 import { prisma } from "../lib/prisma";
 
 /**
@@ -132,7 +133,15 @@ router.get("/members/me/memberships", requireAuth("members:read"), async (req, r
   try {
     const user = req.user;
     if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
-    ok(res, await listMemberships(user.id));
+    // A MEMBER sees only the groups that let members sign in; a group that
+    // switched sign-ins off drops out of their list (and their totals).
+    const memberships = await listMemberships(user.id);
+    if (user.role !== "MEMBER") {
+      ok(res, memberships);
+      return;
+    }
+    const open = await groupsWithMemberAccounts(memberships.map((membership) => membership.groupId));
+    ok(res, memberships.filter((membership) => open.has(membership.groupId)));
   } catch (error) {
     next(asApiError(error));
   }
@@ -144,6 +153,11 @@ router.post("/members/me/active-membership", requireAuth("members:read"), async 
     const user = req.user;
     if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
     const body = activeSchema.parse(req.body);
+    if (user.role === "MEMBER" && !(await memberAccountsEnabledFor(body.groupId))) {
+      // Same answer as for a group they do not belong to: a closed group's
+      // records are not the member's to open.
+      throw new ApiHttpError(404, "NOT_A_MEMBERSHIP", "You do not belong to that group.");
+    }
     const membership = await setActiveMembership(user.id, body.groupId);
     // Not one of theirs — refuse rather than reveal whether the group exists.
     if (!membership) {

@@ -39,9 +39,10 @@ controls in §3 before merge.
 5. **Log hygiene** — request logs carry method, redacted path (`redactUrlForLogs` strips phone/email/name/search query values), status, duration, trace ID, user ID. No request bodies. 401s are routine and not logged as client errors in the web app.
 6. **Role-scoped rows** — every list endpoint filters by role scope (`*ScopeForUser` helpers); members see self, group accounts their group, partners their programmes, `IWL_ADMIN`/`READ_ONLY` all.
 7. **Member contact masking by role** — the group roster (`GET /groups/:id/members`) returns member phone numbers in full only to operational roles (`IWL_ADMIN`, `GROUP_ACCOUNT`, and a member's own record); oversight roles (`PARTNER_OFFICER`, `LENDER`, `READ_ONLY`) receive masked phones via `serializeMember` + `canViewMemberContact` (`apps/api/src/lib/privacy.ts`). Member records embedded in meetings, attendance, ledger entries, and share-out previews (`nestedMemberSelect`) carry **name only, never phone**, for every role — so partner oversight of financial activity never surfaces member contact details.
-8. **Session security** — httpOnly, SameSite=Lax cookies with TTL; append-only `AuditEvent` trail for sensitive actions.
-9. **Consent capture (UI)** — public Intelli-Store checkout and VA/CBT booking forms require an explicit consent checkbox linking to `/privacy` before submission.
-10. **Public privacy notice** — `/privacy` page (linked from the public footer) documents collection, purpose, protections, retention, and DPA-2019 rights.
+8. **Partner accounts are read-only** — `PARTNER_OFFICER` accounts can view only the records within their partner/programme scope. They cannot edit groups, meetings, documents, payments, store requests, loan products, membership, or financial records. Operational changes require an IWL admin or a separately provisioned Intelli-Cash employee role.
+9. **Session security** — httpOnly, SameSite=Lax cookies with TTL; append-only `AuditEvent` trail for sensitive actions.
+10. **Consent capture (UI)** — public Intelli-Store checkout and VA/CBT booking forms require an explicit consent checkbox linking to `/privacy` before submission.
+11. **Public privacy notice** — `/privacy` page (linked from the public footer) documents collection, purpose, protections, retention, and DPA-2019 rights.
 
 ### Policy (enforced by review, pending automation)
 

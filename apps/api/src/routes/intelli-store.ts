@@ -20,6 +20,7 @@ import {
 } from "../services/credit-rating-service";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { assertModuleEnabled, assertPublicModuleEnabled } from "../services/module-service";
 import { createPaymentReference } from "../services/payment-service";
 import { creditBalance, debitAvailable, recordWalletTransaction } from "../services/wallet-service";
 
@@ -1165,7 +1166,7 @@ router.get("/public/intelli-store", async (_req, res, next) => {
             some: {
               // Same exclusion as the public programme list: a demo programme
               // must not put its products on the public storefront.
-              programme: { publicStatus: "ONGOING", isDemo: false }
+              programme: { publicStatus: "ONGOING", isDemo: false, storeEnabled: true }
             }
           }
         },
@@ -1181,7 +1182,7 @@ router.get("/public/intelli-store", async (_req, res, next) => {
           // public could book.
           isDemo: false,
           programmeLinks: {
-            some: { programme: { publicStatus: "ONGOING", isDemo: false } }
+            some: { programme: { publicStatus: "ONGOING", isDemo: false, storeEnabled: true } }
           }
         },
         orderBy: [{ county: "asc" }, { name: "asc" }],
@@ -1191,7 +1192,7 @@ router.get("/public/intelli-store", async (_req, res, next) => {
           // draft or demo programme must not have it surfaced here just
           // because one of their other programmes is public.
           programmeLinks: {
-            where: { programme: { publicStatus: "ONGOING", isDemo: false } },
+            where: { programme: { publicStatus: "ONGOING", isDemo: false, storeEnabled: true } },
             select: {
               programme: { include: { partner: { select: publicPartnerSelect } } }
             },
@@ -1232,6 +1233,7 @@ router.get("/public/intelli-store", async (_req, res, next) => {
 router.post("/public/intelli-store/credit-requests", async (req, res, next) => {
   try {
     const body = creditRequestCreateSchema.parse(req.body);
+    await assertPublicModuleEnabled("store", body.programmeId);
     const creditRequest = await createCreditRequestFromPayload({
       body,
       publicOnly: true
@@ -1273,6 +1275,7 @@ router.post("/intelli-store/credit-requests", requireAuth("store:write"), async 
           }
         : req.body;
     const body = creditRequestCreateSchema.parse(requestBody);
+    await assertModuleEnabled(req.user, "store", { programmeId: body.programmeId });
     const creditRequest = await createCreditRequestFromPayload({
       body,
       user: req.user
@@ -1361,6 +1364,7 @@ router.post("/public/intelli-store/booking-requests", async (req, res, next) => 
     if (!programme) {
       throw new ApiHttpError(404, "PROGRAMME_NOT_FOUND", "Selected program is not available for booking.");
     }
+    await assertPublicModuleEnabled("store", programme.id);
 
     const bookingRequest = await prisma.agentBookingRequest.create({
       data: {
@@ -1400,8 +1404,9 @@ router.post("/public/intelli-store/booking-requests", async (req, res, next) => 
   }
 });
 
-router.get("/intelli-store/suppliers", requireAuth("store:read"), async (_req, res, next) => {
+router.get("/intelli-store/suppliers", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const suppliers = await prisma.storeSupplier.findMany({
       orderBy: [{ status: "asc" }, { name: "asc" }],
       include: {
@@ -1417,6 +1422,7 @@ router.get("/intelli-store/suppliers", requireAuth("store:read"), async (_req, r
 
 router.post("/intelli-store/suppliers", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageCatalog(req.user);
     const body = storeSupplierSchema.parse(req.body);
 
@@ -1452,6 +1458,7 @@ router.post("/intelli-store/suppliers", requireAuth("store:write"), async (req, 
 
 router.patch("/intelli-store/suppliers/:id", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageCatalog(req.user);
     const supplierId = z.string().parse(req.params.id);
     const body = storeSupplierSchema.partial().parse(req.body);
@@ -1497,6 +1504,7 @@ router.patch("/intelli-store/suppliers/:id", requireAuth("store:write"), async (
 
 router.get("/intelli-store/products", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const products = await prisma.storeProduct.findMany({
       where: storeProductScopeForUser(req.user),
       orderBy: { createdAt: "desc" },
@@ -1511,6 +1519,7 @@ router.get("/intelli-store/products", requireAuth("store:read"), async (req, res
 
 router.post("/intelli-store/products", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageCatalog(req.user);
     const body = storeProductCreateSchema.parse(req.body);
     const programmeSettings = await validateProgrammeSettings(
@@ -1569,6 +1578,7 @@ router.post("/intelli-store/products", requireAuth("store:write"), async (req, r
 
 router.patch("/intelli-store/products/:id", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageCatalog(req.user);
     const productId = z.string().parse(req.params.id);
     const body = storeProductUpdateSchema.parse(req.body);
@@ -1655,6 +1665,7 @@ router.patch("/intelli-store/products/:id", requireAuth("store:write"), async (r
 
 router.get("/intelli-store/credit-requests", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const requests = await prisma.storeCreditRequest.findMany({
       where: creditRequestScopeForUser(req.user),
       orderBy: { createdAt: "desc" },
@@ -1669,6 +1680,7 @@ router.get("/intelli-store/credit-requests", requireAuth("store:read"), async (r
 
 router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const requestId = z.string().parse(req.params.id);
     const body = requestUpdateSchema.parse(req.body);
     const existing = await prisma.storeCreditRequest.findFirst({
@@ -1912,6 +1924,7 @@ router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), a
 
 router.post("/intelli-store/credit-requests/:id/repayments", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageStoreOperations(req.user);
     const requestId = z.string().parse(req.params.id);
     const body = repaymentCreateSchema.parse(req.body);
@@ -1992,8 +2005,9 @@ router.post("/intelli-store/credit-requests/:id/repayments", requireAuth("store:
   }
 });
 
-router.get("/intelli-store/payment-methods", requireAuth("store:read"), async (_req, res, next) => {
+router.get("/intelli-store/payment-methods", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     ok(res, STORE_PAYMENT_METHODS);
   } catch (error) {
     next(error);
@@ -2002,6 +2016,7 @@ router.get("/intelli-store/payment-methods", requireAuth("store:read"), async (_
 
 router.get("/intelli-store/reports/sales", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const filters = reportQuerySchema.parse(req.query);
     const requests = await prisma.storeCreditRequest.findMany({
       where: {
@@ -2077,6 +2092,7 @@ router.get("/intelli-store/reports/sales", requireAuth("store:read"), async (req
 
 router.get("/intelli-store/reports/loan-portfolio", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const filters = reportQuerySchema.parse(req.query);
     const now = new Date();
     const requests = await prisma.storeCreditRequest.findMany({
@@ -2216,6 +2232,7 @@ router.get("/intelli-store/reports/loan-portfolio", requireAuth("store:read"), a
 
 router.get("/intelli-store/booking-requests", requireAuth("store:read"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     const requests = await prisma.agentBookingRequest.findMany({
       where: bookingRequestScopeForUser(req.user),
       orderBy: { createdAt: "desc" },
@@ -2230,6 +2247,7 @@ router.get("/intelli-store/booking-requests", requireAuth("store:read"), async (
 
 router.patch("/intelli-store/booking-requests/:id", requireAuth("store:write"), async (req, res, next) => {
   try {
+    await assertModuleEnabled(req.user, "store");
     assertCanManageStoreOperations(req.user);
     const requestId = z.string().parse(req.params.id);
     const body = requestUpdateSchema.parse(req.body);

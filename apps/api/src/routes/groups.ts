@@ -15,15 +15,16 @@ import {
   type MeetingStep
 } from "@intellicash/shared";
 import { assertMeetingStepOrder } from "../domain/meeting-workflow";
+import { MEETING_FREQUENCIES, isMeetingTime, meetingDaysLabel, nairobiDayBounds } from "../domain/meeting-schedule";
 import { assertAppendOnlyOperation, signLedgerEntry } from "../domain/ledger";
 import {
   computeAndStoreCreditRating,
   computeCreditRating,
   latestCreditRating
 } from "../services/credit-rating-service";
-import { canDisburse } from "../domain/loan-math";
+import { canDisburse, normaliseInterestType } from "../domain/loan-math";
 import { AMOUNT_TOO_LARGE_MESSAGE, MAX_CENTS, MAX_CENTS_LABEL } from "../domain/money";
-import { proRataShareCents } from "../domain/share-out";
+import { allocateLargestRemainder } from "../domain/share-out";
 import { loadLoanPositions } from "../services/loan-position-service";
 import {
   assertMeetingWritable,
@@ -52,9 +53,12 @@ import {
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, derivePinVerifier, sha256 } from "../lib/crypto";
 import { canViewMemberContact, maskPhone } from "../lib/privacy";
-import { looksLikePhone, normalisePhone } from "../lib/phone";
-import { reconcileMembership } from "../services/membership-service";
+import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
+import { linkMembership, MemberAlreadyLinkedError, reconcileMembership } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
+import { assertModuleEnabled, modulesForGroup } from "../services/module-service";
+import { assertFollowsGroupRules, groupRules } from "../services/group-rules-service";
+import { assertMayCreateMemberLogin, memberAccountsEnabledFor, visibleMembershipsFor } from "../services/member-accounts-service";
 
 const router = Router();
 const credentialTransactionOptions = { timeout: 15_000 };
@@ -118,7 +122,33 @@ const pinRequestSchema = z.object({}).strict();
 const meetingCreateSchema = z.object({
   title: z.string().trim().min(2).max(200),
   scheduledAt: z.string().datetime(),
-  gpsCompliant: z.boolean().default(false)
+  gpsCompliant: z.boolean().default(false),
+  /**
+   * A phone that starts a meeting sends this: if the group already has a
+   * scheduled meeting that day with nothing recorded in it, that meeting is
+   * the one being held, so it is returned instead of a duplicate being made.
+   */
+  adoptScheduled: z.boolean().optional(),
+  /** PHONE for a meeting a treasurer holds on the phone. */
+  source: z.enum(["MANUAL", "PHONE"]).optional()
+});
+
+const meetingCancelSchema = z.object({
+  reason: z.string().trim().min(3).max(300)
+});
+
+const meetingPhoneLifecycleSchema = z.object({
+  /** What a person did on the phone. The server never infers either one. */
+  event: z.enum(["STARTED", "CLOSED"]),
+  /** When they did it, by the phone's clock. */
+  at: z.string().datetime()
+});
+
+const meetingScheduleSchema = z.object({
+  frequency: z.enum(MEETING_FREQUENCIES),
+  days: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+  time: z.string().refine(isMeetingTime, "Use 24-hour HH:mm, for example 14:00."),
+  remindersEnabled: z.boolean().optional()
 });
 
 const meetingUpdateSchema = z.object({
@@ -201,17 +231,39 @@ const meetingLedgerEntryTypes = [
   "WELFARE_SHARE_OUT"
 ] as const;
 
+/**
+ * The terms a loan was agreed at, sent by the phone with its disbursement so
+ * the server records THAT loan, not the group's current default: a treasurer
+ * may pick a longer due date for one loan, and a rate changed after the loan
+ * was made must not re-price it. Absent (older phones, the console), the
+ * group's policy applies as before.
+ */
+const loanTermsSchema = z.object({
+  termMonths: z.number().int().min(1).max(60),
+  interestRateBps: z.number().int().min(0).max(5000),
+  interestType: z.enum(["FLAT", "REDUCING"])
+});
+type LoanTerms = z.infer<typeof loanTermsSchema>;
+
 const meetingLedgerEntrySchema = z.object({
   memberId: z.string(),
   type: z.enum(meetingLedgerEntryTypes),
   amountCents: z.number().int().min(1).max(MAX_CENTS, AMOUNT_TOO_LARGE_MESSAGE),
+  loan: loanTermsSchema.optional(),
   description: z.string().trim().max(500).optional(),
   externalReference: z.string().max(120).optional(),
   clientRequestId: z.string().trim().min(4).max(120).optional()
 });
 
 const meetingLedgerBatchSchema = z.object({
-  entries: z.array(meetingLedgerEntrySchema).min(1).max(250)
+  entries: z.array(meetingLedgerEntrySchema).min(1).max(250),
+  /**
+   * WEB when typed in the console, which checks the group's own rules. Phones
+   * never send it: they enforce the rules themselves and are the book of
+   * record, so their syncs are never refused (a refused sync would strand a
+   * meeting held offline).
+   */
+  source: z.enum(["PHONE", "WEB"]).optional()
 });
 
 const offlineDevicePrepareSchema = z.object({
@@ -708,6 +760,8 @@ export async function appendLedgerEntry(
     description: string;
     externalReference?: string | null;
     clientRequestId?: string | null;
+    /** For a disbursement: the terms this loan was agreed at. */
+    loanTerms?: LoanTerms;
   }
 ) {
   if (input.clientRequestId) {
@@ -813,7 +867,7 @@ export async function appendLedgerEntry(
   // cycle guard above: a new caller cannot forget it, and until 31 Jul 2026
   // NOTHING created a Loan row, so interest was never charged on anything the
   // app recorded.
-  await projectLoanFromEntry(tx, ledgerEntry);
+  await projectLoanFromEntry(tx, ledgerEntry, input.loanTerms);
 
   if (input.meetingId) {
     const transactionTotal = await tx.ledgerEntry.count({ where: { meetingId: input.meetingId } });
@@ -840,7 +894,8 @@ export async function appendLedgerEntry(
  */
 async function projectLoanFromEntry(
   tx: Prisma.TransactionClient,
-  entry: { id: string; groupId: string; memberId: string | null; cycleId: string | null; type: string; amountCents: number; createdAt: Date }
+  entry: { id: string; groupId: string; memberId: string | null; cycleId: string | null; type: string; amountCents: number; createdAt: Date },
+  terms?: LoanTerms
 ) {
   if (!entry.memberId) return;
 
@@ -848,10 +903,12 @@ async function projectLoanFromEntry(
     // Read the policy through `tx`, not the global client: a read outside the
     // transaction could see a rate that the same transaction is changing.
     const policy = await tx.groupPolicy.findUnique({ where: { groupId: entry.groupId } });
-    const termMonths = policy?.defaultLoanTermMonths ?? 1;
+    const termMonths = terms?.termMonths ?? policy?.defaultLoanTermMonths ?? 1;
     // The rate is COPIED onto the loan rather than looked up later, so a group
     // raising its rate next month cannot reprice money already lent.
-    const interestRateBps = policy?.loanInterestRateBps ?? 0;
+    const interestRateBps = terms?.interestRateBps ?? policy?.loanInterestRateBps ?? 0;
+    // Same for the interest type: reducing or flat, fixed at disbursement.
+    const interestType = normaliseInterestType(terms?.interestType ?? policy?.interestType);
 
     const dueAt = new Date(entry.createdAt);
     dueAt.setMonth(dueAt.getMonth() + termMonths);
@@ -863,6 +920,7 @@ async function projectLoanFromEntry(
         cycleId: entry.cycleId,
         principalCents: entry.amountCents,
         interestRateBps,
+        interestType,
         termMonths,
         disbursedAt: entry.createdAt,
         dueAt,
@@ -958,7 +1016,8 @@ async function appendMeetingLedgerEntry(
     direction: rule.direction,
     description: entry.description ?? rule.label,
     externalReference: entry.externalReference,
-    clientRequestId: entry.clientRequestId
+    clientRequestId: entry.clientRequestId,
+    loanTerms: entry.type === "INTERNAL_LOAN_DISBURSEMENT" ? entry.loan : undefined
   });
 }
 
@@ -996,11 +1055,28 @@ async function computeShareOutPreview(
     orderBy: { createdAt: "desc" },
     select: { createdAt: true }
   });
+  // This cycle's shares: stamped with the active cycle. Older rows carry no
+  // stamp, and for those "since the last payout" is still the best evidence.
+  // Going by the payout alone let a cycle closed WITHOUT a payout leak its
+  // shares into the next share-out.
+  const activeCycle = await tx.cycle.findFirst({
+    where: { groupId, status: "ACTIVE" },
+    orderBy: { number: "desc" },
+    select: { id: true }
+  });
+  const unstampedSinceLastPayout: Prisma.LedgerEntryWhereInput = {
+    cycleId: null,
+    ...(lastShareOut ? { createdAt: { gt: lastShareOut.createdAt } } : {})
+  };
   const cycleWhere: Prisma.LedgerEntryWhereInput = {
     groupId,
     type: "SHARE_PURCHASE",
     direction: "CREDIT",
-    ...(lastShareOut ? { createdAt: { gt: lastShareOut.createdAt } } : {})
+    ...(activeCycle
+      ? { OR: [{ cycleId: activeCycle.id }, unstampedSinceLastPayout] }
+      : lastShareOut
+        ? { createdAt: { gt: lastShareOut.createdAt } }
+        : {})
   };
   const rows = await tx.ledgerEntry.groupBy({
     by: ["memberId"],
@@ -1040,14 +1116,15 @@ async function computeShareOutPreview(
     ? allocateEqually(welfarePoolCents, eligible.length)
     : new Array<number>(eligible.length).fill(0);
 
-  let allocated = 0;
-  const preview = eligible.map((row, index, filteredRows) => {
+  // Largest remainder: the pool splits to the cent, and the leftover cents go
+  // to whoever rounding cost most - not to whoever happens to be listed last.
+  const payouts = allocateLargestRemainder(
+    poolAmountCents,
+    eligible.map((row) => row._sum.amountCents ?? 0)
+  );
+  const preview = eligible.map((row, index) => {
     const sharePurchaseCents = row._sum.amountCents ?? 0;
-    const payoutCents =
-      index === filteredRows.length - 1
-        ? poolAmountCents - allocated
-        : proRataShareCents(poolAmountCents, sharePurchaseCents, totalShareCents);
-    allocated += payoutCents;
+    const payoutCents = payouts[index] ?? 0;
     const member = membersById.get(row.memberId!);
     const welfareCents = welfareShares[index] ?? 0;
     const loanOffsetCents = outstandingByMember.get(row.memberId!) ?? 0;
@@ -1220,10 +1297,32 @@ router.get("/meetings", requireAuth("meetings:read"), async (req, res, next) => 
  * dropped when the current contract cannot rate the group yet ("Pending").
  */
 async function withCurrentRating<
-  T extends { id: string; creditScores: Array<{ score: number; breakdownJson: string }> }
->(group: T): Promise<T> {
+  T extends { id: string; fundAccounts: Array<{ type: string; balanceCents: number }>; creditScores: Array<{ score: number; breakdownJson: string }> }
+>(group: T): Promise<T & { totalSavingsCents: number; totalSocialFundCents: number }> {
   const latest = group.creditScores[0];
-  if (!latest) return group;
+  
+  // Savings = the shares members bought this cycle. NOT the loan fund's cash
+  // balance, which is what this used to report: that falls every time a loan
+  // goes out, so a group that lent its savings read as having saved nothing.
+  // Unstamped rows are older than cycles and belong to the first one.
+  const shares = await prisma.ledgerEntry.groupBy({
+    by: ["direction"],
+    where: {
+      groupId: group.id,
+      type: "SHARE_PURCHASE",
+      OR: [{ cycle: { status: "ACTIVE" } }, { cycleId: null }]
+    },
+    _sum: { amountCents: true }
+  });
+  const totalSavingsCents = shares.reduce(
+    (sum, row) => sum + (row._sum.amountCents ?? 0) * (row.direction === "DEBIT" ? -1 : 1),
+    0
+  );
+  // The welfare fund as it stands: contributions and fines less welfare paid.
+  const socialFund = group.fundAccounts.find((f) => f.type === "SOCIAL");
+  const totalSocialFundCents = socialFund?.balanceCents ?? 0;
+
+  if (!latest) return { ...group, totalSavingsCents, totalSocialFundCents };
 
   let legacy = true;
   try {
@@ -1232,11 +1331,17 @@ async function withCurrentRating<
   } catch {
     legacy = true;
   }
-  if (!legacy) return group;
+  if (!legacy) return { ...group, totalSavingsCents, totalSocialFundCents };
 
   const rating = await latestCreditRating(group.id);
-  if (!rating || !rating.rated) return { ...group, creditScores: [] };
-  return { ...group, creditScores: [{ ...latest, score: rating.score }] };
+  if (!rating || !rating.rated) return { ...group, creditScores: [], totalSavingsCents, totalSocialFundCents };
+
+  return {
+    ...group,
+    creditScores: [{ ...latest, score: rating.score }],
+    totalSavingsCents,
+    totalSocialFundCents
+  };
 }
 
 router.get("/groups", requireAuth("groups:read"), async (req, res, next) => {
@@ -1314,7 +1419,9 @@ router.get("/groups/:id", requireAuth("groups:read"), async (req, res, next) => 
       include: groupInclude
     });
     if (!group) throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
-    ok(res, await withCurrentRating(group));
+    // Which optional modules this group's programmes have switched on, so the
+    // phone and console show only what the group can use.
+    ok(res, { ...(await withCurrentRating(group)), modules: await modulesForGroup(group.id) });
   } catch (error) {
     next(error);
   }
@@ -1718,13 +1825,42 @@ router.post(
 );
 
 /**
- * A group creates a sign-in account for one of its members (optional —
- * switched on from the app's settings). One account per member.
+ * A group gives one of its members a sign-in, so the member can see their own
+ * savings on their own phone.
+ *
+ * Only when the group has member accounts switched on (Edit group set-up on the
+ * phone; `GroupPolicy.memberAccountsEnabled`). IWL admins are not bound by it.
+ *
+ * A person is one login however many groups they save with: the account is
+ * found by the member's phone (compared in canonical form, so 0712… and
+ * +254712… are the same person). A member who already signs in for another
+ * group has this group LINKED to that login, not a second account made.
  */
 const memberAccountSchema = z.object({
   password: z.string().min(6).max(100),
   email: z.string().trim().email().optional()
 });
+
+async function assertMemberAccountsOn(user: AuthenticatedUser | undefined, groupId: string) {
+  if (user?.role === "IWL_ADMIN") return;
+  if (!(await memberAccountsEnabledFor(groupId))) {
+    throw new ApiHttpError(
+      403,
+      "MEMBER_ACCOUNTS_OFF",
+      "Member sign-ins are switched off for this group. Turn them on in Edit group set-up first."
+    );
+  }
+}
+
+async function findLoginForPhone(phone: string) {
+  const tail = phoneTail(phone);
+  if (tail.length < 9) return null;
+  const candidates = await prisma.user.findMany({
+    where: { phone: { contains: tail } },
+    select: { id: true, role: true, phone: true, memberId: true, name: true, email: true, groupId: true }
+  });
+  return candidates.find((candidate) => samePhone(candidate.phone, phone)) ?? null;
+}
 
 router.post(
   "/groups/:id/members/:memberId/account",
@@ -1739,33 +1875,69 @@ router.post(
         select: { id: true, fullName: true, phone: true }
       });
       if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+      if (req.user?.role !== "IWL_ADMIN") await assertMayCreateMemberLogin(groupId, req.user?.id ?? null);
 
-      const email = body.email ?? `${member.phone.replace(/[^0-9]/g, "")}@accounts.intellicash.app`;
-      const conflict = await prisma.user.findFirst({
-        where: { OR: [{ memberId: member.id }, { email }, { phone: member.phone }] },
-        select: { id: true, memberId: true }
-      });
-      if (conflict) {
-        throw new ApiHttpError(
-          409,
-          "ACCOUNT_EXISTS",
-          conflict.memberId === member.id
-            ? `${member.fullName} already has a sign-in account.`
-            : "An account with this phone or email already exists."
-        );
+      const existing = await findLoginForPhone(member.phone);
+      if (existing) {
+        if (existing.role !== "MEMBER") {
+          throw new ApiHttpError(
+            409,
+            "ACCOUNT_EXISTS",
+            "This phone number already signs in to another kind of account, so it cannot be a member sign-in too."
+          );
+        }
+        // Same person, another group: link this group to the login they have.
+        try {
+          await linkMembership(existing.id, member.id, groupId);
+        } catch (error) {
+          if (error instanceof MemberAlreadyLinkedError) {
+            throw new ApiHttpError(409, "ACCOUNT_EXISTS", `${member.fullName} already has a sign-in account.`);
+          }
+          throw error;
+        }
+        await appendAuditEvent({
+          actorUserId: req.user?.id,
+          entityType: "USER",
+          entityId: existing.id,
+          type: "MEMBER_ACCOUNT_CREATED",
+          payload: { memberId: member.id, groupId, createdBy: req.user?.id, linkedExistingLogin: true }
+        });
+        // Their password stays their own; this group's official does not set it.
+        ok(res.status(200), {
+          id: existing.id,
+          name: existing.name,
+          email: existing.email,
+          phone: existing.phone,
+          role: existing.role,
+          groupId: existing.groupId,
+          memberId: existing.memberId,
+          linkedExistingLogin: true
+        });
+        return;
       }
 
-      const user = await prisma.user.create({
-        data: {
-          name: member.fullName,
-          email,
-          phone: member.phone,
-          passwordHash: await bcrypt.hash(body.password, 12),
-          role: "MEMBER",
-          groupId,
-          memberId: member.id
-        },
-        select: { id: true, name: true, email: true, phone: true, role: true, groupId: true, memberId: true }
+      const email = body.email ?? `${member.phone.replace(/[^0-9]/g, "")}@accounts.intellicash.app`;
+      const emailTaken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (emailTaken) {
+        throw new ApiHttpError(409, "ACCOUNT_EXISTS", "An account with this email already exists.");
+      }
+
+      const passwordHash = await bcrypt.hash(body.password, 12);
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            name: member.fullName,
+            email,
+            phone: member.phone,
+            passwordHash,
+            role: "MEMBER",
+            groupId,
+            memberId: member.id
+          },
+          select: { id: true, name: true, email: true, phone: true, role: true, groupId: true, memberId: true }
+        });
+        await linkMembership(created.id, member.id, groupId, tx);
+        return created;
       });
 
       await appendAuditEvent({
@@ -1776,7 +1948,64 @@ router.post(
         payload: { memberId: member.id, groupId, createdBy: req.user?.id }
       });
 
-      ok(res.status(201), user);
+      ok(res.status(201), { ...user, linkedExistingLogin: false });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Sets a new starting password for a member who has forgotten theirs. The
+ * group's official hands it over in person, as with a new account.
+ *
+ * Only for a login that belongs to this group's member and to no other group:
+ * a person who also saves elsewhere keeps control of their own password, and
+ * one group's official must not be able to lock them out of another group.
+ */
+router.put(
+  "/groups/:id/members/:memberId/account/password",
+  requireAuth("members:write"),
+  async (req, res, next) => {
+    try {
+      const body = z.object({ password: z.string().min(6).max(100) }).parse(req.body);
+      const groupId = routeParam(req.params.id, "id");
+      await assertGroupAccess(req.user, groupId);
+      await assertMemberAccountsOn(req.user, groupId);
+      const member = await prisma.member.findFirst({
+        where: memberScopeForUser(req.user, { id: routeParam(req.params.memberId, "memberId"), groupId }),
+        select: { id: true, fullName: true, phone: true }
+      });
+      if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+
+      const login = await findLoginForPhone(member.phone);
+      if (!login || login.role !== "MEMBER") {
+        throw new ApiHttpError(404, "ACCOUNT_NOT_FOUND", `${member.fullName} has no sign-in yet.`);
+      }
+      const otherGroups = await prisma.userMembership.count({
+        where: { userId: login.id, NOT: { groupId } }
+      });
+      if (otherGroups > 0 && req.user?.role !== "IWL_ADMIN") {
+        throw new ApiHttpError(
+          409,
+          "SHARED_LOGIN",
+          `${member.fullName} also signs in for another group, so only they (or IWL support) can change the password.`
+        );
+      }
+
+      await prisma.user.update({
+        where: { id: login.id },
+        data: { passwordHash: await bcrypt.hash(body.password, 12) }
+      });
+      await prisma.session.deleteMany({ where: { userId: login.id } });
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "USER",
+        entityId: login.id,
+        type: "USER_PASSWORD_UPDATED",
+        payload: { memberId: member.id, groupId, method: "GROUP_RESET" }
+      });
+      ok(res, { reset: true });
     } catch (error) {
       next(error);
     }
@@ -1812,7 +2041,24 @@ router.get("/members/me", requireAuth("members:read"), async (req, res, next) =>
         "This account is not linked to a group member."
       );
     }
-    const passbook = await buildMemberPassbook(memberId);
+    // A member whose current group has switched sign-ins off is shown another
+    // group they belong to that has not; with none left, they are told why.
+    if (req.user?.role === "MEMBER" && req.user.id) {
+      const open = await visibleMembershipsFor(req.user.id);
+      if (!open.some((link) => link.memberId === memberId)) {
+        if (open.length === 0) {
+          throw new ApiHttpError(
+            403,
+            "MEMBER_ACCOUNTS_OFF",
+            "Your group has switched member sign-ins off. Ask your group's officials if you need to see your savings."
+          );
+        }
+        memberId = open[0]!.memberId;
+      }
+    }
+    const passbook = await buildMemberPassbook(memberId, {
+      cycleId: typeof req.query.cycleId === "string" ? req.query.cycleId : undefined
+    });
     if (!passbook) {
       throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member record not found.");
     }
@@ -1840,7 +2086,8 @@ router.get("/members/me/overview", requireAuth("members:read"), async (req, res,
       );
     }
     await reconcileMembership(userId);
-    ok(res, await buildMemberOverview(userId));
+    const open = new Set((await visibleMembershipsFor(userId)).map((link) => link.groupId));
+    ok(res, await buildMemberOverview(userId, { includeGroup: (groupId) => open.has(groupId) }));
   } catch (error) {
     next(error);
   }
@@ -1928,6 +2175,26 @@ router.post("/groups/:id/meetings", requireAuth("meetings:write"), async (req, r
   try {
     const payload = meetingCreateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+
+    if (payload.adoptScheduled) {
+      const { start, end } = nairobiDayBounds(new Date(payload.scheduledAt));
+      const planned = await prisma.meeting.findFirst({
+        where: {
+          groupId: routeParam(req.params.id, "id"),
+          status: "SCHEDULED",
+          scheduledAt: { gte: start, lt: end },
+          attendance: { none: {} },
+          ledgerEntries: { none: {} }
+        },
+        orderBy: { scheduledAt: "asc" },
+        include: meetingInclude(req.user)
+      });
+      if (planned) {
+        ok(res, planned);
+        return;
+      }
+    }
+
     const meeting = await prisma.$transaction(async (tx) => {
       // Belongs to the cycle it is made in. Without this every meeting made
       // through this route had no cycle, so closing a cycle archived none of
@@ -1942,7 +2209,8 @@ router.post("/groups/:id/meetings", requireAuth("meetings:write"), async (req, r
           title: payload.title,
           status: "SCHEDULED",
           scheduledAt: new Date(payload.scheduledAt),
-          gpsCompliant: payload.gpsCompliant
+          gpsCompliant: payload.gpsCompliant,
+          source: payload.source ?? "MANUAL"
         }
       });
       await createMeetingSteps(tx, created.id);
@@ -1997,6 +2265,206 @@ router.patch("/groups/:id/meetings/:meetingId", requireAuth("meetings:write"), a
     });
 
     ok(res, meeting);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Cancel a scheduled meeting that did not happen.
+ *
+ * Always a person's decision: nothing in the system cancels, starts or closes
+ * a meeting because its time passed. Refused once anything was recorded in
+ * it - a meeting with attendance or money happened, whatever its status says.
+ */
+router.post("/groups/:id/meetings/:meetingId/cancel", requireAuth("meetings:write"), async (req, res, next) => {
+  try {
+    const payload = meetingCancelSchema.parse(req.body);
+    const groupId = routeParam(req.params.id, "id");
+    const meetingId = routeParam(req.params.meetingId, "meetingId");
+    await assertGroupAccess(req.user, groupId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.meeting.findFirst({
+        where: { id: meetingId, groupId },
+        include: { _count: { select: { attendance: true, ledgerEntries: true } } }
+      });
+      if (!existing) throw new ApiHttpError(404, "MEETING_NOT_FOUND", "Meeting does not exist or is outside this group.");
+      if (existing.status === "CANCELLED") {
+        const meeting = await tx.meeting.findUniqueOrThrow({ where: { id: meetingId }, include: meetingInclude(req.user) });
+        return { meeting, changed: false };
+      }
+      if (!["SCHEDULED", "KEY_UNLOCK_PENDING"].includes(existing.status)) {
+        throw new ApiHttpError(409, "MEETING_NOT_CANCELLABLE", "Only a meeting that has not started can be cancelled.", {
+          status: existing.status
+        });
+      }
+      if (existing._count.attendance > 0 || existing._count.ledgerEntries > 0) {
+        throw new ApiHttpError(
+          409,
+          "MEETING_HAS_RECORDS",
+          "Attendance or money is already recorded in this meeting, so it took place and cannot be cancelled."
+        );
+      }
+      const meeting = await tx.meeting.update({
+        where: { id: meetingId },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: new Date(),
+          cancelledByUserId: req.user?.id ?? null,
+          cancelReason: payload.reason
+        },
+        include: meetingInclude(req.user)
+      });
+      return { meeting, changed: true };
+    });
+
+    if (result.changed) {
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "MEETING",
+        entityId: meetingId,
+        type: "MEETING_CANCELLED",
+        payload: { groupId, meetingId, reason: payload.reason }
+      });
+    }
+
+    ok(res, result.meeting);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * A phone reports what its user did to a meeting held on the phone.
+ *
+ * The phone runs its own three-key unlock offline, so it cannot go through
+ * /open (which checks the keys here). Without this a phone-held meeting stayed
+ * SCHEDULED on the server forever. Each event is the record of a person's
+ * action; the server never infers either one from the clock.
+ *
+ * Safe to resend: an event that already happened returns the meeting as it
+ * is. A meeting never moves backwards, and a cancelled one is not revived.
+ */
+router.post("/groups/:id/meetings/:meetingId/phone-lifecycle", requireAuth("meetings:write"), async (req, res, next) => {
+  try {
+    const payload = meetingPhoneLifecycleSchema.parse(req.body);
+    const groupId = routeParam(req.params.id, "id");
+    const meetingId = routeParam(req.params.meetingId, "meetingId");
+    await assertGroupAccess(req.user, groupId);
+
+    // A phone clock running ahead must not date a meeting in the future.
+    const now = new Date();
+    const at = new Date(Math.min(new Date(payload.at).getTime(), now.getTime()));
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await assertMeetingInGroup(tx, groupId, meetingId);
+      if (existing.status === "CANCELLED") {
+        throw new ApiHttpError(409, "MEETING_CANCELLED", "This meeting was cancelled, so it cannot be started or closed.");
+      }
+
+      let data: Prisma.MeetingUpdateInput | null = null;
+      if (payload.event === "STARTED" && ["SCHEDULED", "KEY_UNLOCK_PENDING"].includes(existing.status)) {
+        data = { status: "IN_PROGRESS", openedAt: at };
+      }
+      if (payload.event === "CLOSED" && ["SCHEDULED", "KEY_UNLOCK_PENDING", "IN_PROGRESS"].includes(existing.status)) {
+        data = { status: "SEALED", openedAt: existing.openedAt ?? at, closedAt: at };
+      }
+
+      const meeting = data
+        ? await tx.meeting.update({ where: { id: meetingId }, data, include: meetingInclude(req.user) })
+        : await tx.meeting.findUniqueOrThrow({ where: { id: meetingId }, include: meetingInclude(req.user) });
+      return { meeting, changed: data !== null };
+    });
+
+    if (result.changed) {
+      await appendAuditEvent({
+        actorUserId: req.user?.id,
+        entityType: "MEETING",
+        entityId: meetingId,
+        type: payload.event === "STARTED" ? "MEETING_STARTED_ON_PHONE" : "MEETING_CLOSED_ON_PHONE",
+        payload: { groupId, meetingId, at: at.toISOString() }
+      });
+      // "Has started" is news only while it is true. A start that reaches the
+      // server hours later, after the phone was offline, is not texted.
+      if (payload.event === "STARTED" && now.getTime() - at.getTime() <= 2 * 60 * 60 * 1000) {
+        await notifyMeetingActive(groupId, result.meeting.title);
+      }
+    }
+
+    ok(res, result.meeting);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * The group's meeting days and time. Used only to remind members - the
+ * reminder planner puts the next meeting on the calendar so the reminders
+ * have something to be about. It never opens one.
+ */
+router.put("/groups/:id/meeting-schedule", requireAuth("meetings:write"), async (req, res, next) => {
+  try {
+    const payload = meetingScheduleSchema.parse(req.body);
+    const groupId = routeParam(req.params.id, "id");
+    await assertGroupAccess(req.user, groupId);
+
+    const days = [...new Set(payload.days)].sort((a, b) => a - b);
+    const before = await prisma.group.findUniqueOrThrow({
+      where: { id: groupId },
+      select: { meetingFrequency: true, meetingDays: true, meetingTime: true }
+    });
+    const scheduleChanged =
+      before.meetingFrequency !== payload.frequency ||
+      before.meetingDays !== JSON.stringify(days) ||
+      before.meetingTime !== payload.time;
+    const group = await prisma.group.update({
+      where: { id: groupId },
+      data: {
+        meetingFrequency: payload.frequency,
+        meetingDays: JSON.stringify(days),
+        meetingTime: payload.time,
+        meetingDay: meetingDaysLabel(days),
+        ...(payload.remindersEnabled !== undefined ? { remindersEnabled: payload.remindersEnabled } : {})
+      },
+      select: {
+        id: true,
+        meetingFrequency: true,
+        meetingTime: true,
+        meetingDay: true,
+        remindersEnabled: true
+      }
+    });
+
+    // Plans the reminder planner made from the OLD days no longer match: their
+    // reminders would send members to a meeting on a day the group does not
+    // meet. Only the planner's own future plans with nothing recorded go; a
+    // meeting a person scheduled, or one that happened, is never touched. The
+    // planner puts the right day on the calendar on its next run.
+    // Saving the same days again withdraws nothing: re-planning would send the
+    // same reminder twice.
+    const withdrawn = scheduleChanged
+      ? await prisma.meeting.deleteMany({
+          where: {
+            groupId,
+            source: "AUTO_SCHEDULE",
+            status: "SCHEDULED",
+            scheduledAt: { gt: new Date() },
+            attendance: { none: {} },
+            ledgerEntries: { none: {} }
+          }
+        })
+      : { count: 0 };
+
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "GROUP",
+      entityId: groupId,
+      type: "MEETING_SCHEDULE_UPDATED",
+      payload: { groupId, frequency: payload.frequency, days, time: payload.time, plansWithdrawn: withdrawn.count }
+    });
+
+    ok(res, { ...group, meetingDays: days });
   } catch (error) {
     next(error);
   }
@@ -2073,6 +2541,9 @@ router.post("/groups/:id/meetings/:meetingId/open", requireAuth("meetings:write"
     const meeting = await prisma.$transaction(async (tx) => {
       const existing = await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
       if (existing.status === "SEALED") throw new ApiHttpError(400, "MEETING_SEALED", "A sealed meeting cannot be reopened.");
+      if (existing.status === "CANCELLED") {
+        throw new ApiHttpError(400, "MEETING_CANCELLED", "This meeting was cancelled. Schedule a new one instead.");
+      }
       for (const submission of payload.keySubmissions) {
         await recordMeetingKeySubmission(tx, req.user, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"), submission);
       }
@@ -2392,8 +2863,17 @@ router.post("/groups/:id/ledger", requireAuth("ledger:write"), async (req, res, 
   try {
     const payload = ledgerCreateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
-    const ledgerEntry = await prisma.$transaction(async (tx) =>
-      appendLedgerEntry(tx, {
+    const ledgerEntry = await prisma.$transaction(async (tx) => {
+      const shape = (meetingLedgerRules as Partial<Record<string, { direction: "CREDIT" | "DEBIT" }>>)[payload.type];
+      // A mis-shaped entry is refused by appendLedgerEntry with its own reason;
+      // the group's rules only speak to an entry that is otherwise valid.
+      if (!shape || shape.direction === payload.direction) await assertFollowsGroupRules(tx, routeParam(req.params.id, "id"), {
+        type: payload.type,
+        amountCents: payload.amountCents,
+        memberId: payload.memberId,
+        meetingId: payload.meetingId
+      });
+      return appendLedgerEntry(tx, {
         groupId: routeParam(req.params.id, "id"),
         memberId: payload.memberId,
         meetingId: payload.meetingId,
@@ -2404,8 +2884,8 @@ router.post("/groups/:id/ledger", requireAuth("ledger:write"), async (req, res, 
         description: payload.description,
         externalReference: payload.externalReference,
         clientRequestId: payload.clientRequestId
-      })
-    );
+      });
+    });
 
     await appendAuditEvent({
       actorUserId: req.user?.id,
@@ -2431,8 +2911,17 @@ router.post("/groups/:id/meetings/:meetingId/ledger/batch", requireAuth("ledger:
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
     const entries = await prisma.$transaction(async (tx) => {
       await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
+      const rules = payload.source === "WEB" ? await groupRules(tx, routeParam(req.params.id, "id")) : null;
       const created = [];
       for (const entry of payload.entries) {
+        if (rules) {
+          await assertFollowsGroupRules(
+            tx,
+            routeParam(req.params.id, "id"),
+            { ...entry, meetingId: routeParam(req.params.meetingId, "meetingId") },
+            rules
+          );
+        }
         created.push(await appendMeetingLedgerEntry(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"), entry));
       }
       return created;
@@ -2517,7 +3006,10 @@ router.post("/groups/:id/meetings/:meetingId/offline-sync", requireAuth("ledger:
               select: { id: true }
             });
             if (existing) {
-              throw new ApiHttpError(409, "DUPLICATE_CLIENT_REQUEST", "This offline entry was already synced.");
+              // A replay after a lost response is an idempotent success, not
+              // a conflict. The phone must be able to converge after retry.
+              synced.push({ kind: "ledgerEntry", id: existing.id });
+              continue;
             }
           }
           const saved = await appendMeetingLedgerEntry(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"), entry);
@@ -2572,6 +3064,12 @@ router.post("/groups/:id/meetings/:meetingId/share-out/preview", requireAuth("le
         distributeWelfare: payload.distributeWelfare
       });
     });
+    // Partners, lenders and read-only viewers see the split, not who gets it
+    // (Kenya DPA 2019: minimisation). The group and its officials keep names.
+    if (["PARTNER_OFFICER", "LENDER", "READ_ONLY"].includes(req.user?.role ?? "")) {
+      ok(res, { ...preview, rows: preview.rows.map((row) => ({ ...row, memberId: null, member: null })) });
+      return;
+    }
     ok(res, preview);
   } catch (error) {
     next(error);
@@ -2719,6 +3217,7 @@ router.post("/groups/:id/votes", requireAuth("votes:write"), async (req, res, ne
   try {
     const payload = voteCreateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    await assertModuleEnabled(req.user, "voting", { groupId: routeParam(req.params.id, "id") });
     const vote = await prisma.$transaction(async (tx) => {
       if (payload.meetingId) await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), payload.meetingId);
       const hashPayload = {
@@ -2758,4 +3257,3 @@ router.post("/groups/:id/votes", requireAuth("votes:write"), async (req, res, ne
 });
 
 export { router as groupsRouter };
-

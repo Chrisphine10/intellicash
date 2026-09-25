@@ -1,6 +1,16 @@
+/**
+ * The programme performance pack: what a partner reads to judge whether groups
+ * are doing well and what the village agents are actually delivering.
+ *
+ * Built to the Kenya Data Protection Act's minimisation principles: no member
+ * is identified, small groups have their money figures suppressed, and no
+ * free text leaves the database.
+ */
+
 import { prisma } from "../lib/prisma";
 import { latestCreditRating } from "./credit-rating-service";
 import { loadLoanPositions } from "./loan-position-service";
+import { SMALL_GROUP_THRESHOLD as THRESHOLD, buildGroupStatement, type GroupStatement } from "./vsla-statement-service";
 
 /**
  * The programme performance pack: what a partner reads to judge whether groups
@@ -37,7 +47,7 @@ import { loadLoanPositions } from "./loan-position-service";
  * nothing here can be older than the data it describes.
  */
 
-export const SMALL_GROUP_THRESHOLD = 5;
+export const SMALL_GROUP_THRESHOLD = THRESHOLD;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const OPENED_MEETING_STATUSES = ["IN_PROGRESS", "SEALED", "SYNC_CONFLICT"];
@@ -69,7 +79,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
   const now = new Date();
   const inPeriod = { gte: period.from, lte: period.to };
 
-  const [groups, members, meetings, ledger, visits, sessions, ratings, actionsRaised, actionsClosed, openActions, topics] =
+  const [groups, members, meetings, visits, sessions, ratings, actionsRaised, actionsClosed, openActions, topics] =
     await Promise.all([
       prisma.group.findMany({
         where: { id: { in: groupIds } },
@@ -89,21 +99,20 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
         where: { groupId: { in: groupIds }, status: "ACTIVE" },
         _count: { _all: true }
       }),
+      // A cancelled meeting was never going to happen, and one still in the
+      // future has not had the chance to: neither counts as scheduled-and-missed.
       prisma.meeting.findMany({
-        where: { groupId: { in: groupIds }, scheduledAt: inPeriod },
+        where: {
+          groupId: { in: groupIds },
+          scheduledAt: { gte: period.from, lte: period.to < now ? period.to : now },
+          status: { not: "CANCELLED" }
+        },
         select: {
           groupId: true,
           status: true,
           attendance: { select: { status: true } },
           _count: { select: { ledgerEntries: true } }
         }
-      }),
-      // Totals by group and type. Grouped in the database: no individual line,
-      // and no member, ever reaches this process.
-      prisma.ledgerEntry.groupBy({
-        by: ["groupId", "type"],
-        where: { groupId: { in: groupIds } },
-        _sum: { amountCents: true }
       }),
       prisma.groupVisit.findMany({
         where: { groupId: { in: groupIds }, startedAt: inPeriod },
@@ -190,8 +199,15 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
   for (const row of latestAssessments) {
     if (!latestAssessmentByGroup.has(row.visit.groupId)) latestAssessmentByGroup.set(row.visit.groupId, row);
   }
-  const ledgerSum = (groupId: string, type: string) =>
-    ledger.find((row) => row.groupId === groupId && row.type === type)?._sum.amountCents ?? 0;
+  // Money comes from each group's statement for its CURRENT CYCLE - the same
+  // figures the group, the portfolio report and the phone show. It used to be
+  // every ledger row ever, so shares already paid out at share-out were still
+  // reported as savings, and the "social fund" ignored fines and welfare paid.
+  const statements = new Map<string, GroupStatement>();
+  for (const group of groups) {
+    const statement = await buildGroupStatement(group.id);
+    if (statement) statements.set(group.id, statement);
+  }
 
   // ---- 2. Group performance ------------------------------------------------
   const groupRows = [];
@@ -204,9 +220,10 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
     const attendanceRows = held.flatMap((meeting) => meeting.attendance);
     const present = attendanceRows.filter((row) => PRESENT_STATUSES.includes(row.status)).length;
 
-    const savings = ledgerSum(group.id, "SHARE_PURCHASE");
-    const social = ledgerSum(group.id, "SOCIAL_CONTRIBUTION");
-    const disbursed = ledgerSum(group.id, "INTERNAL_LOAN_DISBURSEMENT");
+    const statement = statements.get(group.id);
+    const savings = statement?.loanFund.sharesCents ?? 0;
+    const social = statement?.socialFund.closingCents ?? 0;
+    const disbursed = statement?.loanFund.disbursedCents ?? 0;
     const loans = loanStats.get(group.id) ?? { active: 0, outstanding: 0, atRisk: 0, pastDue: 0 };
 
     const rating = await latestCreditRating(group.id);
@@ -233,7 +250,8 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
       activeLoans: loans.active,
       loansPastDue: loans.pastDue,
       loanBookCents: suppressed ? null : loans.outstanding,
-      par30Rate: pct(loans.atRisk, loans.outstanding),
+      // A small group's arrears describe one or two people: withheld too.
+      par30Rate: suppressed ? null : pct(loans.atRisk, loans.outstanding),
       assessmentPercent: assessment ? Math.round(assessment.percentage * 10) / 10 : null,
       assessmentBand: assessment?.bandLabel ?? null,
       assessedAt: assessment?.visit.startedAt ?? null,
@@ -248,8 +266,9 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
   // point at anyone. Withheld only if the whole scope is itself that small.
   const totalActiveMembers = groupRows.reduce((sum, row) => sum + row.activeMembers, 0);
   const totalsSuppressed = totalActiveMembers < SMALL_GROUP_THRESHOLD;
-  const sumAll = (type: string) => groups.reduce((sum, group) => sum + ledgerSum(group.id, type), 0);
-  const totalDisbursed = sumAll("INTERNAL_LOAN_DISBURSEMENT");
+  const sumStatements = (pick: (statement: GroupStatement) => number) =>
+    [...statements.values()].reduce((sum, statement) => sum + pick(statement), 0);
+  const totalDisbursed = sumStatements((statement) => statement.loanFund.disbursedCents);
   const allLoans = [...loanStats.values()].reduce(
     (sum, stats) => ({
       active: sum.active + stats.active,
@@ -357,8 +376,8 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
     performance: {
       totals: {
         suppressed: totalsSuppressed,
-        savingsCents: totalsSuppressed ? null : sumAll("SHARE_PURCHASE"),
-        socialFundCents: totalsSuppressed ? null : sumAll("SOCIAL_CONTRIBUTION"),
+        savingsCents: totalsSuppressed ? null : sumStatements((statement) => statement.loanFund.sharesCents),
+        socialFundCents: totalsSuppressed ? null : sumStatements((statement) => statement.socialFund.closingCents),
         loansDisbursedCents: totalsSuppressed ? null : totalDisbursed,
         loanBookCents: totalsSuppressed ? null : allLoans.outstanding,
         activeLoans: allLoans.active,

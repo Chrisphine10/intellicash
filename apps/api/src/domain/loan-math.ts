@@ -3,7 +3,11 @@
  * every function takes `asOf` so results are reproducible in a test and in a
  * report run months apart.
  *
- * INTEREST MODEL (decided 30 Jul 2026): FLAT MONTHLY ON THE ORIGINAL PRINCIPAL.
+ * INTEREST MODEL (decided 30 Jul 2026): FLAT MONTHLY ON THE ORIGINAL PRINCIPAL,
+ * with REDUCING BALANCE available per group since 24 Sep 2026 (see
+ * `reducingInterestCents`). Both accrue month by month; the phone implements
+ * the same rules in lib/core/utils/loan_accrual.dart and both are checked
+ * against qa/fixtures/loan-accrual-cases.json.
  *
  *   interest = principal x (rateBps / 10_000) x elapsedMonths
  *
@@ -45,15 +49,86 @@ export function chargeableMonths(
   return Math.min(Math.max(0, termMonths), elapsedMonths(disbursedAt, asOf));
 }
 
+/**
+ * FLAT: interest on the original principal every month (the model above).
+ * REDUCING: each month's interest is charged on the principal still unpaid at
+ * the START of that month. Groups choose; the loan keeps the type it was lent
+ * under. Both charge whole completed months only, capped at the term.
+ */
+export type InterestType = "FLAT" | "REDUCING";
+
+export function normaliseInterestType(value: string | null | undefined): InterestType {
+  return value === "REDUCING" ? "REDUCING" : "FLAT";
+}
+
+/** Money applied to one loan, and when. Reducing-balance interest needs the dates. */
+export interface LoanApplication {
+  at: Date;
+  cents: number;
+}
+
+/**
+ * Reducing-balance interest, month by month.
+ *
+ * For month m (1-based) the charge is rate x principal unpaid at the start of
+ * the month, booked at its end and rounded to the cent. Money paid during a
+ * month clears interest already booked first, then principal, so it lowers the
+ * NEXT month's charge, never the current one. A payment exactly at a month's
+ * end counts in the following month.
+ */
+function reducingInterestCents(input: {
+  principalCents: number;
+  interestRateBps: number;
+  months: number;
+  disbursedAt: Date;
+  applications: LoanApplication[];
+}): number {
+  const payments = [...input.applications].sort((a, b) => a.at.getTime() - b.at.getTime());
+  let principalLeft = input.principalCents;
+  let unpaidInterest = 0;
+  let total = 0;
+  let next = 0;
+  const start = input.disbursedAt.getTime();
+
+  for (let month = 1; month <= input.months; month += 1) {
+    const charge = Math.round((principalLeft * input.interestRateBps) / 10_000);
+    const end = start + month * MONTH_MS;
+    while (next < payments.length && payments[next]!.at.getTime() < end) {
+      let cents = payments[next]!.cents;
+      const toInterest = Math.min(cents, unpaidInterest);
+      unpaidInterest -= toInterest;
+      cents -= toInterest;
+      principalLeft = Math.max(0, principalLeft - cents);
+      next += 1;
+    }
+    unpaidInterest += charge;
+    total += charge;
+  }
+  return total;
+}
+
 export function accruedInterestCents(input: {
   principalCents: number;
   interestRateBps: number;
   termMonths: number;
   disbursedAt: Date;
   asOf: Date;
+  interestType?: InterestType | string | null;
+  /** Money applied to this loan; only REDUCING needs it. */
+  applications?: LoanApplication[];
 }): number {
   const months = chargeableMonths(input.disbursedAt, input.termMonths, input.asOf);
   if (months === 0 || input.interestRateBps <= 0) return 0;
+
+  if (normaliseInterestType(input.interestType) === "REDUCING") {
+    return reducingInterestCents({
+      principalCents: input.principalCents,
+      interestRateBps: input.interestRateBps,
+      months,
+      disbursedAt: input.disbursedAt,
+      applications: (input.applications ?? []).filter((entry) => entry.at.getTime() <= input.asOf.getTime())
+    });
+  }
 
   // Integer cents throughout. Round once at the end rather than per month, so
   // twelve monthly roundings cannot drift away from the annual figure.
@@ -82,6 +157,8 @@ export function loanBalance(input: {
   disbursedAt: Date;
   repaidCents: number;
   asOf: Date;
+  interestType?: InterestType | string | null;
+  applications?: LoanApplication[];
 }): LoanBalance {
   const interestCents = accruedInterestCents(input);
   const owed = input.principalCents + interestCents;
@@ -149,6 +226,8 @@ export interface MemberLoanInput {
   interestRateBps: number;
   termMonths: number;
   disbursedAt: Date;
+  /** FLAT unless the loan was lent under reducing-balance rules. */
+  interestType?: InterestType | string | null;
 }
 
 /** One repayment by the member, whichever loan the ledger row happens to point at. */
@@ -229,7 +308,10 @@ export function memberLoanPosition<L extends MemberLoanInput>(
     .map(({ repayment }) => repayment);
 
   const state = new Map(
-    ordered.map((loan) => [loan.id, { applied: 0, surplus: 0, settledAt: null as Date | null }])
+    ordered.map((loan) => [
+      loan.id,
+      { applied: 0, surplus: 0, settledAt: null as Date | null, applications: [] as LoanApplication[] }
+    ])
   );
   const allocations: LoanAllocation[] = [];
 
@@ -244,13 +326,16 @@ export function memberLoanPosition<L extends MemberLoanInput>(
       if (position.settledAt || remaining <= 0) continue;
 
       const owed =
-        loan.principalCents + accruedInterestCents({ ...loan, asOf: repayment.at }) - position.applied;
+        loan.principalCents +
+        accruedInterestCents({ ...loan, asOf: repayment.at, applications: position.applications }) -
+        position.applied;
       if (owed <= 0) {
         position.settledAt = repayment.at;
         continue;
       }
       const take = Math.min(remaining, owed);
       position.applied += take;
+      position.applications.push({ at: repayment.at, cents: take });
       remaining -= take;
       allocations.push({ repaymentId: repayment.id ?? null, loanId: loan.id, cents: take });
       if (take === owed) position.settledAt = repayment.at;
@@ -264,6 +349,7 @@ export function memberLoanPosition<L extends MemberLoanInput>(
     const balance = loanBalance({
       ...loan,
       repaidCents: position.applied,
+      applications: position.applications,
       asOf: position.settledAt ?? asOf
     });
     return {

@@ -21,7 +21,9 @@ import {
   countyCoordinates,
   dateTimeLocalInput,
   fallbackGoogleMapsApiKey,
+  isMeetingOverdue,
   meetingStatusClass,
+  meetingStatusLabel,
   projectKenyaPoint
 } from "../../../features/meetings/model";
 import type {
@@ -227,7 +229,29 @@ export default function MeetingsPage() {
   const canUseMeetingEntry = user?.role === "GROUP_ACCOUNT" && canManageMeetings;
 
   function canEditMeeting(meeting: MeetingWithGroup) {
-    return canManageMeetings && meeting.status !== "IN_PROGRESS" && meeting.status !== "SEALED";
+    return canManageMeetings && ["SCHEDULED", "KEY_UNLOCK_PENDING"].includes(meeting.status);
+  }
+
+  // Scheduled meetings whose time passed without anyone starting them. The
+  // system never starts or cancels a meeting on its own; an official decides.
+  const overdueMeetings = meetings
+    .filter((meeting) => isMeetingOverdue(meeting))
+    .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
+  async function cancelMeeting(meeting: MeetingWithGroup) {
+    const reason = window.prompt(`Why did "${meeting.title}" not take place?`, "The meeting did not take place");
+    if (!reason || reason.trim().length < 3) return;
+    setMessage(null);
+    try {
+      await apiFetch<MeetingWithGroup>(`/groups/${meeting.group.id}/meetings/${meeting.id}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      await loadMeetingsWorkspace();
+      setMessage({ ok: true, text: `${meeting.title} was cancelled. Members get no more reminders for it.` });
+    } catch (cancelError) {
+      setMessage({ ok: false, text: cancelError instanceof Error ? cancelError.message : "Meeting could not be cancelled" });
+    }
   }
 
   function openEditMeeting(meeting: MeetingWithGroup) {
@@ -446,6 +470,42 @@ export default function MeetingsPage() {
       </section>
       ) : null}
 
+      {!isMember && canManageMeetings && overdueMeetings.length > 0 ? (
+        <section className="data-card">
+          <header>
+            <div>
+              <h3>Didn&apos;t happen?</h3>
+              <span>
+                These meetings were scheduled but nobody started them. Start one late from the
+                group&apos;s meetings page, or cancel it so members stop being reminded.
+              </span>
+            </div>
+            <span className="pill red">{overdueMeetings.length} not started</span>
+          </header>
+          <div className="list">
+            {overdueMeetings.slice(0, 10).map((meeting) => (
+              <div className="list-row" key={meeting.id}>
+                <div>
+                  <strong>{meeting.title}</strong>
+                  <span>
+                    {meeting.group.name} - {new Date(meeting.scheduledAt).toLocaleString("en-KE")}
+                  </span>
+                </div>
+                <div className="table-action-group">
+                  <Link className="button secondary table-action-button" href={`/dashboard/groups/${meeting.group.id}/meetings`}>
+                    Start
+                  </Link>
+                  <button className="button secondary table-action-button" onClick={() => cancelMeeting(meeting)} type="button">
+                    <X size={16} />
+                    Cancel meeting
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {(!isMember || memberView === "meetings") ? (
       <section className="data-card">
         <header>
@@ -478,7 +538,7 @@ export default function MeetingsPage() {
                         <h4>{meeting.title}</h4>
                         <small>{new Date(meeting.scheduledAt).toLocaleString("en-KE")}</small>
                       </div>
-                      <span className={meetingStatusClass(meeting.status)}>{humanizeEnum(meeting.status)}</span>
+                      <span className={meetingStatusClass(meeting.status, meeting.scheduledAt)}>{meetingStatusLabel(meeting)}</span>
                     </header>
                     <div className="record-card-meta">
                       <div>
@@ -558,8 +618,8 @@ export default function MeetingsPage() {
             {
               key: "status",
               header: "Status",
-              value: (meeting) => humanizeEnum(meeting.status),
-              cell: (meeting) => <span className={meetingStatusClass(meeting.status)}>{humanizeEnum(meeting.status)}</span>
+              value: (meeting) => meetingStatusLabel(meeting),
+              cell: (meeting) => <span className={meetingStatusClass(meeting.status, meeting.scheduledAt)}>{meetingStatusLabel(meeting)}</span>
             },
             {
               key: "unlock",

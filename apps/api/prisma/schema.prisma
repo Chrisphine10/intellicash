@@ -96,6 +96,7 @@ model Session {
   lastUsedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
 }
 
 model ApiKey {
@@ -191,6 +192,12 @@ model Programme {
   fundingDeadline  DateTime?
   allowInvestments Boolean   @default(true)
   allowDonations   Boolean   @default(true)
+
+  /// Optional modules, switched on per programme by an IWL admin. A group has
+  /// a module when ANY programme it belongs to has it on. Both start off:
+  /// Intelli-Store is not open to groups yet, and voting is opt-in.
+  storeEnabled  Boolean @default(false)
+  votingEnabled Boolean @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -594,6 +601,7 @@ model StoreCreditRepayment {
 
   request     StoreCreditRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   installment StoreCreditInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+
 }
 
 model AgentBookingRequest {
@@ -657,6 +665,14 @@ model Group {
   sourceSystem                 String?
   sourceReference              String?
   meetingDay                   String?
+  /// Structured meeting schedule, used only to remind members. WEEKLY,
+  /// BIWEEKLY or MONTHLY; days are a JSON array of ISO weekdays (1 = Monday);
+  /// time is "HH:mm" in Africa/Nairobi. `meetingDay` above stays as the
+  /// human-readable version for older screens.
+  meetingFrequency             String?
+  meetingDays                  String?
+  meetingTime                  String?
+  remindersEnabled             Boolean  @default(true)
   gpsLatitude                  Float?
   gpsLongitude                 Float?
   gpsRadiusMeters              Int      @default(50)
@@ -1410,11 +1426,24 @@ model Meeting {
   /// have no such proof, and inventing one would be worse than admitting it.
   sealedByMemberId String?
 
+  /// Where the meeting came from: MANUAL (scheduled by a person on the web),
+  /// AUTO_SCHEDULE (made by the reminder planner from the group's meeting
+  /// days, only so members can be reminded) or PHONE (a meeting a treasurer
+  /// held on the phone). None of them is ever opened by the system itself.
+  source String @default("MANUAL")
+
+  /// A scheduled meeting that did not happen, cancelled by an official. Only a
+  /// meeting with no attendance or money can be cancelled.
+  cancelledAt       DateTime?
+  cancelledByUserId String?
+  cancelReason      String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   group                    Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   cycle                    Cycle?                    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  reminders                MeetingReminder[]
   steps                    MeetingStepRecord[]
   attendance               Attendance[]
   keySubmissions           MeetingKeySubmission[]
@@ -1426,6 +1455,29 @@ model Meeting {
   polls                    Poll[]
 
   @@index([groupId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+/// One reminder sent (or being sent) for one scheduled meeting.
+///
+/// The row is claimed before anything is sent and the unique key makes a
+/// second claim fail, so a reminder goes out at most once - across restarts
+/// and even if two API processes ever run the reminder loop together.
+/// `scheduledFor` is the meeting time the reminder was for: moving a meeting
+/// deletes its unsent rows, and a new time gets fresh reminders.
+model MeetingReminder {
+  id           String    @id @default(cuid())
+  meetingId    String
+  /// H24 (the day before) or H2 (two hours before).
+  kind         String
+  scheduledFor DateTime
+  sentAt       DateTime?
+  recipients   Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, kind, scheduledFor])
 }
 
 model MeetingKeySubmission {
@@ -1628,6 +1680,9 @@ model Loan {
   /// Basis points. 0 is legitimate: plenty of groups lend interest-free.
   interestRateBps     Int      @default(0)
   termMonths          Int      @default(1)
+  /// FLAT or REDUCING, fixed when the loan is given out so a later change to
+  /// the group's rules never re-prices an existing loan.
+  interestType        String   @default("FLAT")
   disbursedAt         DateTime
   dueAt               DateTime
   /// ACTIVE | REPAID | CARRIED_FORWARD | WRITTEN_OFF
@@ -1737,6 +1792,23 @@ model GroupPolicy {
   /// Text every member their own transactions once the meeting is sealed.
   /// Off by default for the same reasons.
   smsMeetingSummaryEnabled Boolean @default(false)
+
+  /// The group's own rules, as its phone keeps them. Null means "never set" —
+  /// the phone's copy wins then, and nothing is checked against it.
+  /// FLAT or REDUCING; see domain/loan-math.ts.
+  interestType        String?
+  shareValueCents     Int?
+  maxSharesPerMeeting Int?
+  socialFundCents     Int?
+  /// Borrowing limit as a multiple of this cycle's savings, in basis points
+  /// (30000 = 3x).
+  loanMultiplierBps   Int?
+
+  /// Whether members of this group may have their own sign-in to see their
+  /// savings. Null = never decided: ON if the group already has member
+  /// sign-ins, OFF otherwise (services/member-accounts-service.ts). A member
+  /// in several groups sees only the groups that have it on.
+  memberAccountsEnabled Boolean?
 
   updatedByUserId String?
   createdAt       DateTime @default(now())
@@ -1865,6 +1937,7 @@ model Vote {
 
   group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
 }
 
 model CreditScore {
@@ -1875,6 +1948,7 @@ model CreditScore {
   computedAt    DateTime @default(now())
 
   group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
 }
 
 model AuditEvent {
@@ -1888,6 +1962,7 @@ model AuditEvent {
   createdAt   DateTime @default(now())
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
 }
 
 /// Per-group payment provider credentials.

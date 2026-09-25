@@ -15,6 +15,7 @@ import {
 } from "@/lib/theme-icons";
 import type { PortfolioSummary } from "@intellicash/shared";
 import { apiFetch, formatKes, humanizeEnum } from "../../lib/api";
+import { isMeetingUpcoming, meetingStatusLabel } from "../../features/meetings/model";
 import { SavingsTrendChart } from "../../components/savings-trend-chart";
 import { StatCard } from "../../components/dashboard/stat-card";
 import { getNavigationItemsForRole } from "../../lib/navigation";
@@ -39,6 +40,29 @@ interface MeetingWithGroup extends MeetingRow {
   };
 }
 
+
+/** The two money figures every oversight role opens a dashboard for. */
+function portfolioMoneyCards(portfolio: PortfolioSummary | null) {
+  const par = portfolio?.par30Rate;
+  const repaid = portfolio?.repaymentRate;
+  return (
+    <>
+      <StatCard
+        icon={<CircleDollarSign size={20} />}
+        label="Savings this cycle"
+        note={`Loan fund cash ${formatKes(portfolio?.loanFundCents ?? 0)}`}
+        value={formatKes(portfolio?.totalSavingsCents ?? 0)}
+      />
+      <StatCard
+        icon={<Activity size={20} />}
+        label="Loans outstanding"
+        note={`PAR30 ${par === null || par === undefined ? "-" : `${par}%`} · repaid ${repaid === null || repaid === undefined ? "-" : `${repaid}%`} of due`}
+        value={formatKes(portfolio?.loansOutstandingCents ?? 0)}
+      />
+    </>
+  );
+}
+
 function canReadAudit(role: string) {
   return role === "IWL_ADMIN";
 }
@@ -52,9 +76,11 @@ function canReadMeetings(role: string) {
 }
 
 function canReadStoreRequests(user: User) {
+  // Switched off for every programme in scope: the API would refuse anyway.
+  if (user.modules?.store === false) return false;
   if (user.permissions) return user.permissions.includes("store:read");
 
-  return getNavigationItemsForRole(user.role).some((item) => item.href === "/dashboard/intelli-store");
+  return getNavigationItemsForRole(user.role, user.modules).some((item) => item.href === "/dashboard/intelli-store");
 }
 
 function requestOutstandingCents(request: StoreCreditRequest) {
@@ -239,7 +265,7 @@ function formatShortDateTime(value: string) {
 }
 
 function visibleModules(user: User) {
-  return getNavigationItemsForRole(user.role).filter((item) => item.href !== "/dashboard");
+  return getNavigationItemsForRole(user.role, user.modules).filter((item) => item.href !== "/dashboard");
 }
 
 function DashboardIntro({
@@ -548,7 +574,7 @@ function MemberDashboard({
     0
   );
   const nextMeetings = [...meetings]
-    .filter((meeting) => meeting.status !== "SEALED")
+    .filter((meeting) => meeting.status === "IN_PROGRESS" || isMeetingUpcoming(meeting))
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   const passbookRows = useMemo(() => buildMemberPassbookByMeeting(ledger), [ledger]);
   const recentTransactions = [...ledger]
@@ -612,7 +638,7 @@ function MemberDashboard({
                   <span>{formatShortDateTime(meeting.scheduledAt)}</span>
                 </div>
                 <span className={`pill ${meeting.status === "IN_PROGRESS" ? "" : "blue"}`}>
-                  {humanizeEnum(meeting.status)}
+                  {meetingStatusLabel(meeting)}
                 </span>
               </div>
             ))}
@@ -637,20 +663,22 @@ function MemberDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/intelli-store" count={storeRequests.length} title="Store requests">
-          <div className="list">
-            {storeRequests.slice(0, 4).map((request) => (
-              <div className="list-row" key={request.id}>
-                <div>
-                  <strong>{request.product?.name ?? "Product request"}</strong>
-                  <span>{formatKes(requestOutstandingCents(request))} due</span>
+        {user.modules?.store !== false ? (
+          <DashboardDataCard actionHref="/dashboard/intelli-store" count={storeRequests.length} title="Store requests">
+            <div className="list">
+              {storeRequests.slice(0, 4).map((request) => (
+                <div className="list-row" key={request.id}>
+                  <div>
+                    <strong>{request.product?.name ?? "Product request"}</strong>
+                    <span>{formatKes(requestOutstandingCents(request))} due</span>
+                  </div>
+                  <span className="pill">{humanizeEnum(request.status)}</span>
                 </div>
-                <span className="pill">{humanizeEnum(request.status)}</span>
-              </div>
-            ))}
-            {storeRequests.length === 0 ? <div className="empty-state">No store requests</div> : null}
-          </div>
-        </DashboardDataCard>
+              ))}
+              {storeRequests.length === 0 ? <div className="empty-state">No store requests</div> : null}
+            </div>
+          </DashboardDataCard>
+        ) : null}
 
         <section className="data-card dashboard-data-card member-summary-card">
           <header>
@@ -744,7 +772,7 @@ function GroupAccountDashboard({
   user: User;
 }) {
   const nextMeetings = [...meetings]
-    .filter((meeting) => meeting.status !== "SEALED")
+    .filter((meeting) => meeting.status === "IN_PROGRESS" || isMeetingUpcoming(meeting))
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   const liveMeetings = meetings.filter((meeting) => meeting.status === "IN_PROGRESS").length;
   const recentRecords = recentLedgerList(ledger);
@@ -768,7 +796,9 @@ function GroupAccountDashboard({
         <StatCard icon={<Activity size={20} />} label="Next meetings" note={`${liveMeetings} live now`} value={nextMeetings.length.toString()} />
         <StatCard icon={<UsersRound size={20} />} label="Members" note={primaryGroup?.phase ? humanizeEnum(primaryGroup.phase) : "Group scope"} value={members.length.toString()} />
         <StatCard icon={<CircleDollarSign size={20} />} label="Records" note="Ledger entries" value={ledger.length.toString()} />
-        <StatCard icon={<ShoppingBag size={20} />} label="Requests" note={`${activeRequests.length} active`} value={storeRequests.length.toString()} />
+        {user.modules?.store !== false ? (
+          <StatCard icon={<ShoppingBag size={20} />} label="Requests" note={`${activeRequests.length} active`} value={storeRequests.length.toString()} />
+        ) : null}
       </section>
 
       <section className="dashboard-data-grid">
@@ -781,7 +811,7 @@ function GroupAccountDashboard({
                   <span>{formatShortDateTime(meeting.scheduledAt)}</span>
                 </div>
                 <span className={`pill ${meeting.status === "IN_PROGRESS" ? "" : "blue"}`}>
-                  {humanizeEnum(meeting.status)}
+                  {meetingStatusLabel(meeting)}
                 </span>
               </div>
             ))}
@@ -821,20 +851,22 @@ function GroupAccountDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/intelli-store" actionLabel="Open requests" count={activeRequests.length} title="Requests">
-          <div className="list">
-            {recentStoreRequestList(storeRequests).slice(0, 5).map((request) => (
-              <div className="list-row" key={request.id}>
-                <div>
-                  <strong>{request.product?.name ?? "Product request"}</strong>
-                  <span>{request.groupName ?? request.customerName} - {formatShortDateTime(request.createdAt)}</span>
+        {user.modules?.store !== false ? (
+          <DashboardDataCard actionHref="/dashboard/intelli-store" actionLabel="Open requests" count={activeRequests.length} title="Requests">
+            <div className="list">
+              {recentStoreRequestList(storeRequests).slice(0, 5).map((request) => (
+                <div className="list-row" key={request.id}>
+                  <div>
+                    <strong>{request.product?.name ?? "Product request"}</strong>
+                    <span>{request.groupName ?? request.customerName} - {formatShortDateTime(request.createdAt)}</span>
+                  </div>
+                  <span className="pill">{humanizeEnum(request.status)}</span>
                 </div>
-                <span className="pill">{humanizeEnum(request.status)}</span>
-              </div>
-            ))}
-            {storeRequests.length === 0 ? <div className="empty-state">No store requests</div> : null}
-          </div>
-        </DashboardDataCard>
+              ))}
+              {storeRequests.length === 0 ? <div className="empty-state">No store requests</div> : null}
+            </div>
+          </DashboardDataCard>
+        ) : null}
 
         <DashboardDataCard actionHref="/dashboard/reports" actionLabel="Open reports" title="Reports">
           <div className="list">
@@ -887,28 +919,36 @@ function PartnerOfficerDashboard({
 }) {
   const visibleProgrammes = portfolio?.groups ?? groups.length;
   const activeRequests = activeStoreRequestList(storeRequests);
-  const serviceQuality = liveMeetings > 0 ? "Active" : "Open";
   const upcomingMeetings = [...meetings]
-    .filter((meeting) => meeting.status !== "SEALED")
+    .filter((meeting) => meeting.status === "IN_PROGRESS" || isMeetingUpcoming(meeting))
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 
   return (
     <>
       <DashboardIntro
-        actionHref="/dashboard/programmes"
-        actionLabel="Open programmes"
+        actionHref="/dashboard/reports"
+        actionLabel="View reports"
         eyebrow="Partner Officer"
-        title="Partner service dashboard"
+        title="Partner reporting workspace"
         user={user}
       />
+
+      <section className="notice info dashboard-role-notice">
+        <strong>Scoped partner access</strong>
+        <span>
+          View scoped programme, group, meeting, and impact data for your
+          portfolio. Editing, meeting operations, documents, payments, and
+          financial records remain restricted to Intelli-Cash staff or group
+          officials.
+        </span>
+      </section>
 
       <QuickAccessSection user={user} />
 
       <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<ShoppingBag size={20} />} label="Programmes" note="Service delivery" value={visibleProgrammes.toString()} />
-        <StatCard icon={<UsersRound size={20} />} label="Groups reached" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
-        <StatCard icon={<Activity size={20} />} label="Live sessions" note="Programme meetings" value={liveMeetings.toString()} />
-        <StatCard icon={<ShieldCheck size={20} />} label="Service quality" note="Reports and field follow-up" value={serviceQuality} />
+        <StatCard icon={<UsersRound size={20} />} label="Groups reached" note={`${portfolio?.members ?? 0} active members`} value={activeGroups.toString()} />
+        {portfolioMoneyCards(portfolio)}
+        <StatCard icon={<ShieldCheck size={20} />} label="Live sessions" note="Programme meetings now" value={liveMeetings.toString()} />
       </section>
 
       <section className="dashboard-data-grid">
@@ -933,7 +973,7 @@ function PartnerOfficerDashboard({
 
         <GroupPrioritySection groups={groups} title="Groups reached" />
 
-        <DashboardDataCard actionHref="/dashboard/meetings" count={upcomingMeetings.length} title="Live sessions">
+        <DashboardDataCard actionHref="/dashboard/meetings" actionLabel="View" count={upcomingMeetings.length} title="Meeting activity">
           <div className="list">
             {upcomingMeetings.slice(0, 5).map((meeting) => (
               <div className="list-row" key={meeting.id}>
@@ -942,7 +982,7 @@ function PartnerOfficerDashboard({
                   <span>{meeting.group?.name ?? "Programme group"} - {formatShortDateTime(meeting.scheduledAt)}</span>
                 </div>
                 <span className={`pill ${meeting.status === "IN_PROGRESS" ? "" : "blue"}`}>
-                  {humanizeEnum(meeting.status)}
+                  {meetingStatusLabel(meeting)}
                 </span>
               </div>
             ))}
@@ -950,21 +990,21 @@ function PartnerOfficerDashboard({
           </div>
         </DashboardDataCard>
 
-        <DashboardDataCard actionHref="/dashboard/reports" title="Service quality">
+        <DashboardDataCard actionHref="/dashboard/reports" actionLabel="View reports" title="Meeting reports">
           <div className="list">
             <div className="list-row">
               <div>
-                <strong>Field evidence</strong>
-                <span>Programme delivery, meetings, and group follow-up</span>
+                <strong>Portfolio reporting</strong>
+                <span>Review meeting activity and delivery outcomes for your groups</span>
               </div>
-              <span className="pill blue">Tracked</span>
+              <span className="pill blue">Read only</span>
             </div>
             <div className="list-row">
               <div>
-                <strong>Reports</strong>
-                <span>Use reports for scoped delivery summaries</span>
+                <strong>Read-only access</strong>
+                <span>Meeting and group records are visible within your partner scope</span>
               </div>
-              <span className="pill">{serviceQuality}</span>
+              <span className="pill">{liveMeetings > 0 ? `${liveMeetings} live` : "No live sessions"}</span>
             </div>
           </div>
         </DashboardDataCard>
@@ -1020,8 +1060,8 @@ function LenderDashboard({
   return (
     <>
       <DashboardIntro
-        actionHref="/dashboard/intelli-store"
-        actionLabel="Review applications"
+        actionHref={user.modules?.store !== false ? "/dashboard/intelli-store" : "/dashboard/reports"}
+        actionLabel={user.modules?.store !== false ? "Review applications" : "Open reports"}
         eyebrow="Lender"
         title="Application review dashboard"
         user={user}
@@ -1030,27 +1070,31 @@ function LenderDashboard({
       <QuickAccessSection user={user} />
 
       <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<ShoppingBag size={20} />} label="Applications" note={`${reviewRequests.length} active`} value={storeRequests.length.toString()} />
+        {user.modules?.store !== false ? (
+          <StatCard icon={<ShoppingBag size={20} />} label="Applications" note={`${reviewRequests.length} active`} value={storeRequests.length.toString()} />
+        ) : null}
         <StatCard icon={<UsersRound size={20} />} label="Groups for review" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
         <StatCard icon={<ShieldCheck size={20} />} label="Credit signals" note="Average readiness score" value={score?.toString() ?? "Pending"} />
         <StatCard icon={<Activity size={20} />} label="Evidence" note="Credit review records" value={groups.length.toString()} />
       </section>
 
       <section className="dashboard-data-grid">
-        <DashboardDataCard actionHref="/dashboard/intelli-store" actionLabel="Review" count={reviewRequests.length} title="Applications">
-          <div className="list">
-            {recentStoreRequestList(storeRequests).slice(0, 5).map((request) => (
-              <div className="list-row" key={request.id}>
-                <div>
-                  <strong>{request.customerName}</strong>
-                  <span>{request.product?.name ?? "Product request"} - {request.groupName ?? "No group"} - {formatShortDateTime(request.createdAt)}</span>
+        {user.modules?.store !== false ? (
+          <DashboardDataCard actionHref="/dashboard/intelli-store" actionLabel="Review" count={reviewRequests.length} title="Applications">
+            <div className="list">
+              {recentStoreRequestList(storeRequests).slice(0, 5).map((request) => (
+                <div className="list-row" key={request.id}>
+                  <div>
+                    <strong>{request.customerName}</strong>
+                    <span>{request.product?.name ?? "Product request"} - {request.groupName ?? "No group"} - {formatShortDateTime(request.createdAt)}</span>
+                  </div>
+                  <span className="pill">{humanizeEnum(request.status)}</span>
                 </div>
-                <span className="pill">{humanizeEnum(request.status)}</span>
-              </div>
-            ))}
-            {storeRequests.length === 0 ? <div className="empty-state">No applications</div> : null}
-          </div>
-        </DashboardDataCard>
+              ))}
+              {storeRequests.length === 0 ? <div className="empty-state">No applications</div> : null}
+            </div>
+          </DashboardDataCard>
+        ) : null}
 
         <GroupPrioritySection groups={groups} title="Groups for review" />
 
@@ -1141,7 +1185,7 @@ function AgentDashboard({ meetings, user }: { meetings: MeetingWithGroup[]; user
   }, []);
 
   const upcoming = meetings
-    .filter((meeting) => meeting.status !== "SEALED")
+    .filter((meeting) => meeting.status === "IN_PROGRESS" || isMeetingUpcoming(meeting))
     .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())
     .slice(0, 5);
   const needingSupport = report?.groups.filter((group) => group.needsSupport) ?? [];
@@ -1216,7 +1260,7 @@ function AgentDashboard({ meetings, user }: { meetings: MeetingWithGroup[]; user
                     {meeting.group?.name ?? ""} · {formatShortDateTime(meeting.scheduledAt)}
                   </span>
                 </div>
-                <span className="pill">{humanizeEnum(meeting.status)}</span>
+                <span className="pill">{meetingStatusLabel(meeting)}</span>
               </div>
             ))}
             {upcoming.length === 0 ? <p className="card-note">No meetings coming up in your groups.</p> : null}
@@ -1257,9 +1301,8 @@ function ReadOnlyDashboard({
       <QuickAccessSection user={user} />
 
       <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<ShieldCheck size={20} />} label="Reports" note="Observation workspace" value="Open" />
-        <StatCard icon={<Activity size={20} />} label="Oversight" note="Report access" value="Scoped" />
-        <StatCard icon={<UsersRound size={20} />} label="Groups" note={`${portfolio?.members ?? 0} visible members`} value={activeGroups.toString()} />
+        <StatCard icon={<UsersRound size={20} />} label="Groups" note={`${portfolio?.members ?? 0} active members`} value={activeGroups.toString()} />
+        {portfolioMoneyCards(portfolio)}
         <StatCard icon={<ShoppingBag size={20} />} label="Projects" note="Visible records" value={groups.length.toString()} />
       </section>
 
@@ -1357,9 +1400,8 @@ function AdminDashboard({
       <QuickAccessSection user={user} />
 
       <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<ShieldCheck size={20} />} label="Access requests" note="Users and role scope" value="Open" />
-        <StatCard icon={<UsersRound size={20} />} label="Groups" note={`${portfolio?.members ?? 0} members enrolled`} value={activeGroups.toString()} />
-        <StatCard icon={<Activity size={20} />} label="Payments" note="Partner wallet operations" value="Queue" />
+        <StatCard icon={<UsersRound size={20} />} label="Groups" note={`${portfolio?.members ?? 0} active members`} value={activeGroups.toString()} />
+        {portfolioMoneyCards(portfolio)}
         <StatCard icon={<ShoppingBag size={20} />} label="Integrations" note="Provider readiness" value={integrationReadiness(integrations)} />
       </section>
 

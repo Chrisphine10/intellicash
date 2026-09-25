@@ -1,3 +1,13 @@
+/**
+ * Completion hooks for money a member pays INTO a group through a payment
+ * gateway (M-Pesa STK push or Paystack checkout).
+ *
+ * The gateway callbacks serve two different ledgers: partner wallet
+ * transactions and these group payments. A callback carries only a reference,
+ * so each handler tries both — whichever owns the reference updates, the
+ * other is a no-op.
+ */
+
 import { prisma } from "../lib/prisma";
 
 /**

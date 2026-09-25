@@ -13,6 +13,13 @@ import { ApiHttpError, ok } from "../lib/http";
 import { buildProgrammePerformanceReport } from "../services/programme-performance-report";
 import { latestCreditRating } from "../services/credit-rating-service";
 import { buildMemberPassbook } from "../services/member-passbook-service";
+import {
+  GROUP_LEVEL_ONLY_ROLES,
+  SMALL_GROUP_THRESHOLD,
+  buildGroupStatement,
+  redactStatementForRole,
+  type GroupStatement
+} from "../services/vsla-statement-service";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -182,6 +189,12 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
     const canReadMeetings = hasPermission(req.user, "meetings:read");
     const canReadVotes = hasPermission(req.user, "votes:read");
     const canReadKpis = canReadImportedKpis(req.user);
+    const activeMemberCounts = await prisma.member.groupBy({
+      by: ["groupId"],
+      where: { status: "ACTIVE", group: groupWhere },
+      _count: true
+    });
+    const activeMembersByGroup = new Map(activeMemberCounts.map((row) => [row.groupId, row._count]));
     const [
       fundAccounts,
       ledgerEntries,
@@ -215,8 +228,11 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
         : Promise.resolve([]),
       canReadLedger
         ? prisma.ledgerEntry.findMany({
-            where: ledgerScopeForUser(req.user),
+            // Demo rows are kept out like every other part of this report, and
+            // the list is capped: it is a register to scan, not an export.
+            where: { AND: [ledgerScopeForUser(req.user), { group: await demoExclusionForUser(req.user) }] },
             orderBy: { createdAt: "desc" },
+            take: 500,
             include: {
               group: { select: { id: true, name: true, code: true, county: true, sourceSystem: true } },
               member: { select: { fullName: true } },
@@ -284,13 +300,20 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
         votes: canReadVotes,
         importedKpis: canReadKpis
       },
-      fundAccounts,
+      // A small group's balances describe individuals, so partners, lenders and
+      // read-only viewers do not get them (same threshold as every report).
+      fundAccounts: MEMBER_IDENTITY_WITHHELD_ROLES.includes(req.user?.role ?? "")
+        ? fundAccounts.filter((account) => (activeMembersByGroup.get(account.group.id) ?? 0) >= SMALL_GROUP_THRESHOLD)
+        : fundAccounts,
+      // Free text goes too: a description or a motion can name a person.
       ledgerEntries: MEMBER_IDENTITY_WITHHELD_ROLES.includes(req.user?.role ?? "")
-        ? ledgerEntries.map((entry) => ({ ...entry, memberId: null, member: null }))
+        ? ledgerEntries.map((entry) => ({ ...entry, memberId: null, member: null, description: "", externalReference: null }))
         : ledgerEntries,
       users,
       meetings,
-      votes,
+      votes: MEMBER_IDENTITY_WITHHELD_ROLES.includes(req.user?.role ?? "")
+        ? votes.map((vote) => ({ ...vote, motion: "" }))
+        : votes,
       ftmaCountyVslaKpis: ftmaCountyVslaKpis.map((row) => ({
         ...row,
         savingsCents: Number(row.savingsCents),
@@ -312,119 +335,98 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
 // automatically limited to their own scope by the account-scope helpers.
 // ---------------------------------------------------------------------------
 
-async function groupLedgerBreakdown(groupId: string) {
-  const byType = await prisma.ledgerEntry.groupBy({
-    by: ["type", "direction"],
-    where: { groupId },
-    _sum: { amountCents: true },
-    _count: true
-  });
-  return byType.map((row) => ({
-    type: row.type,
-    direction: row.direction,
-    totalCents: row._sum.amountCents ?? 0,
-    entries: row._count
-  }));
-}
-
+/**
+ * The Group Financial Statement for one cycle (the active one unless
+ * ?cycleId= names another). Every figure comes from buildGroupStatement, so it
+ * matches the portfolio, the passbook and the phone.
+ *
+ * The older fields (group, funds, ledger, members, meetings) are kept for the
+ * phones already in the field, now worked out the same way: this cycle only,
+ * signed by direction. Partners, lenders and read-only viewers get no member
+ * rows, and no money for a group under the small-group threshold.
+ */
 router.get("/reports/group/:id", requireAuth("groups:read"), async (req, res, next) => {
   try {
     const groupId = String(req.params.id);
     const group = await prisma.group.findFirst({
       where: scopeGroupWhere(req.user, { id: groupId }),
-      include: {
-        fundAccounts: { select: { type: true, balanceCents: true } },
-        _count: { select: { members: true, meetings: true } }
-      }
+      select: { id: true, name: true, code: true, county: true, phase: true, cycleNumber: true }
     });
     if (!group) {
       ok(res.status(404), null);
       return;
     }
+    const cycleId = typeof req.query.cycleId === "string" ? req.query.cycleId : undefined;
+    const full = await buildGroupStatement(groupId, { cycleId });
+    if (!full) {
+      ok(res.status(404), null);
+      return;
+    }
+    const statement = redactStatementForRole(full, req.user?.role);
 
-    const [ledger, perMember, meetings, attendance, rating, externalLoans, storeRequests] =
-      await Promise.all([
-        groupLedgerBreakdown(groupId),
-        prisma.ledgerEntry.groupBy({
-          by: ["memberId", "type"],
-          where: { groupId, memberId: { not: null } },
-          _sum: { amountCents: true }
-        }),
-        prisma.meeting.groupBy({
-          by: ["status"],
-          where: { groupId },
-          _count: true
-        }),
-        prisma.attendance.groupBy({
-          by: ["status"],
-          where: { meeting: { groupId } },
-          _count: true
-        }),
-        latestCreditRating(groupId),
-        prisma.externalLoanApplication.groupBy({
-          by: ["status"],
-          where: { groupId },
-          _count: true,
-          _sum: { amountCents: true }
-        }),
-        prisma.storeCreditRequest.groupBy({
-          by: ["status"],
-          where: { groupId },
-          _count: true,
-          _sum: { requestedAmountCents: true }
-        })
-      ]);
-
-    const members = await prisma.member.findMany({
-      where: { groupId },
-      select: { id: true, fullName: true, role: true, status: true }
-    });
-    const memberRows = members.map((member) => {
-      const rows = perMember.filter((row) => row.memberId === member.id);
-      const totalFor = (type: string) =>
-        rows.find((row) => row.type === type)?._sum.amountCents ?? 0;
-      return {
-        id: member.id,
-        fullName: member.fullName,
-        role: member.role,
-        status: member.status,
-        sharesCents: totalFor("SHARE_PURCHASE"),
-        socialCents: totalFor("SOCIAL_CONTRIBUTION"),
-        finesCents: totalFor("FINE_COLLECTION"),
-        loanRepaymentsCents: totalFor("LOAN_REPAYMENT"),
-        loanDisbursementsCents: totalFor("INTERNAL_LOAN_DISBURSEMENT")
-      };
-    });
-
-    const attendanceTotal = attendance.reduce((sum, row) => sum + row._count, 0);
-    const attendancePresent =
-      attendance.find((row) => row.status === "PRESENT")?._count ?? 0;
+    const [rating, externalLoans, storeRequests] = await Promise.all([
+      latestCreditRating(groupId),
+      prisma.externalLoanApplication.groupBy({
+        by: ["status"],
+        where: { groupId },
+        _count: true,
+        _sum: { amountCents: true }
+      }),
+      prisma.storeCreditRequest.groupBy({
+        by: ["status"],
+        where: { groupId },
+        _count: true,
+        _sum: { requestedAmountCents: true }
+      })
+    ]);
 
     ok(res, {
-      generatedAt: new Date().toISOString(),
+      generatedAt: full.generatedAt,
+      statement,
       group: {
         id: group.id,
         name: group.name,
         code: group.code,
         county: group.county,
         phase: group.phase,
-        cycleNumber: group.cycleNumber,
-        memberCount: group._count.members,
-        meetingCount: group._count.meetings
+        cycleNumber: full.cycle.number,
+        memberCount: full.members.active,
+        /** Meetings HELD this cycle - never cancelled ones or reminder plans. */
+        meetingCount: full.meetings.held
       },
-      funds: group.fundAccounts.map((fund) => ({
-        fundType: fund.type,
-        balanceCents: fund.balanceCents
+      funds: statement.suppressed
+        ? []
+        : [
+            { fundType: "INTERNAL_LOAN", balanceCents: full.loanFund.closingCents },
+            { fundType: "SOCIAL", balanceCents: full.socialFund.closingCents }
+          ],
+      // Signed per type and direction, this cycle. Kept for older phones.
+      ledger: statement.suppressed
+        ? []
+        : full.ledger.map((row) => ({
+            type: row.type,
+            direction: row.netCents < 0 ? "DEBIT" : "CREDIT",
+            totalCents: Math.abs(row.netCents),
+            entries: row.entries
+          })),
+      members: statement.memberRows.map((row) => ({
+        id: row.memberId,
+        fullName: row.fullName,
+        role: row.role,
+        status: row.status,
+        sharesCents: row.sharesCents,
+        socialCents: row.socialCents,
+        finesCents: row.finesCents,
+        loanRepaymentsCents: row.loanRepaidCents,
+        loanDisbursementsCents: row.loanDisbursedCents,
+        loanOutstandingCents: row.loanOutstandingCents
       })),
-      ledger,
-      members: memberRows,
       meetings: {
-        byStatus: meetings.map((row) => ({ status: row.status, count: row._count })),
-        attendanceRate: attendanceTotal > 0 ? attendancePresent / attendanceTotal : null
+        held: full.meetings.held,
+        cancelled: full.meetings.cancelled,
+        attendanceRate: full.meetings.attendanceRate === null ? null : full.meetings.attendanceRate / 100
       },
-      creditRating: rating
-        ? { score: rating.score, band: rating.band, rated: rating.rated }
-        : null,
+      creditRating: rating ? { score: rating.score, band: rating.band, rated: rating.rated } : null,
       externalLoans: externalLoans.map((row) => ({
         status: row.status,
         count: row._count,
@@ -441,8 +443,142 @@ router.get("/reports/group/:id", requireAuth("groups:read"), async (req, res, ne
   }
 });
 
+/**
+ * The Portfolio Financial Report: every group a viewer may see, one row each,
+ * with totals. Partners, lenders and read-only viewers see their programmes;
+ * an IWL admin sees the platform (optionally one programme). Group-level only -
+ * no member appears - and a group under the small-group threshold shows no
+ * money in its own row, though it still counts in the totals.
+ *
+ * ?cycle=current (default) reports each group's active cycle; ?cycle=previous
+ * its last closed one (groups that have never closed a cycle are left out).
+ */
+const PORTFOLIO_REPORT_ROLES = ["IWL_ADMIN", "PARTNER_OFFICER", "LENDER", "READ_ONLY", "VILLAGE_AGENT"];
+
+function portfolioRow(statement: GroupStatement, hideMoney: boolean) {
+  const money = !hideMoney;
+  return {
+    groupId: statement.group.id,
+    name: statement.group.name,
+    code: statement.group.code,
+    county: statement.group.county,
+    cycleNumber: statement.cycle.number,
+    activeMembers: statement.members.active,
+    meetingsHeld: statement.meetings.held,
+    attendanceRate: statement.meetings.attendanceRate,
+    suppressed: hideMoney,
+    shareCapitalCents: money ? statement.loanFund.sharesCents : null,
+    loanFundCents: money ? statement.loanFund.closingCents : null,
+    socialFundCents: money ? statement.socialFund.closingCents : null,
+    loansOutstandingCents: money ? statement.loans.outstandingCents : null,
+    activeLoans: money ? statement.loans.activeCount : null,
+    par30Rate: money ? statement.loans.par30Rate : null,
+    repaymentRate: money ? statement.loans.repaymentRate : null,
+    interestCents: money ? statement.income.interestCents : null,
+    finesCents: money ? statement.income.finesCents : null,
+    equityCents: money ? statement.equity.totalCents : null,
+    returnOnSavings: money ? statement.equity.returnOnSavings : null,
+    cashReconciles: statement.cash.reconciles
+  };
+}
+
+router.get("/reports/portfolio-financials", requireAuth("analytics:read"), async (req, res, next) => {
+  try {
+    if (!PORTFOLIO_REPORT_ROLES.includes(req.user?.role ?? "")) {
+      throw new ApiHttpError(403, "FORBIDDEN", "The portfolio report is for programme, partner and platform accounts.");
+    }
+    const which = req.query.cycle === "previous" ? "previous" : "current";
+    const programmeId =
+      typeof req.query.programmeId === "string" && req.query.programmeId ? req.query.programmeId : undefined;
+
+    const groups = await prisma.group.findMany({
+      where: {
+        AND: [
+          scopeGroupWhere(req.user),
+          await demoExclusionForUser(req.user),
+          ...(programmeId
+            ? [{ OR: [{ programmeId }, { programmeLinks: { some: { programmeId } } }] }]
+            : [])
+        ]
+      },
+      select: { id: true },
+      orderBy: { name: "asc" }
+    });
+
+    const groupLevelOnly = GROUP_LEVEL_ONLY_ROLES.includes(req.user?.role ?? "");
+    const statements: GroupStatement[] = [];
+    for (const group of groups) {
+      let cycleId: string | undefined;
+      if (which === "previous") {
+        const closed = await prisma.cycle.findFirst({
+          where: { groupId: group.id, status: "CLOSED" },
+          orderBy: { number: "desc" },
+          select: { id: true }
+        });
+        if (!closed) continue;
+        cycleId = closed.id;
+      }
+      const statement = await buildGroupStatement(group.id, { cycleId });
+      if (statement) statements.push(statement);
+    }
+
+    const sum = (pick: (s: GroupStatement) => number) => statements.reduce((total, s) => total + pick(s), 0);
+    const outstanding = sum((s) => s.loans.outstandingCents);
+    const due = sum((s) => s.loans.dueCents);
+    const totalActive = sum((s) => s.members.active);
+    const recordedHeld = sum((s) => s.meetings.held);
+    const totalsHidden = groupLevelOnly && totalActive < SMALL_GROUP_THRESHOLD;
+
+    ok(res, {
+      generatedAt: new Date().toISOString(),
+      cycle: which,
+      scope: reportAccountScope(req.user),
+      programmeId: programmeId ?? null,
+      smallGroupThreshold: SMALL_GROUP_THRESHOLD,
+      totals: {
+        groups: statements.length,
+        activeMembers: totalActive,
+        meetingsHeld: recordedHeld,
+        suppressed: totalsHidden,
+        ...(totalsHidden
+          ? {}
+          : {
+              shareCapitalCents: sum((s) => s.loanFund.sharesCents),
+              loanFundCents: sum((s) => s.loanFund.closingCents),
+              socialFundCents: sum((s) => s.socialFund.closingCents),
+              loansOutstandingCents: outstanding,
+              activeLoans: sum((s) => s.loans.activeCount),
+              loansPastDue: sum((s) => s.loans.pastDueCount),
+              par30Rate: outstanding > 0 ? Math.round((sum((s) => s.loans.par30Cents) / outstanding) * 1000) / 10 : null,
+              repaymentRate: due > 0 ? Math.round((sum((s) => s.loans.dueCollectedCents) / due) * 100) : null,
+              interestCents: sum((s) => s.income.interestCents),
+              finesCents: sum((s) => s.income.finesCents),
+              welfarePaidCents: sum((s) => s.socialFund.welfarePaidCents),
+              shareOutPaidCents: sum((s) => s.loanFund.shareOutPaidCents),
+              equityCents: sum((s) => s.equity.totalCents),
+              returnOnSavings: (() => {
+                const capital = sum((s) => s.equity.capitalCents);
+                return capital > 0 ? Math.round(((sum((s) => s.equity.totalCents) - capital) / capital) * 1000) / 10 : null;
+              })(),
+              groupsNotReconciling: statements.filter((s) => !s.cash.reconciles).length
+            })
+      },
+      groups: statements.map((statement) =>
+        portfolioRow(statement, groupLevelOnly && statement.members.active < SMALL_GROUP_THRESHOLD)
+      )
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/reports/member/:memberId", requireAuth("members:read"), async (req, res, next) => {
   try {
+    // One named person's money is for them, their group, their agent and the
+    // platform - not for a partner, lender or read-only viewer (Kenya DPA).
+    if (GROUP_LEVEL_ONLY_ROLES.includes(req.user?.role ?? "")) {
+      throw new ApiHttpError(403, "MEMBER_REPORT_NOT_AVAILABLE", "Member statements are not shared outside the group.");
+    }
     const memberId = String(req.params.memberId);
     // Scope-check first: officials and admins may view a member, but only
     // one they are entitled to see.
@@ -457,7 +593,9 @@ router.get("/reports/member/:memberId", requireAuth("members:read"), async (req,
 
     // Same aggregation the member's own passbook uses, so the group's copy
     // of a member's figures always matches the member's own.
-    const passbook = await buildMemberPassbook(memberId);
+    const passbook = await buildMemberPassbook(memberId, {
+      cycleId: typeof req.query.cycleId === "string" ? req.query.cycleId : undefined
+    });
     if (!passbook) {
       ok(res.status(404), null);
       return;
@@ -514,6 +652,7 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
     const groupRows = [];
     for (const group of groups) {
       const rating = await latestCreditRating(group.id);
+      const statement = await buildGroupStatement(group.id);
       const needsSupport =
         !rating || !rating.rated || rating.band === "C" || rating.band === "D";
       groupRows.push({
@@ -523,7 +662,10 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
         county: group.county,
         cycleNumber: group.cycleNumber,
         memberCount: group._count.members,
-        meetingCount: group._count.meetings,
+        meetingCount: statement?.meetings.held ?? group._count.meetings,
+        shareCapitalCents: statement?.loanFund.sharesCents ?? 0,
+        loansOutstandingCents: statement?.loans.outstandingCents ?? 0,
+        par30Rate: statement?.loans.par30Rate ?? null,
         creditRating: rating
           ? { score: rating.score, band: rating.band, rated: rating.rated }
           : null,
@@ -538,7 +680,9 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
         groups: groupRows.length,
         rated: groupRows.filter((row) => row.creditRating?.rated).length,
         needSupport: groupRows.filter((row) => row.needsSupport).length,
-        totalMembers: groupRows.reduce((sum, row) => sum + row.memberCount, 0)
+        totalMembers: groupRows.reduce((sum, row) => sum + row.memberCount, 0),
+        shareCapitalCents: groupRows.reduce((sum, row) => sum + row.shareCapitalCents, 0),
+        loansOutstandingCents: groupRows.reduce((sum, row) => sum + row.loansOutstandingCents, 0)
       },
       groups: groupRows
     });

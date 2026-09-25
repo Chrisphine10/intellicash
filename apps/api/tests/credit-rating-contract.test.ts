@@ -177,7 +177,7 @@ describe("credit rating contract — evidence handling", () => {
     const repayment = rating.factors.find((f) => f.key === "repaymentRate")!;
     expect(repayment.fromBaseline).toBe(true);
     expect(repayment.rawScore).toBe(50); // declared baseline
-    expect(repayment.evidence).toBe("No loans issued yet");
+    expect(repayment.evidence).toBe("No loans have fallen due yet");
     // 100 - (20 weight * 50% shortfall) = 90
     expect(rating.score).toBe(90);
   });
@@ -313,7 +313,9 @@ describe("meetings held on a phone count as completed", () => {
     });
 
     const facts = await gatherCreditFacts(group.id);
-    expect(facts.meetingsTotal).toBe(3);
+    // The planned one is next week: a group has not had the chance to hold
+    // it, so it is not a meeting they could have missed.
+    expect(facts.meetingsTotal).toBe(2);
     // The held one and the sealed one; the merely planned one is not complete.
     expect(facts.meetingsSealed).toBe(2);
   }, 60000);

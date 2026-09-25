@@ -4,8 +4,16 @@ import { prisma } from "../src/lib/prisma";
 import {
   __resetRolePermissionBootstrapForTests,
   getRolePermissionMap,
+  PARTNER_READ_ONLY_MARKER,
   permissionsForRoleFromStore
 } from "../src/services/role-permission-service";
+
+/** Forgets that the one-time partner correction ran, as on a database from before it. */
+async function forgetPartnerCorrection() {
+  await prisma.auditEvent.deleteMany({
+    where: { entityId: "PARTNER_OFFICER", payloadJson: { contains: PARTNER_READ_ONLY_MARKER } }
+  });
+}
 
 /**
  * The failure this guards against is invisible in development and total in
@@ -95,6 +103,68 @@ describe("role permission backfill", () => {
     const granted = await permissionsForRoleFromStore("VILLAGE_AGENT");
     expect(granted).not.toContain("ledger:write");
     expect(granted).not.toContain("meetings:write");
+  });
+
+  it("removes the broad meeting permission from legacy partner templates", async () => {
+    await forgetPartnerCorrection();
+    await prisma.rolePermissionTemplate.deleteMany({ where: { role: "PARTNER_OFFICER" } });
+    await prisma.rolePermissionTemplate.create({
+      data: {
+        role: "PARTNER_OFFICER",
+        permissionsJson: JSON.stringify([
+          "groups:read",
+          "meetings:read",
+          "meetings:write",
+          "analytics:read"
+        ])
+      }
+    });
+    __resetRolePermissionBootstrapForTests();
+
+    const granted = await permissionsForRoleFromStore("PARTNER_OFFICER");
+    expect(granted).not.toContain("meetings:write");
+    expect(granted).not.toContain("payments:write");
+    expect(granted).not.toContain("store:write");
+    expect(granted).not.toContain("documents:write");
+  });
+
+  it("corrects partner templates once, then leaves an admin's later grant alone", async () => {
+    await forgetPartnerCorrection();
+    await prisma.rolePermissionTemplate.deleteMany({ where: { role: "PARTNER_OFFICER" } });
+    await prisma.rolePermissionTemplate.create({
+      data: {
+        role: "PARTNER_OFFICER",
+        permissionsJson: JSON.stringify(["groups:read", "payments:read", "payments:write", "analytics:read"])
+      }
+    });
+    __resetRolePermissionBootstrapForTests();
+    expect(await permissionsForRoleFromStore("PARTNER_OFFICER")).not.toContain("payments:write");
+
+    // An administrator decides this deployment's partners do record payments.
+    await prisma.rolePermissionTemplate.update({
+      where: { role: "PARTNER_OFFICER" },
+      data: { permissionsJson: JSON.stringify(["groups:read", "payments:read", "payments:write", "analytics:read"]) }
+    });
+    // The server restarts.
+    __resetRolePermissionBootstrapForTests();
+
+    const granted = await permissionsForRoleFromStore("PARTNER_OFFICER");
+    expect(granted).toContain("payments:write");
+    expect(granted).toContain("payments:read");
+  });
+
+  it("keeps what partners are still meant to read when correcting them", async () => {
+    await forgetPartnerCorrection();
+    await prisma.rolePermissionTemplate.deleteMany({ where: { role: "PARTNER_OFFICER" } });
+    await prisma.rolePermissionTemplate.create({
+      data: { role: "PARTNER_OFFICER", permissionsJson: JSON.stringify(rolePermissions.PARTNER_OFFICER) }
+    });
+    __resetRolePermissionBootstrapForTests();
+
+    const granted = await permissionsForRoleFromStore("PARTNER_OFFICER");
+    for (const permission of rolePermissions.PARTNER_OFFICER) {
+      expect(granted).toContain(permission);
+    }
   });
 
   it("does not reinstate a permission an admin deliberately removed", async () => {

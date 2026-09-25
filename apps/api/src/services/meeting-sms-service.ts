@@ -1,3 +1,13 @@
+/**
+ * Gathers what a member needs to be told, and hands it to the outbound SMS
+ * service to send.
+ *
+ * Split from the sending for the usual reason: this half knows the ledger and
+ * nothing about providers, that half knows providers and nothing about VSLA.
+ * Both entry points are opt-in per group and both return quietly when a group
+ * has not asked for them.
+ */
+
 import { loadLoanPositions } from "./loan-position-service";
 import {
   buildMeetingSummarySms,

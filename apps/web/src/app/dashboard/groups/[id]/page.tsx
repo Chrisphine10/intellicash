@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowLeft, Banknote, Building2, ClipboardList, FileText, HeartHandshake, Pencil, Settings, TrendingUp, UserCog, UsersRound, Vote, X} from "@/lib/theme-icons";
 import { apiFetch, formatKes, humanizeEnum } from "../../../../lib/api";
+import { meetingStatusClass, meetingStatusLabel } from "../../../../features/meetings/model";
 import { DataTable } from "../../../../components/dashboard/data-table";
 import { ChampionAccessCard } from "../../../../components/dashboard/champion-access-card";
 import type { AgentRow, LedgerEntry, MeetingRow, Member, ProgrammeRow, User, VoteRow } from "../../../../components/dashboard/types";
@@ -34,6 +35,8 @@ const defaultGroupForm = {
 };
 
 interface GroupDetail {
+  /** Optional programme modules; voting off hides the Votes page link. */
+  modules?: { store: boolean; voting: boolean };
   id: string;
   name: string;
   code: string;
@@ -253,10 +256,12 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
                 <FileText size={16} />
                 Ledger
               </Link>
-              <Link className="button secondary" href={`/dashboard/groups/${group.id}/votes`}>
-                <Vote size={16} />
-                Votes
-              </Link>
+              {group.modules?.voting !== false ? (
+                <Link className="button secondary" href={`/dashboard/groups/${group.id}/votes`}>
+                  <Vote size={16} />
+                  Votes
+                </Link>
+              ) : null}
               <Link className="button secondary" href={`/dashboard/groups/${group.id}/payment-providers`}>
                 <Banknote size={16} />
                 Payment Providers
@@ -616,8 +621,10 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
               {
                 key: "status",
                 header: "Status",
-                value: (meeting) => humanizeEnum(meeting.status),
-                cell: (meeting) => <span className="pill blue">{humanizeEnum(meeting.status)}</span>
+                value: (meeting) => meetingStatusLabel(meeting),
+                cell: (meeting) => (
+                  <span className={meetingStatusClass(meeting.status, meeting.scheduledAt)}>{meetingStatusLabel(meeting)}</span>
+                )
               },
               {
                 key: "gps",

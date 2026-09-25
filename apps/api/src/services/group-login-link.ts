@@ -1,3 +1,11 @@
+/**
+ * Every group login opens a group. No exceptions.
+ *
+ * A GROUP_ACCOUNT with no group is a front door to nothing: it signs in and
+ * sees an empty app. This is the one rule that closes the gap for any that
+ * exist or appear, applied when such a login signs in.
+ */
+
 import { fundTypes } from "@intellicash/shared";
 
 import { prisma } from "../lib/prisma";

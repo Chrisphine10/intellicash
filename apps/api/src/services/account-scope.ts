@@ -1,3 +1,20 @@
+/**
+ * Account scoping — the permission boundary every query runs against.
+ *
+ * Every list and read in the API begins here: given a logged-in user, these
+ * functions produce a Prisma `WHERE` clause that limits the rows to exactly
+ * the groups, programmes, partners, members, agents and ledger entries that
+ * account is allowed to see. A partner sees their programmes and the groups
+ * on them; a village agent sees their caseload; a member sees their own
+ * rows. Anything not matched is filtered out at the database, not hidden in
+ * the UI, so a bug here is a data leak rather than a rendering glitch.
+ *
+ * The rule for new roles is: add an explicit branch, or the role silently
+ * inherits platform-wide read access. The fall-through at the bottom of every
+ * scope function is deliberate and documented — it is the door a forgotten
+ * role walks through.
+ */
+
 import type { Prisma } from "@prisma/client";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError } from "../lib/http";

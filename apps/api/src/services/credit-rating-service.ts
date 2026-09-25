@@ -1,3 +1,13 @@
+/**
+ * Derives a group's credit-rating facts from recorded data and runs them
+ * through the rating contract.
+ *
+ * The split is deliberate: **this file only gathers evidence**, the contract
+ * (`domain/credit-rating-contract.ts`) owns every rule. That keeps the rules
+ * pure/testable and means a score can always be re-derived from the stored
+ * facts + contract version.
+ */
+
 import { prisma } from "../lib/prisma";
 import {
   CREDIT_RATING_CONTRACT_VERSION,
@@ -6,6 +16,7 @@ import {
   type CreditRatingFacts
 } from "../domain/credit-rating-contract";
 import { appendAuditEvent } from "./audit-service";
+import { loadLoanPositions } from "./loan-position-service";
 
 /**
  * Derives a group's credit-rating facts from recorded data and runs them
@@ -38,8 +49,12 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
       where: { groupId, status: "ACTIVE" },
       select: { id: true, role: true }
     }),
+    // Meetings that were due to happen: not cancelled, and not still to come.
+    // A plan the reminder planner made for next week is not a meeting the
+    // group has had the chance to hold - counting it let reminder plans alone
+    // make a group "rated" and pulled every rate down.
     prisma.meeting.findMany({
-      where: { groupId },
+      where: { groupId, status: { not: "CANCELLED" }, scheduledAt: { lte: new Date() } },
       select: { id: true, status: true, unlockStatus: true }
     }),
     prisma.vote.count({ where: { groupId } }),
@@ -48,6 +63,22 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
       select: { meetingId: true, type: true, amountCents: true }
     })
   ]);
+
+  // Repayment is judged on what has FALLEN DUE, interest included - the same
+  // measure as every report. Repaid over disbursed read above 100% once
+  // interest was paid, and counted a loan lent yesterday as unpaid.
+  const now = new Date();
+  const positions = await loadLoanPositions(prisma, { groupIds: [groupId] }, now);
+  let dueCents = 0;
+  let dueCollectedCents = 0;
+  for (const position of positions.values()) {
+    for (const entry of position.loans) {
+      if (!entry.settled && entry.loan.dueAt.getTime() > now.getTime()) continue;
+      const owed = entry.principalCents + entry.interestCents;
+      dueCents += owed;
+      dueCollectedCents += owed - entry.outstandingCents;
+    }
+  }
 
   const meetingIds = meetings.map((m) => m.id);
   const attendance = meetingIds.length
@@ -67,9 +98,6 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
         .filter((e) => e.type === type && e.meetingId)
         .map((e) => e.meetingId as string)
     ).size;
-
-  const sumOf = (type: string) =>
-    ledger.filter((e) => e.type === type).reduce((sum, e) => sum + e.amountCents, 0);
 
   const opened = meetings.filter((m) => OPENED_STATUSES.includes(m.status));
 
@@ -108,8 +136,10 @@ export async function gatherCreditFacts(groupId: string): Promise<CreditRatingFa
     attendanceRecords: attendance.length,
     attendancePresent: attendance.filter((a) => PRESENT_STATUSES.includes(a.status)).length,
 
-    loanDisbursedCents: sumOf("INTERNAL_LOAN_DISBURSEMENT"),
-    loanRepaidCents: sumOf("LOAN_REPAYMENT"),
+    // The contract's repayment factor is loanRepaid / loanDisbursed: fed
+    // "collected of what fell due" so the ratio is the due-based rate.
+    loanDisbursedCents: dueCents,
+    loanRepaidCents: dueCollectedCents,
 
     cycleNumber: group.cycleNumber
   };

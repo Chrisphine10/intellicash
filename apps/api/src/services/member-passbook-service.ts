@@ -1,3 +1,11 @@
+/**
+ * One member's passbook, aggregated on the server.
+ *
+ * The mobile app used to pull a member's raw ledger rows and add them up on
+ * the phone. This is the single definition, shared by `GET /members/me` and
+ * the member report so the two can never disagree. All money is integer cents.
+ */
+
 import { prisma } from "../lib/prisma";
 import { loadLoanPositions } from "./loan-position-service";
 
@@ -20,7 +28,16 @@ const FINES = "FINE_COLLECTION";
 const LOAN_REPAYMENT = "LOAN_REPAYMENT";
 const LOAN_DISBURSEMENT = "INTERNAL_LOAN_DISBURSEMENT";
 
-export async function buildMemberPassbook(memberId: string) {
+/**
+ * A member's passbook for one cycle - the group's active cycle unless
+ * `cycleId` names another, or "all" for every cycle.
+ *
+ * The savings figures are the cycle's, because that is what a VSLA member is
+ * asked: shares bought since the last share-out, which is what the next one
+ * pays out on. Adding up every cycle ever counted money already handed back.
+ * `lifetime` keeps the all-cycles totals for anyone who wants them.
+ */
+export async function buildMemberPassbook(memberId: string, options: { cycleId?: string | "all" } = {}) {
   const member = await prisma.member.findUnique({
     where: { id: memberId },
     select: {
@@ -36,16 +53,54 @@ export async function buildMemberPassbook(memberId: string) {
   if (!member) return null;
 
   const asOf = new Date();
-  const [byType, attendance, recent, positions, welfareReceived, shareOuts] = await Promise.all([
+  const cycles = await prisma.cycle.findMany({
+    where: { groupId: member.group.id },
+    orderBy: { number: "desc" },
+    select: { id: true, number: true, status: true, startedAt: true, closedAt: true }
+  });
+  const cycle =
+    options.cycleId === "all"
+      ? null
+      : ((options.cycleId ? cycles.find((c) => c.id === options.cycleId) : undefined) ??
+        cycles.find((c) => c.status === "ACTIVE") ??
+        cycles[0] ??
+        null);
+  // Stamped with the cycle, or (rows older than cycles) inside its dates.
+  const inCycle = cycle
+    ? {
+        OR: [
+          { cycleId: cycle.id },
+          { cycleId: null, createdAt: { gte: cycle.startedAt, ...(cycle.closedAt ? { lte: cycle.closedAt } : {}) } }
+        ]
+      }
+    : {};
+  const meetingInCycle = cycle
+    ? {
+        OR: [
+          { cycleId: cycle.id },
+          { cycleId: null, scheduledAt: { gte: cycle.startedAt, ...(cycle.closedAt ? { lte: cycle.closedAt } : {}) } }
+        ]
+      }
+    : {};
+
+  const [byTypeSigned, lifetimeByType, attendance, recent, positions, welfareReceived, shareOuts] = await Promise.all([
     prisma.ledgerEntry.groupBy({
-      by: ["type"],
+      by: ["type", "direction"],
+      where: { memberId, ...inCycle },
+      _sum: { amountCents: true },
+      _count: true
+    }),
+    prisma.ledgerEntry.groupBy({
+      by: ["type", "direction"],
       where: { memberId },
       _sum: { amountCents: true },
       _count: true
     }),
+    // Attendance at meetings that happened this cycle - a cancelled meeting
+    // is not one a member could have missed.
     prisma.attendance.groupBy({
       by: ["status"],
-      where: { memberId },
+      where: { memberId, meeting: { status: { not: "CANCELLED" }, ...meetingInCycle } },
       _count: true
     }),
     prisma.ledgerEntry.findMany({
@@ -82,8 +137,28 @@ export async function buildMemberPassbook(memberId: string) {
     })
   ]);
 
-  const totalFor = (type: string) =>
-    byType.find((row) => row.type === type)?._sum.amountCents ?? 0;
+  // Signed by direction: a DEBIT against a type (a correction) takes away.
+  type Row = { type: string; direction: string; _sum: { amountCents: number | null }; _count: number };
+  const signedTotal = (rows: Row[], type: string) =>
+    Math.abs(
+      rows
+        .filter((row) => row.type === type)
+        .reduce((sum, row) => sum + (row._sum.amountCents ?? 0) * (row.direction === "DEBIT" ? -1 : 1), 0)
+    );
+  const collapse = (rows: Row[]) => {
+    const byType = new Map<string, { totalCents: number; entries: number }>();
+    for (const row of rows) {
+      const current = byType.get(row.type) ?? { totalCents: 0, entries: 0 };
+      byType.set(row.type, { totalCents: 0, entries: current.entries + row._count });
+    }
+    return [...byType.entries()].map(([type, value]) => ({
+      type,
+      totalCents: signedTotal(rows, type),
+      entries: value.entries
+    }));
+  };
+  const totalFor = (type: string) => signedTotal(byTypeSigned, type);
+  const lifetimeFor = (type: string) => signedTotal(lifetimeByType, type);
 
   const sharesCents = totalFor(SHARES);
   const socialCents = totalFor(SOCIAL);
@@ -109,7 +184,7 @@ export async function buildMemberPassbook(memberId: string) {
       overdue: !balance.settled && loan.dueAt < asOf && balance.outstandingCents > 0
     }));
   const loanInterestCents = loanDetail.reduce((s, l) => s + l.interestCents, 0);
-  const ledgerOnlyOutstandingCents = Math.max(0, loansReceivedCents - loansRepaidCents);
+  const ledgerOnlyOutstandingCents = Math.max(0, lifetimeFor(LOAN_DISBURSEMENT) - lifetimeFor(LOAN_REPAYMENT));
   /**
    * Interest-aware outstanding — but NEVER below what the ledger already
    * proves is owed.
@@ -132,13 +207,26 @@ export async function buildMemberPassbook(memberId: string) {
   const shareOutReceivedCents = shareOuts.reduce((s, e) => s + e.amountCents, 0);
 
   const attendanceTotal = attendance.reduce((sum, row) => sum + row._count, 0);
-  const attendancePresent =
-    attendance.find((row) => row.status === "PRESENT")?._count ?? 0;
+  // Late is still there: the same rule as every group and programme report.
+  const attendancePresent = attendance
+    .filter((row) => row.status === "PRESENT" || row.status === "LATE")
+    .reduce((sum, row) => sum + row._count, 0);
 
   return {
     generatedAt: new Date().toISOString(),
     member,
+    cycle: cycle
+      ? {
+          id: cycle.id,
+          number: cycle.number,
+          status: cycle.status,
+          startedAt: cycle.startedAt.toISOString(),
+          closedAt: cycle.closedAt?.toISOString() ?? null
+        }
+      : null,
+    cycles: cycles.map((c) => ({ id: c.id, number: c.number, status: c.status })),
     /// Pre-computed so a phone shows the same figures the server would.
+    /// Savings and loan flows are THIS CYCLE's; debts are whatever is owed now.
     summary: {
       sharesCents,
       socialCents,
@@ -149,7 +237,8 @@ export async function buildMemberPassbook(memberId: string) {
       // Never show a negative balance when someone overpays.
       loanOutstandingCents: ledgerOnlyOutstandingCents,
       // The line above is the LEDGER difference and ignores interest. Kept
-      // for compatibility; prefer the interest-aware figure below.
+      // for older clients (tests pin it); every report shows the
+      // interest-aware figure below.
       loanInterestCents,
       loanOutstandingWithInterestCents,
       welfareReceivedCents,
@@ -158,11 +247,13 @@ export async function buildMemberPassbook(memberId: string) {
     loans: loanDetail,
     welfareReceived: welfareReceived.map((e) => ({ id: e.id, amountCents: e.amountCents, description: e.description, createdAt: e.createdAt.toISOString() })),
     shareOutHistory: shareOuts.map((e) => ({ id: e.id, amountCents: e.amountCents, description: e.description, createdAt: e.createdAt.toISOString() })),
-    totals: byType.map((row) => ({
-      type: row.type,
-      totalCents: row._sum.amountCents ?? 0,
-      entries: row._count
-    })),
+    totals: collapse(byTypeSigned),
+    lifetime: {
+      sharesCents: lifetimeFor(SHARES),
+      socialCents: lifetimeFor(SOCIAL),
+      finesCents: lifetimeFor(FINES),
+      totals: collapse(lifetimeByType)
+    },
     attendance: {
       present: attendancePresent,
       total: attendanceTotal,
@@ -183,7 +274,10 @@ export type MemberPassbook = NonNullable<Awaited<ReturnType<typeof buildMemberPa
  * builder as the single passbook, so a group's page and this report can never
  * disagree about that group.
  */
-export async function buildMemberOverview(userId: string) {
+export async function buildMemberOverview(
+  userId: string,
+  options: { includeGroup?: (groupId: string) => boolean } = {}
+) {
   const [links, account] = await Promise.all([
     prisma.userMembership.findMany({
       where: { userId },
@@ -201,7 +295,9 @@ export async function buildMemberOverview(userId: string) {
     const passbook = await buildMemberPassbook(link.memberId);
     // A membership whose Member row has gone is skipped rather than counted
     // as zero — a silent zero would understate someone's savings.
-    if (passbook) {
+    // Groups that have switched member sign-ins off drop out of the view
+    // (their figures are the group's to share, not the member's).
+    if (passbook && (!options.includeGroup || options.includeGroup(passbook.member.group.id))) {
       groups.push({ ...passbook, isActive: link.memberId === account?.memberId });
     }
   }

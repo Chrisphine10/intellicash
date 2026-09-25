@@ -76,8 +76,8 @@ function bandMeetsMinimum(band: string | null, minBand: string | null) {
 }
 
 function assertCanManageLoanCatalog(user: AuthenticatedUser | undefined) {
-  if (!user || (user.role !== "IWL_ADMIN" && user.role !== "PARTNER_OFFICER")) {
-    throw new ApiHttpError(403, "FORBIDDEN", "Only IWL admins or partner officers manage external loan products.");
+  if (!user || user.role !== "IWL_ADMIN") {
+    throw new ApiHttpError(403, "FORBIDDEN", "Only IWL admins manage external loan products.");
   }
 }
 

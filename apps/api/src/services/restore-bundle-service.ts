@@ -1,3 +1,11 @@
+/**
+ * Packages a group's data into a restorable bundle.
+ *
+ * Used when a group needs to be moved between environments or restored from a
+ * snapshot. Produces a self-contained export of the group and everything
+ * scoped to it.
+ */
+
 import { prisma } from "../lib/prisma";
 
 /**
@@ -19,10 +27,20 @@ import { prisma } from "../lib/prisma";
 export async function buildRestoreBundle(groupId: string) {
   // One transaction, so the snapshot is consistent: a repayment recorded while
   // this runs cannot appear without the loan it paid, or the reverse.
-  const [group, cycles, policy, meetings, attendance, entries, loans] = await prisma.$transaction([
+  const [group, cycles, policy, meetings, attendance, entries, loans, members] = await prisma.$transaction([
     prisma.group.findUniqueOrThrow({
       where: { id: groupId },
-      select: { id: true, name: true, cycleNumber: true }
+      select: {
+        id: true,
+        name: true,
+        cycleNumber: true,
+        shareValueCents: true,
+        maxSharesPerMemberPerMeeting: true,
+        meetingFrequency: true,
+        meetingDays: true,
+        meetingTime: true,
+        remindersEnabled: true
+      }
     }),
     prisma.cycle.findMany({ where: { groupId }, orderBy: { number: "asc" } }),
     prisma.groupPolicy.findUnique({ where: { groupId } }),
@@ -61,12 +79,17 @@ export async function buildRestoreBundle(groupId: string) {
         cycleId: true,
         principalCents: true,
         interestRateBps: true,
+        interestType: true,
         termMonths: true,
         disbursedAt: true,
         dueAt: true,
         status: true,
         disbursementEntryId: true
       }
+    }),
+    prisma.member.findMany({
+      where: { groupId },
+      select: { id: true, fullName: true, phone: true, role: true, status: true }
     })
   ]);
 
@@ -80,13 +103,39 @@ export async function buildRestoreBundle(groupId: string) {
       name: group.name,
       cycleNumber: active?.number ?? group.cycleNumber,
       // When the open cycle began: the line the phone draws its balances from.
-      cycleStartedAt: active?.startedAt.toISOString() ?? null
+      cycleStartedAt: active?.startedAt.toISOString() ?? null,
+      // Its schedule, so a restored phone meets on the group's real days.
+      meetingFrequency: group.meetingFrequency,
+      meetingDays: group.meetingDays,
+      meetingTime: group.meetingTime,
+      remindersEnabled: group.remindersEnabled
     },
     policy: {
       configured: Boolean(policy),
       loanInterestRateBps: policy?.loanInterestRateBps ?? 0,
-      defaultLoanTermMonths: policy?.defaultLoanTermMonths ?? 1
+      defaultLoanTermMonths: policy?.defaultLoanTermMonths ?? 1,
+      // The group's own rules, so a restored phone computes exactly what the
+      // old one did instead of starting from made-up defaults. The rule the
+      // group set on its phone wins; the group row's share settings fill in
+      // for groups that never pushed their rules.
+      interestType: policy?.interestType ?? "FLAT",
+      shareValueCents: policy?.shareValueCents ?? group.shareValueCents,
+      maxSharesPerMeeting: policy?.maxSharesPerMeeting ?? group.maxSharesPerMemberPerMeeting,
+      socialFundCents: policy?.socialFundCents ?? null,
+      loanMultiplierBps: policy?.loanMultiplierBps ?? null,
+      memberAccountsEnabled: policy?.memberAccountsEnabled ?? false
     },
+    members: members.map((member) => {
+      const [firstName, ...rest] = member.fullName.split(" ");
+      return {
+        id: member.id,
+        firstName,
+        lastName: rest.join(" ") || "",
+        phone: member.phone,
+        role: member.role,
+        status: member.status
+      };
+    }),
     meetings: meetings.map((meeting) => ({
       id: meeting.id,
       title: meeting.title,
@@ -115,6 +164,7 @@ export async function buildRestoreBundle(groupId: string) {
       cycleNumber: numberOf(loan.cycleId),
       principalCents: loan.principalCents,
       interestRateBps: loan.interestRateBps,
+      interestType: loan.interestType,
       termMonths: loan.termMonths,
       disbursedAt: loan.disbursedAt.toISOString(),
       dueAt: loan.dueAt.toISOString(),

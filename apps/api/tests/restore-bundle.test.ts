@@ -123,7 +123,13 @@ describe("the restore bundle", () => {
     const active = await prisma.cycle.findFirstOrThrow({ where: { groupId, status: "ACTIVE" } });
     expect(bundle.group.cycleStartedAt).toBe(active.startedAt.toISOString());
 
-    expect(bundle.policy).toEqual({ configured: true, loanInterestRateBps: 500, defaultLoanTermMonths: 2 });
+    expect(bundle.policy).toMatchObject({ configured: true, loanInterestRateBps: 500, defaultLoanTermMonths: 2 });
+    // The group's own rules travel too, so a restored phone computes exactly
+    // what the old one did. Unset rules come back as the group row's share
+    // settings (or null), never as invented defaults.
+    expect(bundle.policy).toMatchObject({ interestType: "FLAT", socialFundCents: null, loanMultiplierBps: null });
+    expect(typeof bundle.policy.shareValueCents).toBe("number");
+    expect(typeof bundle.policy.maxSharesPerMeeting).toBe("number");
 
     expect(bundle.meetings).toHaveLength(1);
     expect(bundle.meetings[0]).toMatchObject({ id: meetingId, title: "Meeting #1", cycleNumber: 1 });

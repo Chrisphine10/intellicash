@@ -75,6 +75,17 @@ interface MemberReport {
     joinedAt: string | null;
     group: { id: string; name: string; code: string; cycleNumber: number };
   };
+  /** The server's own figures: this cycle's savings, and debt with interest. */
+  summary: {
+    sharesCents: number;
+    socialCents: number;
+    finesCents: number;
+    loansRepaidCents: number;
+    loanOutstandingWithInterestCents: number;
+    welfareReceivedCents: number;
+    shareOutReceivedCents: number;
+  };
+  cycle: { number: number; status: string } | null;
   totals: Array<{ type: string; totalCents: number; entries: number }>;
   attendance: { present: number; total: number; rate: number | null };
   recentEntries: Array<{
@@ -96,7 +107,7 @@ interface AgentReport {
     county: string | null;
     status: string;
     caseloadLimit: number;
-    programme: { id: string; name: string } | null;
+    programmeLinks: Array<{ programme: { id: string; name: string } }>;
   };
   summary: { groups: number; rated: number; needSupport: number; totalMembers: number };
   groups: Array<{
@@ -157,6 +168,13 @@ function dateTimeLabel(value: string) {
 
 export default function DetailedReportsPage() {
   const [activeTab, setActiveTab] = useState<InsightTab>("group");
+  // Only a field agent has a caseload of their own to open.
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  useEffect(() => {
+    apiFetch<{ role: string }>("/auth/me")
+      .then((me) => setViewerRole(me.role))
+      .catch(() => setViewerRole(null));
+  }, []);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -340,10 +358,11 @@ export default function DetailedReportsPage() {
     (activeTab === "member" && Boolean(memberReport)) ||
     (activeTab === "agent" && Boolean(agentReport));
 
-  const memberShareCents =
-    memberReport?.totals.find((total) => total.type === "SHARE_PURCHASE")?.totalCents ?? 0;
-  const memberLoanRepaidCents =
-    memberReport?.totals.find((total) => total.type === "LOAN_REPAYMENT")?.totalCents ?? 0;
+  // From the server's summary - the same figures the member's own passbook
+  // shows - rather than picked out of the totals list here.
+  const memberShareCents = memberReport?.summary.sharesCents ?? 0;
+  const memberLoanRepaidCents = memberReport?.summary.loansRepaidCents ?? 0;
+  const memberOwedCents = memberReport?.summary.loanOutstandingWithInterestCents ?? 0;
 
   return (
     <>
@@ -741,15 +760,15 @@ export default function DetailedReportsPage() {
                 />
                 <StatCard
                   icon={<WalletCards size={20} />}
-                  label="Total saved"
-                  note="Share purchases to date"
+                  label="Saved this cycle"
+                  note={memberReport.cycle ? `Shares bought in cycle ${memberReport.cycle.number}` : "Shares bought"}
                   value={formatKes(memberShareCents)}
                 />
                 <StatCard
                   icon={<HandCoins size={20} />}
-                  label="Loans repaid"
-                  note="Repayments to date"
-                  value={formatKes(memberLoanRepaidCents)}
+                  label="Owes now"
+                  note={`Interest included; ${formatKes(memberLoanRepaidCents)} repaid this cycle`}
+                  value={formatKes(memberOwedCents)}
                 />
               </section>
 
@@ -847,7 +866,7 @@ export default function DetailedReportsPage() {
                 value={selectedAgentId}
               >
                 <option value="">Choose an agent</option>
-                <option value="self">My caseload</option>
+                {viewerRole === "VILLAGE_AGENT" ? <option value="self">My caseload</option> : null}
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
@@ -875,7 +894,7 @@ export default function DetailedReportsPage() {
                     <span>
                       <Phone aria-hidden="true" size={13} /> {agentReport.agent.phone} ·{" "}
                       {agentReport.agent.county ?? "No county"} ·{" "}
-                      {agentReport.agent.programme?.name ?? "No programme"}
+                      {agentReport.agent.programmeLinks.map((link) => link.programme.name).join(", ") || "No programme"}
                     </span>
                   </div>
                   <span className="pill blue">{humanizeEnum(agentReport.agent.status)}</span>

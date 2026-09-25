@@ -1,3 +1,14 @@
+/**
+ * SMS broadcasts an administrator types and sends from the console.
+ *
+ * Manual sends land in the same `SmsBroadcast` table as the ones the system
+ * sends on its own (meeting summaries, share-purchase receipts), so an
+ * operator has one place to answer "what did we text this group, and did it
+ * arrive". The `kind` column records MANUAL vs automatic, because a person
+ * reading an audit log needs to know who — a person or a rule — decided to
+ * spend an SMS credit.
+ */
+
 import type { Prisma } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";

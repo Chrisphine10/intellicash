@@ -1,3 +1,11 @@
+/**
+ * Calls the external LLM that powers IntelliAudit conversations.
+ *
+ * Thin seam over the provider: builds the request, sends it, returns the
+ * response or `null` when the provider is disabled. All the prompt policy and
+ * response handling lives elsewhere — this is only the transport.
+ */
+
 import { env } from "../config/env";
 
 export interface IntelliAuditLlmInput {

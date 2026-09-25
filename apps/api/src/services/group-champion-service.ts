@@ -1,3 +1,12 @@
+/**
+ * Connects a group's digital champion to the group's EXISTING account.
+ *
+ * Why this exists: groups were onboarded centrally, most without a phone on
+ * record. In the field, the champion's number matched no account, so signing
+ * up made a brand-new group login attached to no group at all — a second, empty
+ * front door while the real record sat unopened.
+ */
+
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 

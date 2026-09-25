@@ -1,3 +1,17 @@
+/**
+ * The one place that knows attachments are files on a disk.
+ *
+ * Everything else deals in a `storagePath` — a relative string like
+ * `visit-photo/2026/08/1754-uuid.jpg`. That indirection is the whole point:
+ * moving to object storage later means reimplementing this file and nothing
+ * else. It is deliberately thin, because paying for a full storage abstraction
+ * today would buy nothing — a single VPS with a mounted volume is the correct
+ * answer at this scale.
+ *
+ * Date-sharded directories (`YYYY/MM`) so no folder grows without bound and
+ * retention is a directory operation rather than a query.
+ */
+
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { unlink } from "node:fs/promises";

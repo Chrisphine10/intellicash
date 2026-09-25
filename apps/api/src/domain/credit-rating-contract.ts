@@ -417,8 +417,8 @@ function rawScores(
       value: ratio(f.loanRepaidCents, f.loanDisbursedCents),
       evidence:
         f.loanDisbursedCents > 0
-          ? `${money(f.loanRepaidCents)} repaid of ${money(f.loanDisbursedCents)} lent`
-          : "No loans issued yet"
+          ? `${money(f.loanRepaidCents)} repaid of ${money(f.loanDisbursedCents)} fallen due`
+          : "No loans have fallen due yet"
     },
     savingsConsistency: {
       value: ratio(f.meetingsWithSharePurchase, f.meetingsTotal),

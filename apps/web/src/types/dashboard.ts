@@ -17,7 +17,15 @@ export interface User {
   partner?: { id: string; name: string } | null;
   group?: { id: string; name: string; code: string } | null;
   member?: { id: string; fullName: string; phone: string } | null;
+  /** Optional modules this account can use (from /auth/me). */
+  modules?: ModuleSwitches;
   createdAt?: string;
+}
+
+/** Programme-level modules, as the API reports them for an account or a group. */
+export interface ModuleSwitches {
+  store: boolean;
+  voting: boolean;
 }
 
 export interface InAppNotification {
@@ -51,6 +59,11 @@ export interface GroupRow {
   contactPhone?: string | null;
   onboardingFeedback?: string | null;
   meetingDay?: string | null;
+  meetingFrequency?: string | null;
+  /** JSON array of ISO weekdays, 1 = Monday. */
+  meetingDays?: string | null;
+  meetingTime?: string | null;
+  remindersEnabled?: boolean;
   sourceSystem?: string | null;
   sourceReference?: string | null;
   villageAgent?: { id?: string; name: string } | null;
@@ -523,6 +536,10 @@ export interface MeetingRow {
   gpsCompliant: boolean;
   transactionTotal: number;
   minutes?: string | null;
+  /** MANUAL, AUTO_SCHEDULE (planned from the group's meeting days) or PHONE. */
+  source?: string;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
   steps: Array<{ id: string; step: string; status: string; name: string; completedAt?: string | null }>;
   attendance: Array<{ id: string; memberId: string; status: string; member: { fullName: string; role: string } }>;
   keySubmissions?: Array<{

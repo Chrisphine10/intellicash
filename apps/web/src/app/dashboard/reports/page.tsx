@@ -1169,7 +1169,12 @@ export default function ReportsPage() {
     [categoryCounts]
   );
 
-  const totalFundCents = fundTypeRows.reduce((sum, row) => sum + row.totalCents, 0);
+  // The groups' own money: savings/loan fund, social fund and the like. An
+  // external loan is money the group BORROWED - a debt, not a fund it holds -
+  // so adding it here overstated what the groups have.
+  const totalFundCents = fundTypeRows
+    .filter((row) => row.rawType !== "EXTERNAL_LOAN")
+    .reduce((sum, row) => sum + row.totalCents, 0);
   const totalExternalLoanCents = externalLoanRows.reduce(
     (sum, row) => sum + row.outstandingCents,
     0
@@ -1970,7 +1975,22 @@ export default function ReportsPage() {
       </section>
 
       <div className="dashboard-module-grid">
-        {/* First, because it is the one partners come here for. Not offered to
+        {/* The money picture for every role: the portfolio for partners and
+            admins, the group's own statement for a group. */}
+        {user && user.role !== "MEMBER" ? (
+          <Link className="dashboard-module-link" href="/dashboard/reports/financials">
+            <WalletCards size={18} />
+            <span>
+              <strong>Financial Reports</strong>
+              <em>
+                {user.role === "GROUP_ACCOUNT"
+                  ? "Our statement: funds, loans, income, members"
+                  : "Savings, loans, PAR and returns, by group"}
+              </em>
+            </span>
+          </Link>
+        ) : null}
+        {/* Then the one partners come here for. Not offered to
             a group or member account: the server refuses them, since it
             compares CBTs and groups across the programme. */}
         {user && !["GROUP_ACCOUNT", "MEMBER"].includes(user.role) ? (
@@ -1989,20 +2009,26 @@ export default function ReportsPage() {
             <em>Per group, member and agent</em>
           </span>
         </Link>
-        <Link className="dashboard-module-link" href="/dashboard/reports/visits">
-          <BarChart3 size={18} />
-          <span>
-            <strong>Field Visits</strong>
-            <em>Coverage, scores, overdue actions</em>
-          </span>
-        </Link>
-        <Link className="dashboard-module-link" href="/dashboard/reports/meal">
-          <BarChart3 size={18} />
-          <span>
-            <strong>Impact</strong>
-            <em>Baseline against latest, with the method attached</em>
-          </span>
-        </Link>
+        {/* Visit and impact reports need visits:read; lenders and read-only
+            viewers do not have it and were shown links that answered 403. */}
+        {user?.permissions?.includes("visits:read") ? (
+          <>
+            <Link className="dashboard-module-link" href="/dashboard/reports/visits">
+              <BarChart3 size={18} />
+              <span>
+                <strong>Field Visits</strong>
+                <em>Coverage, scores, overdue actions</em>
+              </span>
+            </Link>
+            <Link className="dashboard-module-link" href="/dashboard/reports/meal">
+              <BarChart3 size={18} />
+              <span>
+                <strong>Impact</strong>
+                <em>Baseline against latest, with the method attached</em>
+              </span>
+            </Link>
+          </>
+        ) : null}
       </div>
 
       <section className="stat-grid">

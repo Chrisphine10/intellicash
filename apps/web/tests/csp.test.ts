@@ -50,6 +50,10 @@ describe("content security policy", () => {
     expect(policy().get("img-src") ?? []).not.toContain("http:");
   });
 
+  it("permits the Google Maps embed used by the meetings dashboard", () => {
+    expect(policy().get("frame-src") ?? []).toContain("https://www.google.com");
+  });
+
   /*
    * Visit evidence is fetched from the API host, so img-src has to permit
    * whatever connect-src permits. When they disagree the console loads the

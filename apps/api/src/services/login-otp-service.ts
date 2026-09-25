@@ -1,3 +1,12 @@
+/**
+ * Signing in with a phone and a texted code, no password.
+ *
+ * The people this is for run a savings group from one shared handset. A
+ * password they must remember is the thing that actually keeps them out — and
+ * the alternative in practice is not a stronger password, it is the password
+ * written on the inside cover of the passbook.
+ */
+
 import bcrypt from "bcryptjs";
 import { randomInt } from "node:crypto";
 

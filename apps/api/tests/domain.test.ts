@@ -19,6 +19,13 @@ describe("authorization", () => {
 
   it("keeps partner officers read-oriented", () => {
     expect(hasPermission("PARTNER_OFFICER", "analytics:read")).toBe(true);
+    expect(hasPermission("PARTNER_OFFICER", "meetings:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "meeting-keys:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "ledger:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "groups:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "payments:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "store:write")).toBe(false);
+    expect(hasPermission("PARTNER_OFFICER", "documents:write")).toBe(false);
     expect(hasPermission("PARTNER_OFFICER", "audit:read")).toBe(false);
     expect(hasPermission("PARTNER_OFFICER", "intelliaudit:write")).toBe(false);
     expect(hasPermission("PARTNER_OFFICER", "integrations:read")).toBe(false);

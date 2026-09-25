@@ -16,6 +16,8 @@ import { requestLoginOtp, verifyLoginOtp } from "../services/login-otp-service";
 import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
 import { loginRateLimit, otpRequestRateLimit, otpVerifyRateLimit, registerRateLimit } from "../middleware/rate-limit";
 import { prisma } from "../lib/prisma";
+import { modulesForUser } from "../services/module-service";
+import { assertMemberMaySignIn } from "../services/member-accounts-service";
 import { generateGroupCode } from "../services/group-code";
 import { ensureGroupForLogin } from "../services/group-login-link";
 
@@ -168,6 +170,7 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
         "This account is not active, so it cannot sign in. Ask your programme officer or IntelliCash support to reopen it."
       );
     }
+    await assertMemberMaySignIn(user);
 
     // A group login with no group behind it gets one before it lands on an
     // empty app — see services/group-login-link.
@@ -405,6 +408,7 @@ router.post("/otp/verify", otpVerifyRateLimit, async (req, res, next) => {
     }
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: result.userId } });
+    await assertMemberMaySignIn(user);
     const groupId = (await ensureGroupForLogin(user.id)).groupId ?? user.groupId;
     const session = await createSession(user.id);
     const permissions = await permissionsForRoleFromStore(user.role);
@@ -552,8 +556,14 @@ router.post("/logout", async (req, res, next) => {
   }
 });
 
-router.get("/me", requireAuth(), async (req, res) => {
-  ok(res, req.user);
+router.get("/me", requireAuth(), async (req, res, next) => {
+  try {
+    // Optional modules this account can use, for menus. The API enforces them
+    // separately; this only keeps switched-off modules out of sight.
+    ok(res, { ...req.user, modules: await modulesForUser(req.user) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.patch("/me", requireAuth(), async (req, res, next) => {

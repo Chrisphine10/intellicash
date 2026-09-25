@@ -143,7 +143,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     );
   }, [pathname]);
   const visibleNavigation = useMemo(
-    () => getNavigationItemsForRole(user?.role),
+    () => getNavigationItemsForRole(user?.role, user?.modules),
     [user]
   );
   const groupedNavigation = useMemo(

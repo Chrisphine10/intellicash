@@ -1,3 +1,11 @@
+/**
+ * Scorecards for field visits.
+ *
+ * Manages assessment templates (draft/publish/clone), freezes immutable
+ * snapshots on publish so historical assessments stay defensible, and scores
+ * submitted visits against the current snapshot.
+ */
+
 import { createHash } from "node:crypto";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";

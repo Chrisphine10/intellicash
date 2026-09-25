@@ -143,6 +143,14 @@ export const navigationItems: NavigationItem[] = [
     priority: { default: 70, IWL_ADMIN: 70, PARTNER_OFFICER: 70, GROUP_ACCOUNT: 30, LENDER: 40, READ_ONLY: 10, VILLAGE_AGENT: 40 }
   },
   {
+    label: "Financials",
+    href: "/dashboard/reports/financials",
+    icon: Landmark,
+    roles: ["IWL_ADMIN", "PARTNER_OFFICER", "GROUP_ACCOUNT", "LENDER", "READ_ONLY", "VILLAGE_AGENT"],
+    section: "review",
+    priority: { default: 65, IWL_ADMIN: 65, PARTNER_OFFICER: 60, GROUP_ACCOUNT: 25, LENDER: 30, READ_ONLY: 5, VILLAGE_AGENT: 35 }
+  },
+  {
     label: "IntelliAudit",
     href: "/dashboard/intelliaudit",
     icon: Bot,
@@ -216,10 +224,27 @@ export const navigationItems: NavigationItem[] = [
   }
 ];
 
-export function getNavigationItemsForRole(role?: string | null) {
+/** Menu entries that belong to a switchable programme module. */
+const moduleHrefs: Record<string, "store" | "voting"> = {
+  "/dashboard/intelli-store": "store"
+};
+
+/**
+ * The menu for a role. [modules] is what `/auth/me` reports the account can
+ * use; a module switched off for every programme in the account's scope drops
+ * its entry. Left out (before /auth/me answers), nothing is dropped by module.
+ */
+export function getNavigationItemsForRole(
+  role?: string | null,
+  modules?: { store?: boolean; voting?: boolean } | null
+) {
   const roleKey = allRoles.find((candidate) => candidate === role);
   const items = navigationItems
     .filter((item) => (roleKey ? item.roles.includes(roleKey) : item.href === "/dashboard"))
+    .filter((item) => {
+      const module = moduleHrefs[item.href];
+      return !module || !modules || modules[module] !== false;
+    })
     .map((item) =>
       roleKey && item.labelByRole?.[roleKey] ? { ...item, label: item.labelByRole[roleKey] } : item
     );

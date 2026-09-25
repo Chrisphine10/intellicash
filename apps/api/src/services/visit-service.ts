@@ -1,3 +1,11 @@
+/**
+ * Field visits: submission, amendment, and serialization.
+ *
+ * A SUBMITTED visit is immutable. There is no PATCH — an amendment writes a
+ * `GroupVisitRevision` holding the previous state and bumps `revision`, so the
+ * record of what was reported at the time survives the correction.
+ */
+
 import type { Prisma } from "@prisma/client";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";

@@ -147,7 +147,13 @@ for (const [key, account] of Object.entries(accounts)) {
     for (const [kind, groupId] of kinds) {
       if (kind !== "n/a" && !groupId) continue;
       // Destructive op against the target group: only meaningful for accounts that could reach it.
-      const expectAllowed = has(account, op.perm) && (kind === "n/a" || inScope(account, groupId));
+      // Member statements stay inside the group: oversight roles see
+      // group-level figures only (reports.ts MEMBER_REPORT_NOT_AVAILABLE).
+      const oversight = ["PARTNER_OFFICER", "LENDER", "READ_ONLY"].includes(account.role);
+      const expectAllowed =
+        has(account, op.perm) &&
+        (kind === "n/a" || inScope(account, groupId)) &&
+        !(op.id === "read-member-passbook" && oversight);
       const r = await op.call(account.cookie, groupId);
       const allowed = !isDenied(r);
       table.push({ account: key, role: account.role, op: op.id, kind, expectAllowed, allowed, status: r.status });

@@ -1,3 +1,12 @@
+/**
+ * Payment gateway integration (M-Pesa Daraja and Paystack).
+ *
+ * Initiates inbound payments (STK push, checkout) and outbound payouts, and
+ * completes or fails them from provider callbacks. Credentials resolve group-
+ * first then platform-default, so a group with its own M-Pesa till settles
+ * into their account rather than the platform's.
+ */
+
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env";
 import { ApiHttpError } from "../lib/http";

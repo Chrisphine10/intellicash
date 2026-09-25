@@ -1,3 +1,12 @@
+/**
+ * Which programmes a village agent serves.
+ *
+ * An agent used to carry a single `programmeId`, which meant somebody setting
+ * up an agent who works across three of a partner's programmes had to pick one
+ * and drop the other two. Programmes now live in a join table. One rule
+ * governs the set: every programme must belong to the same partner.
+ */
+
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { ApiHttpError } from "../lib/http";

@@ -1,3 +1,12 @@
+/**
+ * Encrypts and decrypts third-party credentials at rest.
+ *
+ * Payment gateway keys, SMS provider secrets and any other credential the
+ * platform stores are AES-256-GCM encrypted before they touch the database,
+ * so a `IntegrationConfig` row is opaque ciphertext to anyone without the
+ * `SESSION_SECRET` derived key.
+ */
+
 import type { IntegrationProvider } from "@intellicash/shared";
 import { decryptJson, encryptJson } from "../lib/crypto";
 import { prisma } from "../lib/prisma";

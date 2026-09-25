@@ -1,3 +1,11 @@
+/**
+ * Group codes for groups created outside an import: `IWL-<county>-<random>`.
+ *
+ * Shared by the partner sign-up approval and mobile self sign-up, so a group
+ * made either way is addressed the same way. Random rather than sequential:
+ * a sequence would collide with imported codes and makes codes guessable.
+ */
+
 import type { Prisma } from "@prisma/client";
 
 /**

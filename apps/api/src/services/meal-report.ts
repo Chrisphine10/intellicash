@@ -1,3 +1,12 @@
+/**
+ * Builds the MEAL picture for a set of groups.
+ *
+ * All the arithmetic lives in `domain/meal-indicators.ts`; this file only
+ * gathers the readings and hands them over. The split matters because it is
+ * what keeps the rules — paired comparison, denominators, comparability — in
+ * one tested place instead of re-implemented per query.
+ */
+
 import { prisma } from "../lib/prisma";
 import {
   MEAL_CONTRACT_VERSION,

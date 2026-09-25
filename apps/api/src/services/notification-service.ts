@@ -1,3 +1,13 @@
+/**
+ * System notifications.
+ *
+ * Every notification that appears in the console bell is also texted, because
+ * the people who most need to act on one are not sitting in front of the
+ * console. This is the only seam — wiring SMS here rather than at every call
+ * site means a notification added later is texted without anybody remembering
+ * to.
+ */
+
 import { buildSystemNotificationSms } from "../domain/notification-catalogue";
 import { prisma } from "../lib/prisma";
 import { normalizeSmsPhone } from "./sms-service";

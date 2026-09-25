@@ -1,3 +1,12 @@
+/**
+ * Seeds the one scorecard template the platform ships with.
+ *
+ * A fresh installation has no assessment template, so the first visit an
+ * agent submits has nothing to score against. This ensures the bundled
+ * template exists once, idempotently, so the field can start work without a
+ * manual setup step.
+ */
+
 import { prisma } from "../lib/prisma";
 import { DEFAULT_TEMPLATE_FAMILY } from "./visit-assessment-service";
 import { seedAssessmentTemplateV1 } from "../../prisma/seed-assessment-template-v1";

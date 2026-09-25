@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
-import { scopeGroupWhere } from "../services/account-scope";
+import { demoExclusionForUser, scopeGroupWhere } from "../services/account-scope";
 import { actionItemState, actionPlanSummary } from "../domain/action-plan";
 import { documentStatus, registerSummary } from "../domain/group-document-state";
 import { buildGroupMeal, buildMealReport } from "../services/meal-report";
@@ -121,7 +121,8 @@ visitReportsRouter.get(
  */
 visitReportsRouter.get("/reports/visits", requireAuth("visits:read"), async (req, res, next) => {
   try {
-    const scope = scopeGroupWhere(req.user);
+    // Programme-wide figures leave demo groups out, like every portfolio report.
+    const scope = { AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)] };
     const groups = await prisma.group.findMany({
       where: scope,
       select: { id: true, name: true, code: true, county: true }
@@ -238,7 +239,7 @@ visitReportsRouter.get("/reports/visits", requireAuth("visits:read"), async (req
 visitReportsRouter.get("/reports/meal", requireAuth("visits:read"), async (req, res, next) => {
   try {
     const groups = await prisma.group.findMany({
-      where: scopeGroupWhere(req.user),
+      where: { AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)] },
       select: { id: true }
     });
 

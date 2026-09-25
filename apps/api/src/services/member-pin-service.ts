@@ -1,3 +1,10 @@
+/**
+ * A meeting PIN is four digits, chosen by the member on their phone.
+ *
+ * Handles generation, hashing, delivery by SMS and verification of the PIN
+ * a member uses to prove attendance and unlock steps at a meeting.
+ */
+
 import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";

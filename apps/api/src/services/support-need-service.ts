@@ -1,3 +1,11 @@
+/**
+ * Seeds the support-need taxonomy.
+ *
+ * The kinds of help a group can ask for (finance, market, skills…) are a
+ * controlled list programmes can extend. This ensures the bundled categories
+ * exist on a fresh install.
+ */
+
 import { prisma } from "../lib/prisma";
 import { SUPPORT_NEED_TYPES } from "../domain/meal-indicators";
 

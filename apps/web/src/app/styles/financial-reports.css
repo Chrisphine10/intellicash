@@ -1,0 +1,55 @@
+/* Financial Reports: the group statement's money lines, and a clean print. */
+
+.statement-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  margin-bottom: 16px;
+}
+
+.statement-lines {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.statement-lines td {
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  padding: 9px 16px;
+}
+
+.statement-lines td.numeric {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.statement-lines tr.statement-total td {
+  border-bottom: 2px solid var(--line);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+@media print {
+  .no-print,
+  .dashboard-sidebar,
+  .dashboard-topbar,
+  nav,
+  aside,
+  .table-toolbar,
+  .table-pagination {
+    display: none !important;
+  }
+
+  .statement-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .data-card,
+  .stat-card {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

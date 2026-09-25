@@ -130,6 +130,14 @@ export default function MemberPassbookPage() {
   const [user, setUser] = useState<User | null>(null);
   const [group, setGroup] = useState<GroupRow | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  // The server's own totals - this cycle's savings and the debt with interest -
+  // so the web passbook says what the phone and the group's statement say.
+  const [summary, setSummary] = useState<{
+    sharesCents: number;
+    socialCents: number;
+    loansRepaidCents: number;
+    loanOutstandingWithInterestCents: number;
+  } | null>(null);
   const [openMeetingKey, setOpenMeetingKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +158,8 @@ export default function MemberPassbookPage() {
         const ledgerResponse = primaryGroup
           ? await apiFetch<LedgerEntry[]>(`/groups/${primaryGroup.id}/ledger`)
           : [];
+        const passbook = await apiFetch<{ summary: NonNullable<typeof summary> }>("/members/me").catch(() => null);
+        if (mounted && passbook) setSummary(passbook.summary);
 
         if (!mounted) return;
         setUser(me);
@@ -213,10 +223,21 @@ export default function MemberPassbookPage() {
           </div>
           <div className="passbook-summary-line">
             <span>{passbookRows.length} meetings</span>
-            <span>{formatKes(totals.shares)} shares</span>
-            <span>{formatKes(totals.social)} social</span>
-            <span>{formatKes(totals.repayment)} repaid</span>
-            <span>{formatKes(totals.disbursement)} disbursed</span>
+            {summary ? (
+              <>
+                <span>{formatKes(summary.sharesCents)} shares this cycle</span>
+                <span>{formatKes(summary.socialCents)} social</span>
+                <span>{formatKes(summary.loansRepaidCents)} repaid</span>
+                <span>{formatKes(summary.loanOutstandingWithInterestCents)} owed (with interest)</span>
+              </>
+            ) : (
+              <>
+                <span>{formatKes(totals.shares)} shares</span>
+                <span>{formatKes(totals.social)} social</span>
+                <span>{formatKes(totals.repayment)} repaid</span>
+                <span>{formatKes(totals.disbursement)} disbursed</span>
+              </>
+            )}
           </div>
         </header>
         <div className="table-wrap passbook-table-wrap">

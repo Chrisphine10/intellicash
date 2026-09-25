@@ -53,6 +53,12 @@ const envSchema = z.object({
   ALLOW_SANDBOX_NETWORK_TESTS: envBoolean(false),
   ENABLE_PAYMENT_NETWORK_CALLS: envBoolean(false),
   ENABLE_SMS_NETWORK_CALLS: envBoolean(true),
+  /**
+   * The loop that plans upcoming meetings from each group's meeting days and
+   * sends their reminders. It never opens a meeting. Off in tests, which drive
+   * the same functions directly with their own clock.
+   */
+  ENABLE_MEETING_REMINDERS: envBoolean(process.env.NODE_ENV !== "test"),
   GOOGLE_MAPS_BROWSER_API_KEY: z.string().default(""),
   INTELLIAUDIT_LLM_PROVIDER: z.string().default("disabled"),
   INTELLIAUDIT_LLM_BASE_URL: z.string().default(""),

@@ -13,6 +13,7 @@ import { cyclesRouter } from "./routes/cycles";
 import { externalLoansRouter } from "./routes/external-loans";
 import { groupPaymentsRouter } from "./routes/group-payments";
 import { groupPolicyRouter } from "./routes/group-policy";
+import { consistencyRouter } from "./routes/consistency";
 import { publicJoinRouter } from "./routes/public-join";
 import { visitsRouter } from "./routes/visits";
 import { assessmentsRouter } from "./routes/assessments";
@@ -178,6 +179,7 @@ export function createApp(
   app.use("/api/v1", shareOutsRouter);
   app.use("/api/v1", restoreBundleRouter);
   app.use("/api/v1", groupPolicyRouter);
+  app.use("/api/v1", consistencyRouter);
   app.use("/api/v1", publicJoinRouter);
   app.use("/api/v1", memberRolesRouter);
   app.use("/api/v1", welfareExpensesRouter);

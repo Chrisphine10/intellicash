@@ -176,9 +176,51 @@ export function formatMeetingTime(value: string) {
   });
 }
 
-export function meetingStatusClass(status: string) {
+/**
+ * Meeting status, in one place.
+ *
+ * A meeting is started only by a person. The schedule never opens one: a
+ * scheduled meeting whose time has passed is still SCHEDULED, shown as
+ * "Not started" so an official can start it late or cancel it.
+ */
+const NOT_STARTED = ["SCHEDULED", "KEY_UNLOCK_PENDING"];
+
+type StatusInput = { status: string; scheduledAt: string };
+
+export function isMeetingNotStarted(meeting: StatusInput) {
+  return NOT_STARTED.includes(meeting.status);
+}
+
+/** Scheduled for later and not started - what "upcoming" means. */
+export function isMeetingUpcoming(meeting: StatusInput, now = Date.now()) {
+  return isMeetingNotStarted(meeting) && new Date(meeting.scheduledAt).getTime() >= now;
+}
+
+/** Its time has passed and nobody started it. Needs an official: start or cancel. */
+export function isMeetingOverdue(meeting: StatusInput, now = Date.now()) {
+  return isMeetingNotStarted(meeting) && new Date(meeting.scheduledAt).getTime() < now;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: "Scheduled",
+  KEY_UNLOCK_PENDING: "Waiting for keys",
+  IN_PROGRESS: "In progress",
+  SEALED: "Closed",
+  CLOSED: "Closed",
+  SYNC_CONFLICT: "Needs review",
+  CANCELLED: "Cancelled"
+};
+
+export function meetingStatusLabel(meeting: StatusInput, now = Date.now()) {
+  if (isMeetingOverdue(meeting, now)) return "Not started";
+  return STATUS_LABELS[meeting.status] ?? meeting.status.replace(/_/g, " ").toLowerCase();
+}
+
+export function meetingStatusClass(status: string, scheduledAt?: string) {
   if (status === "IN_PROGRESS") return "pill";
   if (status === "SEALED" || status === "CLOSED") return "pill blue";
+  if (status === "CANCELLED" || status === "SYNC_CONFLICT") return "pill red";
+  if (scheduledAt && isMeetingOverdue({ status, scheduledAt })) return "pill red";
   return "pill gold";
 }
 

@@ -18,12 +18,36 @@ import {
   type OfflineMeetingScheduleDraft
 } from "../../../../../lib/meeting-offline-store";
 import { DataTable } from "../../../../../components/dashboard/data-table";
+import { isMeetingOverdue, meetingStatusClass, meetingStatusLabel } from "../../../../../features/meetings/model";
 import type { MeetingRow, Member, User } from "../../../../../components/dashboard/types";
 
 interface GroupSummary {
   id: string;
   name: string;
   code: string;
+  meetingFrequency?: string | null;
+  meetingDays?: string | null;
+  meetingTime?: string | null;
+  remindersEnabled?: boolean;
+}
+
+const WEEKDAYS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 7, label: "Sun" }
+];
+
+function parseDays(value?: string | null): number[] {
+  try {
+    const parsed: unknown = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((day): day is number => Number.isInteger(day)) : [];
+  } catch {
+    return [];
+  }
 }
 
 interface MeetingForm {
@@ -64,6 +88,12 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
   });
   const [memberKeyForm, setMemberKeyForm] = useState({ meetingId: "", pin: "" });
   const [pendingSchedules, setPendingSchedules] = useState<OfflineMeetingScheduleDraft[]>([]);
+  const [scheduleForm, setScheduleForm] = useState({
+    frequency: "WEEKLY",
+    days: [] as number[],
+    time: "14:00",
+    remindersEnabled: true
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,6 +132,12 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
 
   function applyWorkspace(workspace: MeetingWorkspaceCache, schedules: OfflineMeetingScheduleDraft[]) {
     setGroup(workspace.group);
+    setScheduleForm({
+      frequency: workspace.group.meetingFrequency ?? "WEEKLY",
+      days: parseDays(workspace.group.meetingDays),
+      time: workspace.group.meetingTime ?? "14:00",
+      remindersEnabled: workspace.group.remindersEnabled ?? true
+    });
     setMeetings([...schedules.map(offlineScheduleAsMeeting), ...workspace.meetings]);
     setMembers(workspace.members);
     setUser(workspace.user);
@@ -181,7 +217,11 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
     setMessage(null);
 
     try {
-      const scheduledAt = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : new Date().toISOString();
+      if (!form.scheduledAt) {
+        setMessage({ ok: false, text: "Choose the date and time of the meeting." });
+        return;
+      }
+      const scheduledAt = new Date(form.scheduledAt).toISOString();
       if (isOffline()) {
         const queued = await queueOfflineMeetingSchedule({
           groupId: id,
@@ -208,7 +248,7 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
       setMessage({ ok: true, text: `${created.title} scheduled.` });
     } catch (saveError) {
       if (isNetworkFailure(saveError)) {
-        const scheduledAt = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : new Date().toISOString();
+        const scheduledAt = new Date(form.scheduledAt).toISOString();
         const queued = await queueOfflineMeetingSchedule({
           groupId: id,
           title: form.title,
@@ -253,6 +293,43 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (scheduleForm.days.length === 0) {
+      setMessage({ ok: false, text: "Pick at least one meeting day." });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      await apiFetch(`/groups/${id}/meeting-schedule`, {
+        method: "PUT",
+        body: JSON.stringify(scheduleForm)
+      });
+      await loadPage();
+      setMessage({
+        ok: true,
+        text: scheduleForm.remindersEnabled
+          ? "Meeting schedule saved. Members will be reminded the day before and two hours before each meeting."
+          : "Meeting schedule saved. Reminders are off for this group."
+      });
+    } catch (scheduleError) {
+      setMessage({ ok: false, text: scheduleError instanceof Error ? scheduleError.message : "Schedule failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelMeeting(meeting: MeetingRow) {
+    const reason = window.prompt(`Why is "${meeting.title}" not taking place?`, "The meeting did not take place");
+    if (!reason || reason.trim().length < 3) return;
+    await postAction(
+      `/groups/${id}/meetings/${meeting.id}/cancel`,
+      `${meeting.title} cancelled. Members get no more reminders for it.`,
+      { reason: reason.trim() }
+    );
   }
 
   async function postAction(path: string, success: string, payload: unknown = {}) {
@@ -404,6 +481,79 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="data-card">
+            <header>
+              <div>
+                <h3>Meeting days &amp; reminders</h3>
+                <span>
+                  Used only to remind members by SMS and notification, the day before and two hours
+                  before. A meeting still starts only when an official unlocks it.
+                </span>
+              </div>
+            </header>
+            <form className="credential-form" onSubmit={saveSchedule}>
+              <div className="credential-grid">
+                <label className="credential-field">
+                  <span>How often</span>
+                  <select
+                    onChange={(event) => setScheduleForm((current) => ({ ...current, frequency: event.target.value }))}
+                    value={scheduleForm.frequency}
+                  >
+                    <option value="WEEKLY">Every week</option>
+                    <option value="BIWEEKLY">Every two weeks</option>
+                    <option value="MONTHLY">Once a month (first week)</option>
+                  </select>
+                </label>
+                <label className="credential-field">
+                  <span>Time</span>
+                  <input
+                    onChange={(event) => setScheduleForm((current) => ({ ...current, time: event.target.value }))}
+                    required
+                    type="time"
+                    value={scheduleForm.time}
+                  />
+                </label>
+              </div>
+              <div className="segmented" role="group" aria-label="Meeting days">
+                {WEEKDAYS.map((day) => {
+                  const selected = scheduleForm.days.includes(day.value);
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={selected ? "active" : ""}
+                      key={day.value}
+                      onClick={() =>
+                        setScheduleForm((current) => ({
+                          ...current,
+                          days: selected
+                            ? current.days.filter((value) => value !== day.value)
+                            : [...current.days, day.value].sort((a, b) => a - b)
+                        }))
+                      }
+                      type="button"
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="checkbox-card">
+                <input
+                  checked={scheduleForm.remindersEnabled}
+                  onChange={(event) => setScheduleForm((current) => ({ ...current, remindersEnabled: event.target.checked }))}
+                  type="checkbox"
+                />
+                <span>Send meeting reminders to members</span>
+              </label>
+              <div className="credential-actions">
+                <button className="button" disabled={saving || isOffline()} type="submit">
+                  <Activity size={16} />
+                  {saving ? "Saving" : "Save schedule"}
+                </button>
+              </div>
+            </form>
           </div>
 
           <div className="data-card">
@@ -617,8 +767,13 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
             {
               key: "status",
               header: "Status",
-              value: (meeting) => humanizeEnum(meeting.status),
-              cell: (meeting) => <span className="pill blue">{humanizeEnum(meeting.status)}</span>
+              value: (meeting) => (meeting.status === "QUEUED_OFFLINE" ? "Waiting to sync" : meetingStatusLabel(meeting)),
+              cell: (meeting) =>
+                meeting.status === "QUEUED_OFFLINE" ? (
+                  <span className="pill gold">Waiting to sync</span>
+                ) : (
+                  <span className={meetingStatusClass(meeting.status, meeting.scheduledAt)}>{meetingStatusLabel(meeting)}</span>
+                )
             },
             {
               key: "step",
@@ -689,9 +844,22 @@ export default function GroupMeetingsPage({ params }: { params: Promise<{ id: st
                     </button>
                   );
                 }
+                const cancellable =
+                  ["SCHEDULED", "KEY_UNLOCK_PENDING"].includes(meeting.status) && meeting.attendance.length === 0;
                 return (
                   <div className="table-action-group">
                     {primaryAction}
+                    {cancellable ? (
+                      <button
+                        className="button secondary table-action-button"
+                        disabled={saving}
+                        onClick={() => cancelMeeting(meeting)}
+                        title={isMeetingOverdue(meeting) ? "This meeting's time has passed and nobody started it." : undefined}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
                     <Link className="button table-action-button" href={`/dashboard/meetings/${meeting.id}/entry`}>
                       <BookOpenText size={15} />
                       Entry

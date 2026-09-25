@@ -1,3 +1,11 @@
+/**
+ * Sends a single SMS through the configured provider.
+ *
+ * Handles phone-number normalization, provider selection, template rendering,
+ * and the provider-specific request shape. The outbound service calls this;
+ * routes and other services call the outbound service.
+ */
+
 export type SmsProvider = "BONGA_SMS" | "AFRICAS_TALKING";
 export type SmsSendStatus = "QUEUED" | "SENT" | "FAILED";
 

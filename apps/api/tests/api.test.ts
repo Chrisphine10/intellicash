@@ -27,6 +27,9 @@ async function publishSeededProgramme() {
 describe("Intellicash API", () => {
   beforeAll(async () => {
     await seedDatabase();
+    // These tests exercise the store and voting themselves, not the module
+    // switch (tests/programme-modules.test.ts covers that): open both.
+    await prisma.programme.updateMany({ data: { storeEnabled: true, votingEnabled: true } });
   }, 30000);
 
   it("adds request trace IDs to API responses and errors", async () => {
@@ -868,6 +871,23 @@ describe("Intellicash API", () => {
       })
     );
 
+    const partnerAgent = await authenticatedAgent("partner@intellicash.co.ke");
+    await partnerAgent
+      .patch(`/api/v1/groups/${group.body.data.id}/meetings/${meeting.body.data.id}`)
+      .send({ title: "Partner rescheduled meeting" })
+      .expect(403);
+    await partnerAgent
+      .post(`/api/v1/groups/${group.body.data.id}/meetings`)
+      .send({
+        title: "Partner-created meeting",
+        scheduledAt: new Date(Date.now() + 259_200_000).toISOString()
+      })
+      .expect(403);
+    await partnerAgent
+      .post(`/api/v1/groups/${group.body.data.id}/meetings/${meeting.body.data.id}/attendance`)
+      .send({ memberId: "not-authorized", status: "PRESENT" })
+      .expect(403);
+
     await prisma.meeting.update({
       where: { id: meeting.body.data.id },
       data: { status: "IN_PROGRESS" }
@@ -1029,6 +1049,11 @@ describe("Intellicash API", () => {
     expect(accessControl.body.data.rolePermissions.GROUP_ACCOUNT).toEqual(
       expect.arrayContaining(["members:write", "meetings:write", "ledger:write", "votes:write"])
     );
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("meetings:write");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("groups:write");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("payments:write");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("store:write");
+    expect(accessControl.body.data.rolePermissions.PARTNER_OFFICER).not.toContain("documents:write");
     expect(accessControl.body.data.rolePermissions.GROUP_ACCOUNT).not.toContain("payments:write");
     expect(accessControl.body.data.rolePermissions.MEMBER).not.toContain("payments:read");
     expect(accessControl.body.data.rolePermissions.READ_ONLY).not.toContain("payments:read");
@@ -1560,10 +1585,14 @@ describe("Intellicash API", () => {
       // backstop for every other kind of over-debit.
       expect.arrayContaining([
         "INVALID_MEMBER_CREDENTIAL",
-        "DUPLICATE_CLIENT_REQUEST",
         "INSUFFICIENT_LOAN_FUND"
       ])
     );
+    expect(
+      offlineSync.body.data.synced.some(
+        (item: { kind: string }) => item.kind === "ledgerEntry"
+      )
+    ).toBe(true);
 
     await groupAgent
       .post(`/api/v1/groups/${otherGroup.id}/ledger`)
@@ -2344,9 +2373,35 @@ describe("Intellicash API", () => {
     expect(bookingRequests.body.data.some((row: { id: string }) => row.id === bookingRequest.body.data.id)).toBe(true);
   }, 60000);
 
-  it("supports wallet deposits, wallet contributions, withdrawal approvals, and idempotent callbacks", async () => {
+  it("keeps partner wallet actions read-only", async () => {
     const partnerAgent = await authenticatedAgent("partner@intellicash.co.ke");
+    await partnerAgent.get("/api/v1/partner-wallet").expect(200);
+    await partnerAgent.post("/api/v1/partner-wallet/deposits").send({
+      provider: "MPESA_DARAJA",
+      amountCents: 100000,
+      phoneNumber: "254700000201"
+    }).expect(403);
+    await partnerAgent.post("/api/v1/partner-wallet/withdrawals").send({
+      provider: "MPESA_DARAJA",
+      amountCents: 50000,
+      payoutPhoneNumber: "254700000201"
+    }).expect(403);
+  });
+
+  it("still moves wallet money correctly for a partner an admin has allowed to pay", async () => {
+    // Partners are read-only by default, so the wallet is dormant until an
+    // admin grants payments:write. The money path behind it (M-Pesa callback
+    // idempotency, contributions, withdrawal approval) must keep working for
+    // the deployments that do.
     const adminAgent = await authenticatedAgent();
+    const access = await adminAgent.get("/api/v1/access-control").expect(200);
+    const partnerDefaults: string[] = access.body.data.rolePermissions.PARTNER_OFFICER;
+    await adminAgent
+      .patch("/api/v1/access-control/roles/PARTNER_OFFICER/permissions")
+      .send({ permissions: [...partnerDefaults, "payments:write"] })
+      .expect(200);
+    try {
+    const partnerAgent = await authenticatedAgent("partner@intellicash.co.ke");
     const before = await partnerAgent.get("/api/v1/partner-wallet").expect(200);
     const programmes = await request(app).get("/api/v1/public/programmes").expect(200);
     const programmeId = programmes.body.data[0].id;
@@ -2439,6 +2494,12 @@ describe("Intellicash API", () => {
     const afterWithdrawal = await partnerAgent.get("/api/v1/partner-wallet").expect(200);
     expect(afterWithdrawal.body.data.heldCents).toBe(before.body.data.heldCents);
     expect(afterWithdrawal.body.data.balanceCents).toBe(before.body.data.balanceCents);
+    } finally {
+      await adminAgent
+        .patch("/api/v1/access-control/roles/PARTNER_OFFICER/permissions")
+        .send({ permissions: partnerDefaults })
+        .expect(200);
+    }
   });
 
   it("rejects invalid Paystack webhook signatures", async () => {

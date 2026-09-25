@@ -11,6 +11,7 @@ import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { MeetingRow, User, VoteRow } from "../../../../../components/dashboard/types";
 
 interface GroupSummary {
+  modules?: { store: boolean; voting: boolean };
   id: string;
   name: string;
   code: string;
@@ -67,7 +68,10 @@ export default function GroupVotesPage({ params }: { params: Promise<{ id: strin
     };
   }, [id]);
 
-  const canWrite = user?.permissions?.includes("votes:write") ?? false;
+  // Voting switched off for this group's programmes: the record stays readable,
+  // but new resolutions are not taken (the API refuses them too).
+  const votingOn = group?.modules?.voting !== false;
+  const canWrite = votingOn && (user?.permissions?.includes("votes:write") ?? false);
 
   async function createVote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

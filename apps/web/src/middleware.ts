@@ -79,6 +79,9 @@ export function middleware(request: NextRequest) {
     // Same-origin deployments add nothing here.
     `img-src 'self' https: data: blob:${extraConnectSrc()}`,
     "font-src 'self' https: data:",
+    // The meetings map falls back to Google's keyless embed (an iframe) when
+    // no Maps API key is configured; default-src 'self' would blank it.
+    "frame-src 'self' https://www.google.com",
     // The API is same-origin (/api/v1 on this very host) in every deployment.
     // A split setup — API on its own port during development — has to declare
     // itself with NEXT_PUBLIC_API_BASE_URL, and is then allowed here. Reading

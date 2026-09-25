@@ -147,6 +147,8 @@ data class PortfolioSummary(
     val members: Int,
     val activeMeetings: Int,
     val totalSavingsCents: Long,
+    /** Social/welfare fund balance, reported separately from savings. */
+    val totalSocialFundCents: Long = 0,
     val repaymentRate: Double,
     val averageCreditScore: Double,
     val phaseDistribution: Map<String, Int> = emptyMap(),
