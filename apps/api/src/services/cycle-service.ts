@@ -131,6 +131,80 @@ export interface CloseCycleOptions {
   notes?: string | null;
   /** Set when a phone's share-out ends the cycle; see `Cycle.closedByShareOutId`. */
   closedByShareOutId?: string | null;
+  /**
+   * The meeting the cycle ends in (a share-out reviewed on the web happens
+   * inside an open meeting). It is sealed with the cycle instead of blocking
+   * the close as "still open".
+   */
+  sealMeetingId?: string | null;
+}
+
+/**
+ * Ledger rows in each group's CURRENT cycle, by the statement's rule: stamped
+ * with the active cycle, or (older rows with no stamp) made since it began. A
+ * group with no cycle rows at all is one cycle long. "Active cycle OR no
+ * stamp" at any date — what the portfolio and group list used to count —
+ * added every pre-cycle share ever bought to "savings this cycle".
+ */
+export async function activeCycleEntriesWhere(
+  db: Prisma.TransactionClient | PrismaClient,
+  groupIds: string[]
+): Promise<Prisma.LedgerEntryWhereInput> {
+  const cycles = await db.cycle.findMany({
+    where: { groupId: { in: groupIds } },
+    select: { id: true, groupId: true, status: true, startedAt: true }
+  });
+  const withCycles = new Set(cycles.map((cycle) => cycle.groupId));
+  // A group whose cycles are all closed has nothing "this cycle".
+  const active = cycles.filter((cycle) => cycle.status === "ACTIVE");
+  return {
+    groupId: { in: groupIds },
+    OR: [
+      { cycleId: { in: active.map((cycle) => cycle.id) } },
+      ...active.map((cycle) => ({ groupId: cycle.groupId, cycleId: null, createdAt: { gte: cycle.startedAt } })),
+      { groupId: { in: groupIds.filter((id) => !withCycles.has(id)) } }
+    ]
+  };
+}
+
+/**
+ * The share purchases that belong to the cycle a share-out would end: stamped
+ * with the active cycle, or (older rows with no stamp) made since the last
+ * payout. One definition for the console's reviewed share-out and the phone's
+ * recorded one, so the two never disagree about which cycle a share belongs
+ * to. A cycle closed WITHOUT a payout does not carry its shares forward — they
+ * were settled when it closed, and counting them again would pay them twice.
+ */
+export async function currentCycleSharesWhere(
+  tx: Prisma.TransactionClient,
+  groupId: string
+): Promise<Prisma.LedgerEntryWhereInput> {
+  const [lastShareOut, activeCycle] = await Promise.all([
+    tx.ledgerEntry.findFirst({
+      where: { groupId, type: "SHARE_OUT_PAYOUT" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true }
+    }),
+    tx.cycle.findFirst({
+      where: { groupId, status: "ACTIVE" },
+      orderBy: { number: "desc" },
+      select: { id: true }
+    })
+  ]);
+  const unstampedSinceLastPayout: Prisma.LedgerEntryWhereInput = {
+    cycleId: null,
+    ...(lastShareOut ? { createdAt: { gt: lastShareOut.createdAt } } : {})
+  };
+  return {
+    groupId,
+    type: "SHARE_PURCHASE",
+    direction: "CREDIT",
+    ...(activeCycle
+      ? { OR: [{ cycleId: activeCycle.id }, unstampedSinceLastPayout] }
+      : lastShareOut
+        ? { createdAt: { gt: lastShareOut.createdAt } }
+        : {})
+  };
 }
 
 /**
@@ -147,9 +221,14 @@ export async function closeCycleWithin(
 ): Promise<CloseCycleResult> {
   const current = await ensureActiveCycle(tx, groupId);
 
-  // Only a meeting that is happening RIGHT NOW blocks the close.
+  // Only a meeting that is happening RIGHT NOW blocks the close — other than
+  // the one the cycle is ending in, which is sealed with it.
   const openMeetings = await tx.meeting.count({
-    where: { cycleId: current.id, status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] } }
+    where: {
+      cycleId: current.id,
+      status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] },
+      ...(options.sealMeetingId ? { id: { not: options.sealMeetingId } } : {})
+    }
   });
   if (openMeetings > 0) {
     throw new ApiHttpError(
@@ -203,6 +282,12 @@ export async function closeCycleWithin(
 
   if (heldIds.length > 0) {
     await tx.meeting.updateMany({ where: { id: { in: heldIds } }, data: { status: "SEALED", closedAt: now } });
+  }
+  if (options.sealMeetingId) {
+    await tx.meeting.updateMany({
+      where: { id: options.sealMeetingId, cycleId: current.id, status: { notIn: ["SEALED", "CANCELLED"] } },
+      data: { status: "SEALED", closedAt: now }
+    });
   }
   if (plannedIds.length > 0) {
     await tx.meeting.updateMany({ where: { id: { in: plannedIds } }, data: { cycleId: opened.id } });

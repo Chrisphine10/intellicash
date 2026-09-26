@@ -46,6 +46,17 @@ export function fail(res: Response, error: unknown) {
     });
   }
 
+  // The database refusing a write is usually the person's input colliding with
+  // something that exists - a phone number or code already in use - which they
+  // can fix. It used to reach them as "Something went wrong on our side".
+  const known = knownDatabaseRefusal(error);
+  if (known) {
+    logApiFailure(known.status, known.code, known.message, traceId);
+    return res.status(known.status).json({
+      error: { code: known.code, message: known.message, ...(traceId ? { traceId } : {}) }
+    });
+  }
+
   logApiFailure(500, "INTERNAL_ERROR", error instanceof Error ? error.message : "Unknown API error", traceId, error);
   return res.status(500).json({
     error: {
@@ -54,6 +65,53 @@ export function fail(res: Response, error: unknown) {
       ...(traceId ? { traceId } : {})
     }
   });
+}
+
+const FIELD_WORDS: Record<string, string> = {
+  phone: "phone number",
+  email: "email address",
+  code: "code",
+  name: "name",
+  nationalIdHash: "national ID",
+  clientRequestId: "request",
+  slug: "web address"
+};
+
+/**
+ * Prisma's refusals that mean something to a person, in their words. Duck-typed
+ * on `code` so this file does not have to import the Prisma runtime.
+ *   P2002 unique constraint  -> 409 ALREADY_EXISTS, naming the field
+ *   P2025 record not found   -> 404 NOT_FOUND
+ *   P2003 still referenced   -> 409 IN_USE
+ */
+export function knownDatabaseRefusal(error: unknown): { status: number; code: string; message: string } | null {
+  if (!error || typeof error !== "object") return null;
+  const { code, meta } = error as { code?: unknown; meta?: { target?: unknown } };
+  if (typeof code !== "string" || !/^P\d{4}$/.test(code)) return null;
+  if (code === "P2002") {
+    const target = meta?.target;
+    const fields = (Array.isArray(target) ? target : typeof target === "string" ? [target] : [])
+      .map((field) => String(field))
+      .map((field) => FIELD_WORDS[field] ?? null)
+      .filter((word): word is string => Boolean(word));
+    const what = fields.length > 0 ? `this ${fields.join(" and ")}` : "these details";
+    return {
+      status: 409,
+      code: "ALREADY_EXISTS",
+      message: `Something with ${what} is already recorded. Use a different one, or open the existing record.`
+    };
+  }
+  if (code === "P2025") {
+    return { status: 404, code: "NOT_FOUND", message: "We could not find that. It may have been removed, or the page is out of date." };
+  }
+  if (code === "P2003") {
+    return {
+      status: 409,
+      code: "IN_USE",
+      message: "This is still linked to other records, so it cannot be changed or removed yet."
+    };
+  }
+  return null;
 }
 
 /**

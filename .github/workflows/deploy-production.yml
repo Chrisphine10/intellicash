@@ -81,12 +81,13 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      # Only what the data guard needs: the script itself and the list of
-      # migrations this commit ships.
+      # Only what the data guard and the backup need: the guard, the backup
+      # script, and the list of migrations this commit ships.
       - uses: actions/checkout@v5
         with:
           sparse-checkout: |
             scripts/prod-data-guard.py
+            ops/intellicash-backup.sh
             apps/api/prisma/migrations
           sparse-checkout-cone-mode: false
 
@@ -137,6 +138,20 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'python3 - snapshot' < scripts/prod-data-guard.py
+
+      # The backup script is reviewed in this repo (ops/intellicash-backup.sh);
+      # the server runs that version, not whatever was once copied there. It
+      # verifies its own copy and exits non-zero if the copy is bad, which
+      # stops the deploy here - before any code changes.
+      - name: Install the backup script from this commit
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             cat > /usr/local/bin/intellicash-backup.sh.new
+             bash -n /usr/local/bin/intellicash-backup.sh.new
+             chmod 755 /usr/local/bin/intellicash-backup.sh.new
+             mv /usr/local/bin/intellicash-backup.sh.new /usr/local/bin/intellicash-backup.sh' < ops/intellicash-backup.sh
 
       - name: Pre-deploy backup and record rollback point
         id: backup

@@ -7,6 +7,34 @@
  */
 
 import { prisma } from "../lib/prisma";
+import { memberAccountsEnabledFor } from "./member-accounts-service";
+import { loadLoanPositions } from "./loan-position-service";
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+/**
+ * The share value a group's recorded purchases were actually made in, for a
+ * group whose rules never reached the server.
+ *
+ * The group row's value is kept when every purchase is a whole number of it
+ * (it is then at least consistent with the book). Otherwise the largest value
+ * every purchase is a multiple of is the group's share: a group buying
+ * KSh 50, 100 and 150 of shares saves in KSh 50 shares. With no purchases at
+ * all there is nothing to go on but the row.
+ */
+export function shareValueFromHistory(
+  entries: Array<{ type: string; amountCents: number }>,
+  rowValueCents: number
+): number {
+  const amounts = entries
+    .filter((entry) => entry.type === "SHARE_PURCHASE" && entry.amountCents > 0)
+    .map((entry) => entry.amountCents);
+  if (amounts.length === 0) return rowValueCents;
+  if (rowValueCents > 0 && amounts.every((amount) => amount % rowValueCents === 0)) return rowValueCents;
+  return amounts.reduce((acc, amount) => gcd(acc, amount));
+}
 
 /**
  * Everything a phone needs to rebuild a group's record book: its cycles, meetings
@@ -93,6 +121,18 @@ export async function buildRestoreBundle(groupId: string) {
     })
   ]);
 
+  // How each repayment was actually applied: the server replays a member's
+  // repayments across all their loans (oldest first, a surplus rolling on),
+  // while a ledger row points at one loan only. Without this a restored phone
+  // pinned each payment to that one loan, dropped any with no loan link, and
+  // showed balances the server did not.
+  const positions = await loadLoanPositions(prisma, { groupIds: [groupId] }, new Date());
+  const allocations = [...positions.values()].flatMap((position) =>
+    position.allocations
+      .filter((slice) => slice.repaymentId)
+      .map((slice) => ({ repaymentEntryId: slice.repaymentId!, loanId: slice.loanId, cents: slice.cents }))
+  );
+
   const cycleNumber = new Map(cycles.map((cycle) => [cycle.id, cycle.number]));
   const active = [...cycles].reverse().find((cycle) => cycle.status === "ACTIVE") ?? null;
   const numberOf = (cycleId: string | null) => (cycleId ? cycleNumber.get(cycleId) ?? null : null);
@@ -116,14 +156,16 @@ export async function buildRestoreBundle(groupId: string) {
       defaultLoanTermMonths: policy?.defaultLoanTermMonths ?? 1,
       // The group's own rules, so a restored phone computes exactly what the
       // old one did instead of starting from made-up defaults. The rule the
-      // group set on its phone wins; the group row's share settings fill in
-      // for groups that never pushed their rules.
+      // group set on its phone wins. A group that never pushed one gets the
+      // share value its own history shows (see [shareValueFromHistory]) — the
+      // group row's KSh 500 is a schema default most groups never chose.
       interestType: policy?.interestType ?? "FLAT",
-      shareValueCents: policy?.shareValueCents ?? group.shareValueCents,
+      shareValueCents:
+        policy?.shareValueCents ?? shareValueFromHistory(entries, group.shareValueCents),
       maxSharesPerMeeting: policy?.maxSharesPerMeeting ?? group.maxSharesPerMemberPerMeeting,
       socialFundCents: policy?.socialFundCents ?? null,
       loanMultiplierBps: policy?.loanMultiplierBps ?? null,
-      memberAccountsEnabled: policy?.memberAccountsEnabled ?? false
+      memberAccountsEnabled: await memberAccountsEnabledFor(groupId)
     },
     members: members.map((member) => {
       const [firstName, ...rest] = member.fullName.split(" ");
@@ -170,6 +212,7 @@ export async function buildRestoreBundle(groupId: string) {
       dueAt: loan.dueAt.toISOString(),
       status: loan.status,
       disbursementEntryId: loan.disbursementEntryId
-    }))
+    })),
+    allocations
   };
 }

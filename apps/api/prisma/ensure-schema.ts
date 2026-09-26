@@ -1,3 +1,7 @@
+// Read apps/api/.env the way Prisma itself does. Without it, a NODE_ENV or
+// PRISMA_SCHEMA_STRATEGY kept only in .env was invisible here and the script
+// chose `db push` while Prisma still used the .env DATABASE_URL.
+import "dotenv/config";
 import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -21,15 +25,43 @@ const force = process.argv.includes("--force");
 const schemaDirectory = join(process.cwd(), "prisma");
 
 /**
+ * Whether [path] is a database built by migrations (it has migration
+ * history). Such a database is only ever changed by migrations: `db push`
+ * would reshape it with no record, and the next `migrate deploy` would find
+ * a schema its history does not explain.
+ */
+async function hasMigrationHistory(path: string): Promise<boolean> {
+  if (!existsSync(path)) return false;
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      const table = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'")
+        .get();
+      if (!table) return false;
+      const row = db.prepare("SELECT COUNT(*) AS n FROM _prisma_migrations").get() as { n: number } | undefined;
+      return (row?.n ?? 0) > 0;
+    } finally {
+      db.close();
+    }
+  } catch {
+    // No node:sqlite (Node < 22) or an unreadable file: fall back to the
+    // environment alone, as before.
+    return false;
+  }
+}
+
+/**
  * Migrations in production, push in development.
  *
  * Anything that is not explicitly a development run is treated as production:
  * the safe default is the reviewable path, not the destructive one.
  */
-const useMigrations =
-  process.env.PRISMA_SCHEMA_STRATEGY === "migrate" ||
-  (process.env.NODE_ENV === "production" &&
-    process.env.PRISMA_SCHEMA_STRATEGY !== "push");
+const explicitStrategy = process.env.PRISMA_SCHEMA_STRATEGY;
+let useMigrations =
+  explicitStrategy === "migrate" ||
+  (process.env.NODE_ENV === "production" && explicitStrategy !== "push");
 
 function sqliteFilePath(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl?.startsWith("file:")) return join(schemaDirectory, "dev.db");
@@ -56,6 +88,18 @@ function fail(result: ReturnType<typeof run>) {
 }
 
 const databasePath = sqliteFilePath();
+
+if (!useMigrations && (await hasMigrationHistory(databasePath))) {
+  if (explicitStrategy === "push") {
+    console.error(
+      `Refusing to db push ${databasePath}: it was built by migrations. ` +
+        "Write a migration (npx prisma migrate dev --name <change>) instead."
+    );
+    process.exit(1);
+  }
+  console.log("This database was built by migrations; applying migrations, not db push.");
+  useMigrations = true;
+}
 
 if (force && existsSync(databasePath)) {
   // Only ever a development convenience — `db:reset` wipes and re-seeds.

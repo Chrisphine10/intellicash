@@ -27,7 +27,10 @@ import { AMOUNT_TOO_LARGE_MESSAGE, MAX_CENTS, MAX_CENTS_LABEL } from "../domain/
 import { allocateLargestRemainder } from "../domain/share-out";
 import { loadLoanPositions } from "../services/loan-position-service";
 import {
+  activeCycleEntriesWhere,
   assertMeetingWritable,
+  closeCycleWithin,
+  currentCycleSharesWhere,
   ensureActiveCycle
 } from "../services/cycle-service";
 import { requireAuth } from "../middleware/auth";
@@ -747,6 +750,46 @@ export async function resolveFundAccount(tx: Prisma.TransactionClient, groupId: 
   return fundAccount;
 }
 
+/**
+ * A request id seen before. The same entry again is a retry and is answered
+ * with what was saved. The same id on a different entry of the SAME group is
+ * answered the same way, on purpose (QA I4.03): a hard refusal would leave the
+ * phone's meeting in "waiting to back up" for ever and block its sign-out,
+ * over a slip no phone can make legitimately (a closed meeting's rows cannot
+ * change). It is logged, so it can be found. An id from ANOTHER group is never
+ * a retry: answering it would hand one group's entry to another, so it is
+ * refused.
+ */
+export function assertSameRequest(
+  existing: { groupId: string; memberId: string | null; type: string; amountCents: number },
+  input: { groupId: string; memberId?: string | null; type: string; amountCents: number; clientRequestId?: string | null }
+) {
+  if (existing.groupId !== input.groupId) {
+    throw new ApiHttpError(
+      409,
+      "REQUEST_ID_REUSED",
+      "This entry's request id was already used by another group, so it was not saved. Send it again with a new id.",
+      { clientRequestId: input.clientRequestId ?? null }
+    );
+  }
+  if (
+    existing.type !== input.type ||
+    existing.amountCents !== input.amountCents ||
+    (existing.memberId ?? null) !== (input.memberId ?? null)
+  ) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "ledger.request_id.replayed_with_differences",
+        clientRequestId: input.clientRequestId ?? null,
+        groupId: input.groupId,
+        saved: { type: existing.type, amountCents: existing.amountCents, memberId: existing.memberId },
+        sent: { type: input.type, amountCents: input.amountCents, memberId: input.memberId ?? null }
+      })
+    );
+  }
+}
+
 export async function appendLedgerEntry(
   tx: Prisma.TransactionClient,
   input: {
@@ -773,7 +816,14 @@ export async function appendLedgerEntry(
         fundAccount: { select: { id: true, type: true, currency: true } }
       }
     });
-    if (existing) return existing;
+    if (existing) {
+      // A retry of the same entry is answered with what was saved. The same
+      // key on a DIFFERENT entry (another group, amount, type or member) is a
+      // client bug or a collision: answering "saved" would tell the phone its
+      // entry is on the server when it is not, and the money would be lost.
+      assertSameRequest(existing, input);
+      return existing;
+    }
   }
 
   const fundAccount = await tx.fundAccount.findFirst({
@@ -1050,34 +1100,11 @@ async function computeShareOutPreview(
   poolAmountCents: number,
   options: { distributeWelfare?: boolean } = {}
 ) {
-  const lastShareOut = await tx.ledgerEntry.findFirst({
-    where: { groupId, type: "SHARE_OUT_PAYOUT" },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true }
-  });
   // This cycle's shares: stamped with the active cycle. Older rows carry no
   // stamp, and for those "since the last payout" is still the best evidence.
   // Going by the payout alone let a cycle closed WITHOUT a payout leak its
   // shares into the next share-out.
-  const activeCycle = await tx.cycle.findFirst({
-    where: { groupId, status: "ACTIVE" },
-    orderBy: { number: "desc" },
-    select: { id: true }
-  });
-  const unstampedSinceLastPayout: Prisma.LedgerEntryWhereInput = {
-    cycleId: null,
-    ...(lastShareOut ? { createdAt: { gt: lastShareOut.createdAt } } : {})
-  };
-  const cycleWhere: Prisma.LedgerEntryWhereInput = {
-    groupId,
-    type: "SHARE_PURCHASE",
-    direction: "CREDIT",
-    ...(activeCycle
-      ? { OR: [{ cycleId: activeCycle.id }, unstampedSinceLastPayout] }
-      : lastShareOut
-        ? { createdAt: { gt: lastShareOut.createdAt } }
-        : {})
-  };
+  const cycleWhere = await currentCycleSharesWhere(tx, groupId);
   const rows = await tx.ledgerEntry.groupBy({
     by: ["memberId"],
     where: cycleWhere,
@@ -1304,14 +1331,10 @@ async function withCurrentRating<
   // Savings = the shares members bought this cycle. NOT the loan fund's cash
   // balance, which is what this used to report: that falls every time a loan
   // goes out, so a group that lent its savings read as having saved nothing.
-  // Unstamped rows are older than cycles and belong to the first one.
+  // "This cycle" by the statement's rule (activeCycleEntriesWhere).
   const shares = await prisma.ledgerEntry.groupBy({
     by: ["direction"],
-    where: {
-      groupId: group.id,
-      type: "SHARE_PURCHASE",
-      OR: [{ cycle: { status: "ACTIVE" } }, { cycleId: null }]
-    },
+    where: { AND: [await activeCycleEntriesWhere(prisma, [group.id]), { type: "SHARE_PURCHASE" }] },
     _sum: { amountCents: true }
   });
   const totalSavingsCents = shares.reduce(
@@ -3003,11 +3026,13 @@ router.post("/groups/:id/meetings/:meetingId/offline-sync", requireAuth("ledger:
           if (entry.clientRequestId) {
             const existing = await tx.ledgerEntry.findUnique({
               where: { clientRequestId: entry.clientRequestId },
-              select: { id: true }
+              select: { id: true, groupId: true, memberId: true, type: true, amountCents: true }
             });
             if (existing) {
               // A replay after a lost response is an idempotent success, not
-              // a conflict. The phone must be able to converge after retry.
+              // a conflict. The phone must be able to converge after retry —
+              // but only for the SAME entry (assertSameRequest).
+              assertSameRequest(existing, { ...entry, groupId: routeParam(req.params.id, "id") });
               synced.push({ kind: "ledgerEntry", id: existing.id });
               continue;
             }
@@ -3084,10 +3109,30 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
       await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
       const groupId = routeParam(req.params.id, "id");
       const meetingId = routeParam(req.params.meetingId, "meetingId");
+      const prefix = payload.clientRequestPrefix ?? `shareout-${meetingId}`;
+      // A share-out ends the cycle, so the same one sent twice (a double
+      // click, a retry after a dropped reply) must not work the NEXT cycle's
+      // shares out and pay them. The cycle it closed remembers it.
+      const shareOutKey = `web-${prefix}`;
+      const alreadyClosed = await tx.cycle.findFirst({
+        where: { groupId, closedByShareOutId: shareOutKey },
+        select: { id: true, number: true }
+      });
+      if (alreadyClosed) {
+        return { replayed: true as const, closed: alreadyClosed };
+      }
       const preview = await computeShareOutPreview(tx, groupId, payload.poolAmountCents, {
         distributeWelfare: payload.distributeWelfare
       });
-      const prefix = payload.clientRequestPrefix ?? `shareout-${meetingId}`;
+      // Nobody bought shares this cycle: there is nothing to share out, and
+      // "sharing out" would only end an empty cycle.
+      if (preview.rows.length === 0) {
+        throw new ApiHttpError(
+          409,
+          "NOTHING_TO_SHARE_OUT",
+          "No member has bought shares this cycle, so there is nothing to share out."
+        );
+      }
       const entries = [];
       const settlements = [];
 
@@ -3148,7 +3193,31 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
         }
       }
 
+      // A share-out IS the end of the cycle: close it in the same transaction,
+      // as the phone's recorded share-out does. Left open, every report went
+      // on counting shares that had just been paid out (the statement showed a
+      // near −100% return) and a second preview would pay them again.
+      const closed = await closeCycleWithin(tx, groupId, {
+        closedByUserId: req.user?.id ?? null,
+        closedByShareOutId: shareOutKey,
+        sealMeetingId: meetingId,
+        notes: `Closed by the share-out reviewed on the web.${payload.description ? ` ${payload.description}` : ""}`
+      }).catch((error: unknown) => {
+        if (error instanceof ApiHttpError && error.code === "CYCLE_HAS_OPEN_MEETINGS") {
+          throw new ApiHttpError(
+            409,
+            "CYCLE_HAS_OPEN_MEETINGS",
+            "Another meeting of this cycle is still open. A share-out ends the cycle, so seal or cancel that meeting first. Nothing was paid out.",
+            error.details
+          );
+        }
+        throw error;
+      });
+
       return {
+        replayed: false as const,
+        closed: closed.closed,
+        opened: closed.opened,
         preview,
         entries,
         settlements,

@@ -183,7 +183,13 @@ export async function buildMemberPassbook(memberId: string, options: { cycleId?:
       settledAt: settledAt ? settledAt.toISOString() : null,
       overdue: !balance.settled && loan.dueAt < asOf && balance.outstandingCents > 0
     }));
-  const loanInterestCents = loanDetail.reduce((s, l) => s + l.interestCents, 0);
+  // Interest on the loans this statement is about — lent in this cycle, or
+  // still owed now — the same loans the group statement counts. Summing every
+  // loan the member ever had put years of settled interest beside this
+  // cycle's "received" and "repaid", and a member PDF that did not add up.
+  const loanInterestCents = (positions.get(memberId)?.loans ?? [])
+    .filter((entry) => !cycle || entry.loan.cycleId === cycle.id || !entry.settled)
+    .reduce((s, entry) => s + entry.interestCents, 0);
   const ledgerOnlyOutstandingCents = Math.max(0, lifetimeFor(LOAN_DISBURSEMENT) - lifetimeFor(LOAN_REPAYMENT));
   /**
    * Interest-aware outstanding — but NEVER below what the ledger already
@@ -235,10 +241,10 @@ export async function buildMemberPassbook(memberId: string, options: { cycleId?:
       loansReceivedCents,
       loansRepaidCents,
       // Never show a negative balance when someone overpays.
+      // DEPRECATED: the LEDGER difference, which ignores interest. Kept only
+      // for phones released before loanOutstandingWithInterestCents existed;
+      // no report may show it. Remove once those phones are gone.
       loanOutstandingCents: ledgerOnlyOutstandingCents,
-      // The line above is the LEDGER difference and ignores interest. Kept
-      // for older clients (tests pin it); every report shows the
-      // interest-aware figure below.
       loanInterestCents,
       loanOutstandingWithInterestCents,
       welfareReceivedCents,

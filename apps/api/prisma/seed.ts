@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { assertSafeToWipe } from "./destructive-guard";
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -87,7 +88,11 @@ function demoAccount(role: (typeof demoAccounts)[number]["role"]) {
   return demoAccounts.find((account) => account.role === role)!;
 }
 
-export async function seedDatabase() {
+export async function seedDatabase(options: { databaseIsEmpty?: boolean } = {}) {
+  // It starts by deleting every table. Never against a live database
+  // (prisma/destructive-guard.ts), unless the caller has just proved there is
+  // nothing in it to lose.
+  if (!options.databaseIsEmpty) assertSafeToWipe("the demo seed (prisma/seed.ts)");
   await prisma.intelliAuditOfflineAction.deleteMany();
   await prisma.intelliAuditReportAuditReference.deleteMany();
   await prisma.intelliAuditReportApproval.deleteMany();

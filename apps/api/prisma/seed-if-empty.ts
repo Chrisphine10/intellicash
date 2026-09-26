@@ -29,7 +29,15 @@ async function seedIfEmpty() {
     return;
   }
 
-  await seedDatabase();
+  // No users; make sure there is no money either before the demo seed
+  // (which starts by clearing every table) is allowed to run.
+  const ledgerRows = await prisma.ledgerEntry.count();
+  if (ledgerRows > 0) {
+    console.error(`Seed refused: no users, but ${ledgerRows} ledger rows exist. Restore the users instead of reseeding.`);
+    process.exitCode = 1;
+    return;
+  }
+  await seedDatabase({ databaseIsEmpty: true });
   console.log("Demo seed data created for empty database.");
 }
 

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { WIPE_OVERRIDE_FLAG } from "./destructive-guard";
 import { basename, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
@@ -188,6 +189,18 @@ function readVslaOnboarding(workbook: WorkbookSheets) {
 }
 
 async function clearPreviousImport() {
+  // Re-importing replaces the previous import's groups. A group that has
+  // since held a meeting or recorded money is no longer just imported data:
+  // deleting it would cascade to its members and meetings.
+  const used = await prisma.group.count({
+    where: { sourceSystem, OR: [{ meetings: { some: {} } }, { ledgerEntries: { some: {} } }] }
+  });
+  if (used > 0 && !process.argv.includes(WIPE_OVERRIDE_FLAG)) {
+    throw new Error(
+      `Refusing to re-import: ${used} imported group(s) now have meetings or money recorded. ` +
+        `Run again with ${WIPE_OVERRIDE_FLAG} only if that data may be deleted.`
+    );
+  }
   await prisma.ftmaPartnerLinkage.deleteMany();
   await prisma.ftmaCountyFscKpi.deleteMany();
   await prisma.ftmaCountyVslaTrainingMetric.deleteMany();

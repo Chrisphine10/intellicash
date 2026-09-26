@@ -1,0 +1,10 @@
+[Unit]
+Description=IntelliCash nightly backup (database + uploads, verified)
+# Installed as /etc/systemd/system/intellicash-backup.service; see ops/README.md.
+
+[Service]
+Type=oneshot
+# Sundays keep a weekly copy (8 kept); every other night a daily one (14 kept).
+ExecStart=/bin/sh -c 'if [ "$(date +%%u)" = 7 ]; then exec /usr/local/bin/intellicash-backup.sh weekly; else exec /usr/local/bin/intellicash-backup.sh daily; fi'
+Nice=10
+IOSchedulingClass=idle

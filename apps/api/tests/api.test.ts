@@ -1497,13 +1497,17 @@ describe("Intellicash API", () => {
       shareOutPreview.body.data.rows.reduce((sum: number, row: { payoutCents: number }) => sum + row.payoutCents, 0)
     ).toBe(25000);
 
-    const postedShareOut = await groupAgent
+    // A share-out ends the cycle, so it waits while another meeting of the
+    // cycle is still in progress (the one opened above) - and pays nothing.
+    const shareOutPrefix = `shareout-test-${Date.now()}`;
+    const earlyShareOut = await groupAgent
       .post(`/api/v1/groups/${groupId}/meetings/${batchMeeting.body.data.id}/share-out/post`)
-      .send({ poolAmountCents: 25000, clientRequestPrefix: `shareout-test-${Date.now()}` })
-      .expect(201);
-    expect(postedShareOut.body.data.entries[0]).toEqual(
-      expect.objectContaining({ type: "SHARE_OUT_PAYOUT", direction: "DEBIT" })
-    );
+      .send({ poolAmountCents: 25000, clientRequestPrefix: shareOutPrefix })
+      .expect(409);
+    expect(earlyShareOut.body.error.code).toBe("CYCLE_HAS_OPEN_MEETINGS");
+    expect(
+      await prisma.ledgerEntry.count({ where: { groupId, type: "SHARE_OUT_PAYOUT", clientRequestId: { startsWith: shareOutPrefix } } })
+    ).toBe(0);
 
     const syncMeeting = await groupAgent
       .post(`/api/v1/groups/${groupId}/meetings`)
@@ -1649,6 +1653,9 @@ describe("Intellicash API", () => {
         transactionTotal: 2
       })
     );
+    // The share-out that ends a cycle, sealed meeting and all, is covered in
+    // reports-integrity.test.ts on a group of its own; this group still has
+    // other meetings in progress from the tests above.
   }, 60000);
 
   it("handles public partner signup requests and admin account approval", async () => {

@@ -15,6 +15,13 @@ apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 apps/api/prisma/test.db
 apps/api/prisma/test.db-journal
+# Every local SQLite file: test and QA databases, CI's migration check, and any
+# copy of a real database brought down for a rehearsal (members' personal
+# data - never for git).
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+*.sqlite
+*.sqlite3
 apps/api/uploads/
 # The API resolves its upload folder from the working directory, so a run started
 # from the repo root writes here instead - visit photos and avatars, never for git.

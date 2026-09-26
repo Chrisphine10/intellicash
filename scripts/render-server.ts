@@ -4,6 +4,7 @@ import next from "next";
 import { createApp } from "../apps/api/src/app";
 import { prisma } from "../apps/api/src/lib/prisma";
 import { assertDurableDatabase } from "../apps/api/src/lib/storage-safety";
+import { startMeetingReminderLoop } from "../apps/api/src/services/meeting-reminder-service";
 
 // This process serves the API as well as the web app, so the same rule
 // applies: do not take a group's money into storage that gets wiped.
@@ -36,9 +37,24 @@ async function start() {
   server.listen(port, host, () => {
     console.log(`Intelli-Cash web and API listening on ${host}:${port}`);
   });
+
+  // Meeting reminders plan each group's next meetings and text members about
+  // them. This process is what production runs, and it never started the loop
+  // (only server.ts did), so no reminder was ever sent. It sends SMS to real
+  // members, so here it is an explicit choice: ENABLE_MEETING_REMINDERS=true
+  // in the service's .env turns it on; anything else leaves it off.
+  if (process.env.ENABLE_MEETING_REMINDERS === "true") {
+    stopMeetingReminders = startMeetingReminderLoop();
+    console.log("Meeting reminders: on");
+  } else {
+    console.log("Meeting reminders: off (set ENABLE_MEETING_REMINDERS=true to send them)");
+  }
 }
 
+let stopMeetingReminders: () => void = () => undefined;
+
 async function shutdown() {
+  stopMeetingReminders();
   if (!server) {
     await prisma.$disconnect();
     process.exit(0);

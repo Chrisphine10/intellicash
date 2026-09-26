@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the IntelliCash backup every night
+# Installed as /etc/systemd/system/intellicash-backup.timer; see ops/README.md.
+
+[Timer]
+# 02:45 server time: after hodi's 02:30 backup, before anyone meets.
+OnCalendar=*-*-* 02:45:00
+# A night the server was off is caught up at the next boot.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

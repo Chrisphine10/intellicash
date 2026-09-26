@@ -20,6 +20,7 @@ section("Group statements match the ledger");
 const admin = await login("admin@intellicash.co.ke", DEMO_PASSWORD);
 const groups = await db.group.findMany({ where: { isDemo: false }, select: { id: true, name: true } });
 const notReconciling = [];
+const statementShares = new Map();
 let checked = 0;
 for (const group of groups) {
   const cycle = await db.cycle.findFirst({ where: { groupId: group.id, status: "ACTIVE" }, orderBy: { number: "desc" } });
@@ -43,12 +44,19 @@ for (const group of groups) {
   check(`stmt-shares-${group.id}`, `${group.name}: share capital this cycle`, shares, s.loanFund.sharesCents);
   check(`stmt-loanfund-${group.id}`, `${group.name}: loan fund cash`, loanFund, s.loanFund.closingCents);
   check(`stmt-social-${group.id}`, `${group.name}: social fund`, socialFund, s.socialFund.closingCents);
+  // Equity from the LEDGER, not from the report's own lines: the loan fund's
+  // cash, plus anything a share-out already paid out of it this cycle, plus
+  // what is still owed to it.
+  const shareOutPaid = -signed(
+    await db.ledgerEntry.findMany({ where: { ...inCycle, type: "SHARE_OUT_PAYOUT" }, select: { amountCents: true, direction: true } })
+  );
   check(
     `stmt-equity-${group.id}`,
-    `${group.name}: equity = loan fund + owed`,
-    s.loanFund.closingCents + s.loans.outstandingCents,
+    `${group.name}: equity = loan fund (ledger) + shared out + owed`,
+    loanFund + shareOutPaid + s.loans.outstandingCents,
     s.equity.totalCents
   );
+  statementShares.set(group.id, s.loanFund.sharesCents);
   const projected = s.memberRows.reduce((sum, row) => sum + row.projectedShareOutCents, 0);
   if (s.memberRows.some((row) => row.sharesCents > 0)) {
     check(`stmt-split-${group.id}`, `${group.name}: projected share-out adds up to equity`, Math.max(0, s.equity.totalCents), projected);
@@ -62,6 +70,33 @@ console.log(`\n${checked} group statements checked.`);
 if (notReconciling.length) {
   console.log("Stored fund balances that do not match the ledger (the report follows the ledger):");
   for (const row of notReconciling) console.log(`  ${row.group}: ledger KES ${row.ledger}, stored KES ${row.stored}`);
+}
+
+section("The dashboard and group list say what the statements say");
+{
+  // "Savings this cycle" on the admin dashboard is the sum of every real
+  // group's statement; each row of the group list is its own statement's.
+  const portfolioSummary = await api(admin.cookie, "GET", "/analytics/portfolio");
+  const list = await api(admin.cookie, "GET", "/groups?pageSize=500");
+  const rows = list.data?.items ?? list.data ?? [];
+  let mismatched = [];
+  let total = 0;
+  for (const row of rows) {
+    if (!statementShares.has(row.id)) continue;
+    total += statementShares.get(row.id);
+    if (row.totalSavingsCents !== statementShares.get(row.id)) {
+      mismatched.push(`${row.name}: list ${row.totalSavingsCents} vs statement ${statementShares.get(row.id)}`);
+    }
+  }
+  check("dash-list-savings", "each group's savings in the list equal its statement", [], mismatched.slice(0, 5));
+  // Groups with no cycle yet are counted whole by both; only compare when
+  // every counted group has a statement here.
+  const covered = rows.filter((row) => statementShares.has(row.id)).length;
+  if (covered === portfolioSummary.data?.groups) {
+    check("dash-portfolio-savings", "dashboard savings this cycle = sum of the statements", total, portfolioSummary.data.totalSavingsCents);
+  } else {
+    console.log(`  (dashboard total not compared: ${portfolioSummary.data?.groups} groups on the dashboard, ${covered} with a statement here)`);
+  }
 }
 
 section("Each role sees what it should");

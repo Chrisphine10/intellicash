@@ -3,8 +3,11 @@
  *
  * The rules are the group's (share value, most shares a member may buy at one
  * meeting, the social-fund amount, how much a member may borrow against their
- * savings). They are set on the group's phone and pushed to GroupPolicy; the
- * group row's share settings fill in for a group that never pushed them.
+ * savings). They are set on the group's phone and pushed to GroupPolicy, and
+ * ONLY GroupPolicy counts. The group row's share settings are schema defaults
+ * (KSh 500, 10 shares) that every imported or console-made group carries
+ * whether or not anyone chose them — the production rehearsal of 25 Sep 2026
+ * found a live group saving KSh 50 shares that the default would have refused.
  *
  * Who is checked (decided 24 Sep 2026): entries typed on the web are refused
  * when they break a rule. Entries synced from a phone are NEVER refused — the
@@ -27,19 +30,13 @@ export interface GroupRules {
 }
 
 export async function groupRules(db: Db, groupId: string): Promise<GroupRules> {
-  const [policy, group] = await Promise.all([
-    db.groupPolicy.findUnique({
-      where: { groupId },
-      select: { shareValueCents: true, maxSharesPerMeeting: true, socialFundCents: true, loanMultiplierBps: true }
-    }),
-    db.group.findUnique({
-      where: { id: groupId },
-      select: { shareValueCents: true, maxSharesPerMemberPerMeeting: true }
-    })
-  ]);
+  const policy = await db.groupPolicy.findUnique({
+    where: { groupId },
+    select: { shareValueCents: true, maxSharesPerMeeting: true, socialFundCents: true, loanMultiplierBps: true }
+  });
   return {
-    shareValueCents: policy?.shareValueCents ?? group?.shareValueCents ?? null,
-    maxSharesPerMeeting: policy?.maxSharesPerMeeting ?? group?.maxSharesPerMemberPerMeeting ?? null,
+    shareValueCents: policy?.shareValueCents ?? null,
+    maxSharesPerMeeting: policy?.maxSharesPerMeeting ?? null,
     socialFundCents: policy?.socialFundCents ?? null,
     loanMultiplierBps: policy?.loanMultiplierBps ?? null
   };

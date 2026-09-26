@@ -72,6 +72,11 @@ async function main() {
 
   // ---- start clean -------------------------------------------------------
   const existing = await prisma.group.findFirst({ where: { code: DEMO_CODE } });
+  if (existing && !existing.isDemo) {
+    // The code is the demo's, but the group is not flagged as demo data:
+    // someone's real group. Its money is not this script's to delete.
+    throw new Error(`Refusing to reset ${DEMO_CODE}: that group is not flagged as demo data.`);
+  }
   if (existing) {
     /**
      * `LedgerEntry.group` is `onDelete: Restrict` on purpose: deleting a group

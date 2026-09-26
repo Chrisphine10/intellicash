@@ -46,6 +46,21 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Production is built by `prisma migrate deploy`, the tests by `db push`.
+      # Nothing proved the two agree: a schema change without its migration
+      # passed CI and failed (or silently drifted) on the live database. Build
+      # a database from the migrations alone and require it to equal the schema.
+      - name: Migrations build the schema
+        working-directory: apps/api
+        run: |
+          rm -f prisma/ci-migrate.db
+          DATABASE_URL=file:./ci-migrate.db npx prisma migrate deploy --schema prisma/schema.prisma
+          DATABASE_URL=file:./ci-migrate.db npx prisma migrate diff \
+            --from-url file:./prisma/ci-migrate.db \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
+          rm -f prisma/ci-migrate.db
+
       # The api suite runs against apps/api/prisma/dev.db and each test file
       # reseeds it, but nothing creates it. A developer machine already has one
       # from `npm run dev`, so this only ever fails on a clean checkout — which

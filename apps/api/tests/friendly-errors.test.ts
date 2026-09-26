@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { createApp } from "../src/app";
-import { validationMessage } from "../src/lib/http";
+import { knownDatabaseRefusal, validationMessage } from "../src/lib/http";
 import { prisma } from "../src/lib/prisma";
 
 const app = createApp();
@@ -99,3 +99,30 @@ describe("validation messages name the field", () => {
     expect(response.body.error.message.length).toBeGreaterThan(10);
   });
 });
+
+describe("database refusals a person can fix", () => {
+  it("a duplicate says what is already recorded, as a conflict and not our fault", () => {
+    const refusal = knownDatabaseRefusal({ code: "P2002", meta: { target: ["phone"] } });
+    expect(refusal).toEqual({
+      status: 409,
+      code: "ALREADY_EXISTS",
+      message: "Something with this phone number is already recorded. Use a different one, or open the existing record."
+    });
+  });
+
+  it("a duplicate on an unnamed index still reads as a sentence", () => {
+    expect(knownDatabaseRefusal({ code: "P2002", meta: { target: "Group_code_key" } })?.message).toContain("these details");
+  });
+
+  it("a record that has gone is 'not found', and one still in use says so", () => {
+    expect(knownDatabaseRefusal({ code: "P2025" })?.status).toBe(404);
+    expect(knownDatabaseRefusal({ code: "P2003" })?.code).toBe("IN_USE");
+  });
+
+  it("anything else is left to the generic handler", () => {
+    expect(knownDatabaseRefusal(new Error("boom"))).toBeNull();
+    expect(knownDatabaseRefusal({ code: "ECONNRESET" })).toBeNull();
+    expect(knownDatabaseRefusal({ code: "P1001" })).toBeNull();
+  });
+});
+

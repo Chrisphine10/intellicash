@@ -661,7 +661,9 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
         code: group.code,
         county: group.county,
         cycleNumber: group.cycleNumber,
-        memberCount: group._count.members,
+        // Members still in the group, as every other report counts them — the
+        // raw row count included everyone who has left.
+        memberCount: statement?.members.active ?? group._count.members,
         meetingCount: statement?.meetings.held ?? group._count.meetings,
         shareCapitalCents: statement?.loanFund.sharesCents ?? 0,
         loansOutstandingCents: statement?.loans.outstandingCents ?? 0,

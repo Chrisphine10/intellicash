@@ -60,6 +60,27 @@ IDENTITY = ["Group", "Member", "Meeting", "Cycle", "Loan", "FundAccount", "Ledge
 
 LEDGER_FIELDS = ["amountCents", "direction", "type", "memberId", "fundAccountId"]
 
+# Fields that never change once a record exists. A migration that rebuilds a
+# table (copy rows, drop, rename) can lose or scramble them without losing a
+# single id, and the id checks above would not notice. Status, due dates and
+# names legitimately change, so they are not here.
+FIXED_FIELDS = {
+    "Loan": ["groupId", "memberId", "principalCents", "disbursedAt"],
+    "Cycle": ["groupId", "number", "startedAt"],
+    "Member": ["groupId"],
+}
+
+# A meeting the reminder planner made (source AUTO_SCHEDULE) that nothing was
+# ever recorded in is deleted when a group changes its schedule. That is the
+# application working, not data loss, so such meetings are not held to
+# "must survive". Everything else about meetings is.
+DISPOSABLE_MEETINGS = """
+    SELECT m.id FROM Meeting m
+    WHERE m.source = 'AUTO_SCHEDULE'
+      AND NOT EXISTS (SELECT 1 FROM Attendance a WHERE a.meetingId = m.id)
+      AND NOT EXISTS (SELECT 1 FROM LedgerEntry l WHERE l.meetingId = m.id)
+"""
+
 
 def discover_db(explicit: str | None) -> str:
     """The database the running service uses: --db, else its own DATABASE_URL."""
@@ -114,6 +135,10 @@ def q(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
+def columns(con: sqlite3.Connection, table: str) -> list[str]:
+    return [r[1] for r in con.execute(f"PRAGMA table_info({q(table)})")]
+
+
 def table_exists(con: sqlite3.Connection, name: str) -> bool:
     return name in tables(con)
 
@@ -125,10 +150,25 @@ def capture(con: sqlite3.Connection, path: str) -> dict:
         names = tables(con)
         counts = {t: con.execute(f"SELECT COUNT(*) FROM {q(t)}").fetchone()[0] for t in names}
 
+        disposable: set[str] = set()
+        if "Meeting" in names and "source" in columns(con, "Meeting"):
+            disposable = {r[0] for r in con.execute(DISPOSABLE_MEETINGS)}
+
         identity: dict[str, list[str]] = {}
         for t in IDENTITY:
             if t in names:
-                identity[t] = [r[0] for r in con.execute(f"SELECT id FROM {q(t)} ORDER BY id")]
+                ids = [r[0] for r in con.execute(f"SELECT id FROM {q(t)} ORDER BY id")]
+                identity[t] = [i for i in ids if i not in disposable] if t == "Meeting" else ids
+        if "Meeting" in counts:
+            counts["Meeting"] -= len(disposable)
+
+        fixed: dict[str, dict[str, list]] = {}
+        for t, fields in FIXED_FIELDS.items():
+            if t not in names:
+                continue
+            have = [f for f in fields if f in columns(con, t)]
+            cols = ", ".join(q(f) for f in have)
+            fixed[t] = {r["id"]: [r[f] for f in have] for r in con.execute(f"SELECT id, {cols} FROM {q(t)}")}
 
         ledger: dict[str, list] = {}
         if "LedgerEntry" in names:
@@ -170,6 +210,7 @@ def capture(con: sqlite3.Connection, path: str) -> dict:
         "counts": counts,
         "identity": identity,
         "ledger": ledger,
+        "fixed": fixed,
         "fundsOutOfStep": mismatched,
         "migrations": migrations,
         "integrity": integrity,
@@ -264,6 +305,13 @@ def cmd_verify(args) -> int:
         gone = [i for i in ids if i not in have]
         if gone:
             problems.append(f"{len(gone)} {t} record(s) that existed before are gone (e.g. {gone[0]})")
+
+    for t, rows in before.get("fixed", {}).items():
+        after = now.get("fixed", {}).get(t, {})
+        altered = [i for i, fields in rows.items() if i in after and after[i] != fields]
+        if altered:
+            problems.append(f"{len(altered)} {t} record(s) had fields that never change altered (e.g. {altered[0]})")
+        print(f"{t}: {len(rows)} checked for unchanged {', '.join(FIXED_FIELDS[t])}; {len(altered)} altered")
 
     changed = [
         i for i, fields in before["ledger"].items()

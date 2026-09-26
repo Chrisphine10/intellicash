@@ -11,6 +11,7 @@ import {
 import { repaymentRatePercent } from "../domain/loan-math";
 import { ok } from "../lib/http";
 import { loadLoanPositions } from "../services/loan-position-service";
+import { activeCycleEntriesWhere } from "../services/cycle-service";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
@@ -56,15 +57,13 @@ router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, re
       credentialContext.credentialsByProvider,
       credentialContext.metaByProvider
     );
-    // Savings = shares bought this cycle, signed by direction. Unstamped rows
-    // predate cycles and belong to each group's first one.
+    // Savings = shares bought this cycle, signed by direction, by the
+    // statement's rule (activeCycleEntriesWhere) so the dashboard and each
+    // group's report add up to the same figure.
+    const groupIds = groups.map((group) => group.id);
     const shareRows = await prisma.ledgerEntry.groupBy({
       by: ["direction"],
-      where: {
-        type: "SHARE_PURCHASE",
-        group: groupWhere,
-        OR: [{ cycle: { status: "ACTIVE" } }, { cycleId: null }]
-      },
+      where: { AND: [await activeCycleEntriesWhere(prisma, groupIds), { type: "SHARE_PURCHASE" }] },
       _sum: { amountCents: true }
     });
     const totalSavingsCents = shareRows.reduce(
@@ -88,7 +87,7 @@ router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, re
     // balance maths as the passbook. This used to be the constant 91, shown to
     // partners as if it were a measurement.
     const now = new Date();
-    const positions = await loadLoanPositions(prisma, { groupIds: groups.map((group) => group.id) }, now);
+    const positions = await loadLoanPositions(prisma, { groupIds }, now);
     let loansOutstandingCents = 0;
     let par30Cents = 0;
     for (const position of positions.values()) {
@@ -98,9 +97,26 @@ router.get("/analytics/portfolio", requireAuth("analytics:read"), async (req, re
         if (now.getTime() - entry.loan.dueAt.getTime() > 30 * 24 * 60 * 60 * 1000) par30Cents += entry.outstandingCents;
       }
     }
+    // The repayment rate over the same loans each group's statement counts:
+    // lent this cycle, or still owed. Every loan ever made (what this was) let
+    // a good year long ago hide a bad cycle now, and disagreed with the
+    // financial reports.
+    const cycles = await prisma.cycle.findMany({
+      where: { groupId: { in: groupIds } },
+      select: { id: true, groupId: true, status: true }
+    });
+    const activeCycleIds = new Set(cycles.filter((cycle) => cycle.status === "ACTIVE").map((cycle) => cycle.id));
+    const groupsWithCycles = new Set(cycles.map((cycle) => cycle.groupId));
     const repaymentRate = repaymentRatePercent(
       [...positions.values()].flatMap((position) =>
-        position.loans.map((entry) => ({ ...entry, dueAt: entry.loan.dueAt }))
+        position.loans
+          .filter(
+            (entry) =>
+              !entry.settled ||
+              !groupsWithCycles.has(entry.loan.groupId) ||
+              (entry.loan.cycleId !== null && activeCycleIds.has(entry.loan.cycleId))
+          )
+          .map((entry) => ({ ...entry, dueAt: entry.loan.dueAt }))
       ),
       now
     );

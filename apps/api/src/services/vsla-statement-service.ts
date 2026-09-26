@@ -339,8 +339,10 @@ export async function buildGroupStatement(
   let pastDueCount = 0;
   let interestCollected = 0;
   for (const entry of loanEntries) {
-    // Principal first: what was repaid beyond the principal is interest.
-    interestCollected += Math.max(0, entry.repaidCents - entry.principalCents);
+    // Principal first: what was repaid beyond the principal is interest. An
+    // overpayment is the member's money held by the group, not interest the
+    // group earned, so it is taken out first.
+    interestCollected += Math.max(0, entry.repaidCents - entry.overpaidCents - entry.principalCents);
     if (entry.settled) continue;
     activeCount += 1;
     outstanding += entry.outstandingCents;
@@ -367,7 +369,11 @@ export async function buildGroupStatement(
   );
 
   // --- equity -----------------------------------------------------------------
-  const equityCents = loanClosing + outstanding;
+  // What the loan fund was worth to its savers: the cash in it, what is still
+  // owed to it, and what a share-out has already paid out of it. Leaving the
+  // payout out made every shared-out cycle look as if it had lost everything
+  // (a return near -100%). For a cycle not yet shared out it is zero.
+  const equityCents = loanClosing + shareOutPaidCents + outstanding;
   const capitalCents = sharesCents + Math.max(0, loanOpening);
   const returnOnSavings = capitalCents > 0 ? Math.round(((equityCents - capitalCents) / capitalCents) * 1000) / 10 : null;
 

@@ -150,10 +150,18 @@ for (const [key, account] of Object.entries(accounts)) {
       // Member statements stay inside the group: oversight roles see
       // group-level figures only (reports.ts MEMBER_REPORT_NOT_AVAILABLE).
       const oversight = ["PARTNER_OFFICER", "LENDER", "READ_ONLY"].includes(account.role);
+      // A member reads their OWN statement only, never a fellow member's
+      // (memberScopeForUser). The prepared record is the group's earliest
+      // member, which is the member's own only by chance of seed order.
+      const someoneElses =
+        op.id === "read-member-passbook" &&
+        account.role === "MEMBER" &&
+        (await prepare(groupId)).member !== account.user.memberId;
       const expectAllowed =
         has(account, op.perm) &&
         (kind === "n/a" || inScope(account, groupId)) &&
-        !(op.id === "read-member-passbook" && oversight);
+        !(op.id === "read-member-passbook" && oversight) &&
+        !someoneElses;
       const r = await op.call(account.cookie, groupId);
       const allowed = !isDenied(r);
       table.push({ account: key, role: account.role, op: op.id, kind, expectAllowed, allowed, status: r.status });
@@ -190,6 +198,12 @@ for (const op of ops) {
     const row = cols.map((k) => { const t = table.find((x) => x.account === key && x.op === op.id && x.kind === k); return t ? `${k}:${t.allowed ? "OK " : "-- "}${t.allowed === t.expectAllowed ? "" : "  <== UNEXPECTED"}` : ""; }).filter(Boolean).join("   ");
     console.log(`    ${key.padEnd(9)} ${row}`);
   }
+}
+
+// A member reads their own statement (and, above, never a fellow member's).
+if (accounts.member?.user.memberId) {
+  const ownStatement = await api(accounts.member.cookie, "GET", `/reports/member/${accounts.member.user.memberId}`);
+  check("P1.member.own-statement", "a member reads their own statement", 200, ownStatement.status);
 }
 
 save();

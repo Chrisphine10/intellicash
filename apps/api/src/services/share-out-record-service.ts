@@ -13,7 +13,7 @@ import { AMOUNT_TOO_LARGE_MESSAGE, MAX_CENTS } from "../domain/money";
 import { ApiHttpError } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { appendLedgerEntry, resolveFundAccount } from "../routes/groups";
-import { closeCycleWithin, ensureActiveCycle } from "./cycle-service";
+import { closeCycleWithin, currentCycleSharesWhere, ensureActiveCycle } from "./cycle-service";
 
 /**
  * A share-out that was done on a phone, sent to the online record.
@@ -109,24 +109,16 @@ export function shareDifferences(phone: Map<string, number>, online: Map<string,
 }
 
 /**
- * The share purchases the console's own share-out would count for this cycle:
- * everything credited since the last share-out payout. Deliberately the same
- * definition, so the two never disagree about which cycle a share belongs to.
+ * The share purchases the console's own share-out would count for this cycle
+ * (`currentCycleSharesWhere`). Deliberately the same definition, so the two
+ * never disagree about which cycle a share belongs to. "Since the last payout"
+ * alone counted the shares of a cycle closed WITHOUT a payout too, and refused
+ * every phone share-out after one as out of step.
  */
 async function onlineCycleShares(tx: Prisma.TransactionClient, groupId: string) {
-  const lastShareOut = await tx.ledgerEntry.findFirst({
-    where: { groupId, type: "SHARE_OUT_PAYOUT" },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true }
-  });
   const rows = await tx.ledgerEntry.groupBy({
     by: ["memberId"],
-    where: {
-      groupId,
-      type: "SHARE_PURCHASE",
-      direction: "CREDIT",
-      ...(lastShareOut ? { createdAt: { gt: lastShareOut.createdAt } } : {})
-    },
+    where: await currentCycleSharesWhere(tx, groupId),
     _sum: { amountCents: true }
   });
   const shares = new Map<string, number>();
