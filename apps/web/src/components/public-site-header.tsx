@@ -66,7 +66,9 @@ export function PublicSiteHeader({
         <img
           alt="Intelli Cash - Trusted Financial Partner"
           className="brand-logo landing-logo"
-          src="/brand/intelli-cash-logo.png"
+          height={128}
+          src="/brand/intelli-cash-logo.webp"
+          width={516}
         />
       </Link>
       {allowMobileMenu ? (

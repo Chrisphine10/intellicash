@@ -181,7 +181,9 @@ export function LoginExperience({
           <img
             alt="Intelli Cash - Trusted Financial Partner"
             className="brand-logo login-logo"
-            src="/brand/intelli-cash-logo.png"
+            height={128}
+            src="/brand/intelli-cash-logo.webp"
+            width={516}
           />
         </div>
         <div>

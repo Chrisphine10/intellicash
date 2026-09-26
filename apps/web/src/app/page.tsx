@@ -277,14 +277,9 @@ const appScreens = [
     text: "Three officials turn their key, and the room can see the count as it goes."
   },
   {
-    src: "/docs/10-group-home.webp",
-    title: "The group at a glance",
-    text: "Savings, loans out, members, meetings, fines and the welfare pot."
-  },
-  {
-    src: "/docs/11-meeting-hub.webp",
-    title: "Everything the evening needs",
-    text: "Shares, repayments, fines, welfare and voting, in one place."
+    src: "/docs/11-meetings.webp",
+    title: "Every meeting on record",
+    text: "What each meeting collected, and when the next one is."
   },
   {
     src: "/docs/13-members.webp",
@@ -292,14 +287,19 @@ const appScreens = [
     text: "Where each member stands on savings and on what they owe."
   },
   {
-    src: "/docs/18-voting.webp",
-    title: "Decisions on the record",
-    text: "A vote keeps its tally. An election can be secret."
+    src: "/docs/14-loans.webp",
+    title: "Who owes what",
+    text: "Every loan out, with the interest charged so far."
   },
   {
-    src: "/docs/21-member-passbook.webp",
-    title: "A member's own passbook",
-    text: "What they have paid in, what they owe, every entry in order."
+    src: "/docs/17-welfare.webp",
+    title: "The welfare fund",
+    text: "What the pot holds, and what it has paid out this cycle."
+  },
+  {
+    src: "/docs/19-group-report.webp",
+    title: "The group's report",
+    text: "Savings, loans and the cash box, checked against the online record."
   },
   {
     src: "/docs/23-member-report.webp",
@@ -307,21 +307,31 @@ const appScreens = [
     text: "A dated record a member can send to anyone who asks."
   },
   {
-    src: "/docs/17-welfare.webp",
-    title: "The welfare fund",
-    text: "What the pot holds, and what it has paid out this cycle."
+    src: "/docs/20-member-home.webp",
+    title: "Every group, one total",
+    text: "A member who saves in more than one group sees them all together."
   }
 ];
 
-/** The three screens fanned behind the hero headline. */
+/**
+ * The three screens fanned behind the hero headline. None repeats in the
+ * gallery below. Captured 25 Sep 2026 from the app as it ships, with a
+ * fictional demo group ("Umoja Women VSLA") whose figures add up.
+ */
 const heroScreens = [
-  { src: "/docs/10-group-home.webp", alt: "The group dashboard: savings, loans, members and meetings" },
-  { src: "/docs/11-meeting-hub.webp", alt: "Inside an open meeting, with every action the group takes" },
+  { src: "/docs/10-group-home.webp", alt: "The group dashboard: savings, loans, members, meetings and the social fund" },
+  { src: "/docs/11-meeting-hub.webp", alt: "A meeting's page: everything recorded in it and what it collected" },
   { src: "/docs/21-member-passbook.webp", alt: "A member's passbook showing their savings and what they owe" }
 ];
 
 // NOTE: Illustrative testimonials by role only (no named people/organizations).
 // TODO: Replace with real, attributed and consented quotes before public launch.
+//
+// Not shown until then (SHOW_TESTIMONIALS). Quotes nobody said, presented under
+// "how the groups using Intelli-Cash describe it", would mislead the partners
+// and funders reading this page. Put real, consented quotes here and set the
+// flag to true.
+const SHOW_TESTIMONIALS = false;
 const testimonials = [
   {
     quote:
@@ -402,7 +412,7 @@ const faqs = [
   {
     question: "Does it work where there is no network?",
     answer:
-      "Yes. The whole meeting runs on the phone — attendance, savings, shares, loans, fines, welfare and votes. When you are back in signal the phone sends everything up by itself. Only creating an account and signing in the first time need internet."
+      "Yes. The whole meeting runs on the phone — attendance, savings, shares, loans, fines and welfare, and votes where your programme uses them. When you are back in signal the phone sends everything up by itself. Only creating an account and signing in the first time need internet."
   },
   {
     question: "What if the phone is lost or breaks?",
@@ -504,7 +514,18 @@ export default function LandingPage() {
           <div className="hero-phone-fan">
             {heroScreens.map((screen, index) => (
               <figure className={`hero-phone hero-phone-${index + 1}`} key={screen.src}>
-                <img alt={screen.alt} loading={index === 0 ? "eager" : "lazy"} src={screen.src} />
+                {/* The middle phone is the one every screen size shows, so it
+                    loads first. The side phones are hidden on phones, and a
+                    hidden lazy image is never fetched. */}
+                <img
+                  alt={screen.alt}
+                  decoding="async"
+                  fetchPriority={index === 1 ? "high" : "low"}
+                  height={1212}
+                  loading={index === 1 ? "eager" : "lazy"}
+                  src={screen.src}
+                  width={540}
+                />
               </figure>
             ))}
           </div>
@@ -604,7 +625,14 @@ export default function LandingPage() {
         <div className="app-screens-grid">
           {appScreens.map((screen) => (
             <figure className="app-screen" key={screen.src}>
-              <img alt={`${screen.title}: ${screen.text}`} loading="lazy" src={screen.src} />
+              <img
+                alt={`${screen.title}: ${screen.text}`}
+                decoding="async"
+                height={1212}
+                loading="lazy"
+                src={screen.src}
+                width={540}
+              />
               <figcaption>
                 <strong>{screen.title}</strong>
                 <span>{screen.text}</span>
@@ -707,6 +735,7 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+      {SHOW_TESTIMONIALS ? (
       <section className="landing-section testimonials-section" id="testimonials" aria-labelledby="testimonials-title">
         <div className="landing-section-header wide">
           <p className="eyebrow">From the field</p>
@@ -732,6 +761,7 @@ export default function LandingPage() {
         </div>
         <p className="section-footnote">Illustrative examples by role &mdash; verified, attributed quotes will be added before launch.</p>
       </section>
+      ) : null}
 
       <section className="landing-section pricing-section" id="pricing" aria-labelledby="pricing-title">
         <div className="landing-section-header wide">

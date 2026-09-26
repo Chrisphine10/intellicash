@@ -91,11 +91,13 @@ export function IntelliStoreSection() {
           serviceType: current.serviceType || response.serviceTypes[0] || "Group onboarding",
           programmeId: current.programmeId || firstProgrammeId(response.agents[0])
         }));
-      } catch (storeError) {
+      } catch {
         // Nowhere left to show this: a section that cannot load its own
         // catalogue has nothing to advertise and stays hidden. The Intelli-Store
-        // page itself still reports the failure to anyone who goes there.
-        console.error("Intelli-Store section failed to load", storeError);
+        // page itself still reports the failure to anyone who goes there, and
+        // apiFetch has already logged the request. (With the store switched
+        // off - the default - this happens on every visit, so a second,
+        // error-level log here raised a red overlay on the home page.)
       }
     }
 

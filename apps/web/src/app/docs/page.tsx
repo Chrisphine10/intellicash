@@ -184,8 +184,8 @@ export default function DocsPage() {
           />
           <DocsShot
             src="/docs/11-meetings.webp"
-            alt="The meetings list showing one meeting in progress"
-            caption="Meetings. A closed meeting is locked — its records are the group's permanent audit trail — so the list says so rather than leaving you to find out."
+            alt="The meetings list: the next planned meeting and each past meeting with what it collected"
+            caption="Meetings: the next one on the group's schedule, and every meeting held with what it collected. A closed meeting is locked — its records are the group's permanent audit trail — so the list says so rather than leaving you to find out."
           />
           <DocsShot
             src="/docs/12-unlock.webp"
@@ -199,18 +199,18 @@ export default function DocsPage() {
           />
           <DocsShot
             src="/docs/11-meeting-hub.webp"
-            alt="The open meeting with tiles for social fund, shares, fines, loans, voting and welfare"
+            alt="A meeting's page with tiles for social fund, shares, fines, loans, repayments and welfare, and what it collected"
             caption="The meeting itself. Every action the group takes together is one tap away, and the running totals for this meeting sit underneath."
           />
           <DocsShot
             src="/docs/18-voting.webp"
             alt="Group votes showing a passed motion and an open election"
-            caption="Votes and elections. A decision records the tally; an election can be secret. One member, one vote."
+            caption="Votes and elections, when the group's programme has switched voting on. A decision records the tally; an election can be secret. One member, one vote."
           />
           <DocsShot
             src="/docs/17-welfare.webp"
             alt="The welfare fund screen"
-            caption="Welfare sits beside Voting, because a payout is agreed in the meeting the same way a motion is."
+            caption="The welfare fund: what is left in it, and every payout this cycle. A payout is recorded in an open meeting, in front of the members."
           />
           <DocsShot
             src="/docs/13-members.webp"
@@ -221,6 +221,11 @@ export default function DocsPage() {
             src="/docs/14-loans.webp"
             alt="The loans tab for the group"
             caption="Loans the group has out, what is owed, and what has been repaid."
+          />
+          <DocsShot
+            src="/docs/19-group-report.webp"
+            alt="The group report: savings, social fund, fines, loans, the cash box and each member's figures"
+            caption="The group report: savings, the social fund, loans and the cash box, marked as confirmed when the online record agrees. Share it as text or save it as a PDF."
           />
           <DocsShot
             src="/docs/15-more.webp"

@@ -25,13 +25,29 @@ export const metadata: Metadata = {
     "Keep your savings group's meetings, savings, shares and loans on an ordinary phone — working with or without network. Every member sees their own money, and no one person can open the book alone.",
   applicationName: "Intelli-Cash Group Account",
   manifest: "/manifest.webmanifest",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://intellicash.co.ke"),
+  // A square mark for the tab: the wide logo, first in this list until 25 Sep
+  // 2026, was squashed into a 16px square nobody could read.
   icons: {
     icon: [
-      { url: "/brand/intelli-cash-logo.png" },
-      { url: "/pwa/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/pwa/icon-512.png", sizes: "512x512", type: "image/png" }
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/pwa/icon-192.png", sizes: "192x192", type: "image/png" }
     ],
-    apple: [{ url: "/pwa/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }]
+  },
+  // What a link to the site shows in WhatsApp, email and social posts.
+  openGraph: {
+    type: "website",
+    siteName: "Intelli-Cash",
+    title: "Intelli-Cash | Your savings group’s book, on a phone",
+    description:
+      "Meetings, savings, shares and loans kept on an ordinary phone, with or without network. Every member sees their own money.",
+    images: [{ url: "/brand/og-image.png", width: 1200, height: 630, alt: "Intelli-Cash" }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/brand/og-image.png"]
   },
   appleWebApp: {
     capable: true,

@@ -219,10 +219,10 @@ export default function MemberPassbookPage() {
         <header>
           <div>
             <h3>Passbook</h3>
-            <span>{group?.code ?? user?.group?.code ?? "Member account"} meeting records</span>
+            <span>{group?.code ?? user?.group?.code ?? "Member account"} meeting records, every cycle</span>
           </div>
           <div className="passbook-summary-line">
-            <span>{passbookRows.length} meetings</span>
+            <span>{passbookRows.length} meetings listed below (every cycle)</span>
             {summary ? (
               <>
                 <span>{formatKes(summary.sharesCents)} shares this cycle</span>
@@ -232,10 +232,10 @@ export default function MemberPassbookPage() {
               </>
             ) : (
               <>
-                <span>{formatKes(totals.shares)} shares</span>
-                <span>{formatKes(totals.social)} social</span>
-                <span>{formatKes(totals.repayment)} repaid</span>
-                <span>{formatKes(totals.disbursement)} disbursed</span>
+                <span>{formatKes(totals.shares)} shares, all time</span>
+                <span>{formatKes(totals.social)} social, all time</span>
+                <span>{formatKes(totals.repayment)} repaid, all time</span>
+                <span>{formatKes(totals.disbursement)} borrowed, all time</span>
               </>
             )}
           </div>

@@ -326,14 +326,14 @@ export default function ProgrammePerformancePage() {
             </header>
             <div className="card-body">
               <div className="fact-grid">
-                <Fact label="Savings mobilised" note="Shares bought, all time" value={money(totals.savingsCents)} />
+                <Fact label="Savings mobilised" note="Shares bought this cycle" value={money(totals.savingsCents)} />
                 <Fact label="Loan book" note={`${totals.activeLoans} active loans`} value={money(totals.loanBookCents)} />
                 <Fact
                   label="Portfolio at risk (30 days)"
                   note={`${totals.loansPastDue} loans past due`}
                   value={percent(totals.par30Rate)}
                 />
-                <Fact label="Social fund" note="Contributions, all time" value={money(totals.socialFundCents)} />
+                <Fact label="Social fund" note="Balance: contributions and fines, less welfare paid" value={money(totals.socialFundCents)} />
                 <Fact
                   label="Meetings held"
                   note={`of ${totals.meetingsScheduled} scheduled in the period`}

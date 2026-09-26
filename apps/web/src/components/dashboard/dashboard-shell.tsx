@@ -423,7 +423,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <img
               alt="Intelli Cash - Trusted Financial Partner"
               className="brand-logo sidebar-logo"
-              src="/brand/intelli-cash-logo.png"
+              height={128}
+              src="/brand/intelli-cash-logo.webp"
+              width={516}
             />
           </Link>
           <button
@@ -668,7 +670,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <div className="page-content">{children}</div>
       </main>
       {groupBottomNavigation.length > 0 ? (
-        <nav className="bottom-tab-bar" aria-label="Group account app navigation">
+        <nav
+          aria-label="Group account app navigation"
+          className="bottom-tab-bar"
+          // As many columns as tabs: with the store switched off there are
+          // four, and a fixed five left a gap at the end of the bar.
+          style={{ gridTemplateColumns: `repeat(${groupBottomNavigation.length}, minmax(0, 1fr))` }}
+        >
           {groupBottomNavigation.map((item) => {
             const Icon = item.icon;
             const active =

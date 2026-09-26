@@ -15,7 +15,6 @@ import {
   X
 } from "@/lib/theme-icons";
 import { apiFetch, formatKes, humanizeEnum } from "../../../lib/api";
-import { DEFAULT_IMAGE_PLACEHOLDER } from "../../../lib/placeholders";
 import { FallbackImage } from "../../../components/fallback-image";
 import { PublicSiteFooter } from "../../../components/public-site-footer";
 import { PublicSiteHeader } from "../../../components/public-site-header";
@@ -138,7 +137,14 @@ export default function PublicPartnerProjectPage() {
     programme?.partnerLinks?.filter((link) => link.role !== "LENDER").map((link) => link.partner.name) ?? [];
   const lenders =
     programme?.partnerLinks?.filter((link) => link.role === "LENDER").map((link) => link.partner.name) ?? [];
-  const heroImage = `linear-gradient(90deg, rgba(0, 11, 5, 0.86), rgba(0, 97, 40, 0.58)), url("${programme?.coverImageUrl || DEFAULT_IMAGE_PLACEHOLDER}")`;
+  // The programme's own cover photo when it has one. Without one (and while
+  // the page loads) a plain branded ground - never the generic "Image"
+  // placeholder stretched across the whole hero. The URL is an admin's input,
+  // so it is encoded before it goes into a CSS url().
+  const cover = programme?.coverImageUrl ? encodeURI(programme.coverImageUrl).replace(/["'()]/g, (c) => `%${c.charCodeAt(0).toString(16)}`) : null;
+  const heroImage = cover
+    ? `linear-gradient(90deg, rgba(0, 11, 5, 0.86), rgba(0, 97, 40, 0.58)), url("${cover}")`
+    : "linear-gradient(90deg, rgba(0, 11, 5, 0.92), rgba(0, 97, 40, 0.7)), radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%), #04140b";
 
   return (
     <main className="partner-public-page">

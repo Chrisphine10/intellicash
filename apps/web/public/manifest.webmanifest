@@ -6,11 +6,19 @@
   "start_url": "/dashboard?app=group-account",
   "scope": "/dashboard",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
   "theme_color": "#1f7a36",
   "background_color": "#f7faf8",
-  "categories": ["finance", "business", "productivity"],
+  "categories": [
+    "finance",
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/pwa/icon-192.png",
@@ -33,18 +41,25 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/member-dashboard.png",
+      "src": "/screenshots/group-dashboard.png",
       "sizes": "1440x1100",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Group account dashboard"
     },
     {
-      "src": "/screenshots/member-meetings.png",
+      "src": "/screenshots/group-meetings.png",
       "sizes": "1440x1100",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Meetings calendar"
+    },
+    {
+      "src": "/screenshots/group-dashboard-phone.png",
+      "sizes": "412x915",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Group account on a phone"
     }
   ],
   "shortcuts": [
@@ -53,21 +68,24 @@
       "short_name": "Meetings",
       "description": "Open group meetings",
       "url": "/dashboard/meetings",
-      "icons": [{ "src": "/pwa/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Intelli-Store",
-      "short_name": "Store",
-      "description": "Open group equipment and service requests",
-      "url": "/dashboard/intelli-store",
-      "icons": [{ "src": "/pwa/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/pwa/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Reports",
       "short_name": "Reports",
       "description": "Open group reports",
       "url": "/dashboard/reports",
-      "icons": [{ "src": "/pwa/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/pwa/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

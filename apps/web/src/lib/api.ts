@@ -192,18 +192,23 @@ function logClientApiError(error: ApiClientError) {
   if (error.status === 401) return;
 
   // A 4xx is the server answering a question - "enter a valid phone number",
-  // "not found", "already exists" - and the page shows it inline. Only a 5xx or
-  // a failed request is a fault worth an error-level log; a rejected form used
-  // to raise Next's red "1 Issue" overlay for something working as intended.
-  const isFault = error.status >= 500 || error.status === 0;
-  (isFault ? console.error : console.warn)("[intellicash-api]", {
-    status: error.status,
-    code: error.code,
-    traceId: error.traceId,
-    path: error.path,
-    method: error.method,
-    details: error.details
-  });
+  // "not found", "already exists" - and the page shows it inline. A request
+  // that never arrived (status 0) is the phone or laptop being offline, or the
+  // API not running: also shown inline, and not a fault in this code. Only a
+  // 5xx is logged at error level. Both used to raise Next's red "1 Issue"
+  // overlay, which printed the details as "{}".
+  //
+  // One readable line first (the overlay and a pasted report keep it), the
+  // details after it for the browser console.
+  const reference = error.traceId ? ` ref ${error.traceId.slice(0, 8)}` : "";
+  const what = `${error.method ?? "GET"} ${error.path ?? ""}`.trim();
+  const line =
+    error.status === 0
+      ? `[intellicash-api] ${what}: could not reach the API at ${API_BASE_URL}` +
+        `${error.details ? ` (${String(error.details)})` : ""}.${reference}`
+      : `[intellicash-api] ${what}: ${error.status} ${error.code}.${reference}`;
+  const log = error.status >= 500 ? console.error : console.warn;
+  log(line, { status: error.status, code: error.code, traceId: error.traceId, details: error.details });
 }
 
 function createResponseError(

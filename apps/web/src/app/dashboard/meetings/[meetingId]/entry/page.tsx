@@ -577,15 +577,26 @@ export default function MeetingEntryPage({ params }: { params: Promise<{ meeting
     if (!group) return;
     setSaving(true);
     try {
-      await apiFetch(`/groups/${group.id}/meetings/${meetingId}/share-out/post`, {
-        method: "POST",
-        body: JSON.stringify({
-          poolAmountCents: amountToCents(shareOutPool),
-          clientRequestPrefix: `shareout-${meetingId}-${Date.now()}`
-        })
-      });
+      // One share-out per meeting: the same key every time, so a second click
+      // or a retry is recognised by the server instead of ending a second
+      // cycle. (A timestamp in the key made every click a new share-out.)
+      const posted = await apiFetch<{ replayed?: boolean; closed?: { number: number } }>(
+        `/groups/${group.id}/meetings/${meetingId}/share-out/post`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            poolAmountCents: amountToCents(shareOutPool),
+            clientRequestPrefix: `shareout-${meetingId}`
+          })
+        }
+      );
       await refresh(group.id);
-      setMessage({ ok: true, text: "Share-out payouts posted for review." });
+      setMessage({
+        ok: true,
+        text: posted?.replayed
+          ? `This share-out was already recorded; cycle ${posted.closed?.number ?? ""} is closed.`
+          : `Share-out recorded. Cycle ${posted?.closed?.number ?? ""} is closed and the next one has begun.`
+      });
     } catch (postError) {
       setMessage({ ok: false, text: postError instanceof Error ? postError.message : "Share-out post failed." });
     } finally {

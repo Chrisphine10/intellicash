@@ -2884,7 +2884,9 @@ tr:last-child td {
   min-height: 100vh;
   background:
     linear-gradient(135deg, rgba(0, 18, 8, 0.86), rgba(0, 138, 58, 0.66)),
-    url("https://images.unsplash.com/photo-1521791055366-0d553872125f?auto=format&fit=crop&w=1600&q=80");
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   background-position: center;
   background-size: cover;
   color: white;
@@ -9849,4 +9851,58 @@ html[data-theme="dark"] .link-button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ==========================================================================
+   Dashboard balance (25 Sep 2026)
+   ========================================================================== */
+
+/* The logo's lettering is dark: in dark mode it sits on a white plate, as the
+   public site's does, instead of disappearing into the sidebar. */
+html[data-theme="dark"] .sidebar-logo {
+  box-sizing: content-box;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 4px 8px;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .sidebar-logo {
+    box-sizing: content-box;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 4px 8px;
+  }
+}
+
+/* A group account's figures share the row equally, however many there are
+   (three left a blank fourth column); on a small phone, two across, so a
+   figure like "Ksh 12,500" is never broken mid-number. */
+.group-pwa-tab-screen .stat-grid {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+@media (max-width: 360px) {
+  .group-pwa-tab-screen .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
+  }
+}
+
+/* An odd number of cards in a two-column grid leaves the last one alone and
+   half-width; let it take the whole row. */
+@media (min-width: 1081px) {
+  .dashboard-data-grid > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+
+/* Dashboard figures fill the row whatever their number: a role with three
+   (the group account) left a blank fourth column. The group account's own
+   phone layout keeps its fixed columns (rules above). */
+@media (min-width: 761px) {
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
 }

@@ -12,7 +12,9 @@
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(0, 11, 5, 0.9), rgba(0, 118, 70, 0.42), rgba(255, 196, 69, 0.2)),
-    url("https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=1800&q=82");
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   background-position: center;
   background-size: cover;
   color: white;
@@ -1153,7 +1155,9 @@
   padding: 22px clamp(18px, 4vw, 44px) 56px;
   background:
     linear-gradient(90deg, rgba(0, 15, 6, 0.9), rgba(0, 15, 6, 0.54)),
-    url("https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=1600&q=80") center / cover;
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   color: #ffffff;
 }
 
@@ -1760,7 +1764,9 @@
   gap: 28px;
   background:
     linear-gradient(90deg, rgba(0, 11, 5, 0.94), rgba(0, 105, 62, 0.82)),
-    url("https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1600&q=82");
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   background-position: center;
   background-size: cover;
   color: #ffffff;
@@ -1842,7 +1848,9 @@
   padding: 24px clamp(24px, 5vw, 76px) 64px;
   background:
     linear-gradient(90deg, rgba(0, 15, 6, 0.9), rgba(0, 98, 52, 0.55)),
-    url("https://images.unsplash.com/photo-1590247813693-5541d1c609fd?auto=format&fit=crop&w=1600&q=82") center / cover;
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   color: #ffffff;
 }
 
@@ -2015,7 +2023,7 @@
 .partner-hero {
   background:
     linear-gradient(90deg, rgba(4, 71, 39, 0.88), rgba(13, 82, 61, 0.72)),
-    url("/brand/intelli-cash-logo.png") center right 8% / 360px auto no-repeat,
+    url("/brand/intelli-cash-logo-light.webp") center right 8% / 360px auto no-repeat,
     #07452c;
   color: #fff;
   min-height: 620px;
@@ -2233,7 +2241,9 @@
   align-content: end;
   background:
     linear-gradient(90deg, rgba(0, 11, 5, 0.88), rgba(0, 97, 40, 0.62)),
-    url("https://images.unsplash.com/photo-1521791055366-0d553872125f?auto=format&fit=crop&w=1800&q=82");
+    radial-gradient(circle at 82% 18%, rgba(0, 200, 83, 0.3), transparent 46%),
+    radial-gradient(circle at 12% 88%, rgba(0, 168, 70, 0.2), transparent 42%),
+    #04140b;
   background-position: center;
   background-size: cover;
   color: #ffffff;
@@ -4057,5 +4067,204 @@ html[data-theme="dark"] .hero-phone {
 
   .join-head h1 {
     font-size: 1.42rem;
+  }
+}
+
+/* ==========================================================================
+   Balance pass (25 Sep 2026)
+
+   This file loads AFTER globals.css, so several phone and tablet rules
+   written there never took effect: /contact kept a 280px column on a 360px
+   phone and scrolled sideways, and the store and project grids never
+   collapsed. They live here now, beside the rules they override. Measured
+   at 320-1920px with a headless browser before and after.
+   ========================================================================== */
+
+/* One content width for every section - the nav's 1180px - while the
+   section backgrounds still run edge to edge. */
+.landing-section,
+.landing-signal-band.proof-strip,
+.partner-proof-row {
+  padding-inline: max(clamp(22px, 5vw, 72px), calc((100% - 1180px) / 2));
+}
+
+/* The proof strip: as many as fit, never five columns of three-word lines. */
+.proof-strip {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+
+/* Blocks that were centred under left-aligned headings line up with them. */
+.partner-signup-form,
+.faq-list,
+.section-footnote {
+  margin-left: 0;
+  margin-right: auto;
+}
+.section-footnote {
+  text-align: left;
+}
+
+/* Neighbouring sections on the same ground read as one long section; give
+   every other one a tint. */
+.testimonials-section,
+.faq-section {
+  background: var(--surface-tint, #f3f8f4);
+}
+
+/* Partner logos sit on a white plate in every theme: several are dark
+   lettering on transparent, which vanished on a dark card. */
+.partner-logo-card img {
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+/* The app gallery: four across on a wide screen (8 = 4 + 4, not 5 + 3). */
+.app-screens-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Three-card rows stay three across on a tablet instead of leaving one card
+   alone on a second row. */
+@media (min-width: 761px) {
+  .testimonial-grid,
+  .pricing-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  /* The hero goes to one column with its phone below the words. Between
+     901 and 1080px it used to keep two columns with the phone hidden:
+     half the first screen was empty. */
+  .landing-hero.is-minimal {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .landing-hero.is-minimal .landing-hero-content {
+    max-width: 720px;
+  }
+  .landing-hero.is-minimal .landing-hero-scene {
+    display: block;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .contact-layout,
+  .store-signal-row,
+  .store-catalog,
+  .project-detail-gallery-band {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .landing-hero.is-minimal .landing-hero-scene {
+    max-width: 240px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Cards shrink to their content on a phone: fixed heights of 270-330px
+     made every one-column card a screen tall. */
+  .pillar-card,
+  .audience-card,
+  .financial-rail-card,
+  .workflow-step,
+  .partner-logo-card {
+    min-height: 0;
+  }
+
+  .landing-hero p:not(.eyebrow) {
+    font-size: 16px;
+  }
+
+  /* On a phone a card's picture sits beside its title at the small size, not
+     156px above it: eighteen cards each carried a picture taller than their
+     words, about 2,500px per section. */
+  .illustrated-card,
+  .audience-card {
+    grid-template-columns: 56px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 6px;
+  }
+  .illustrated-card > .landing-illustration,
+  .audience-card > .landing-illustration {
+    grid-row: 1;
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+    margin: 0;
+    border-radius: 14px;
+    box-shadow: none;
+  }
+  .illustrated-card > .landing-illustration .landing-icon-core,
+  .audience-card > .landing-illustration .landing-icon-core {
+    width: 40px;
+    height: 40px;
+  }
+  .illustrated-card > .landing-illustration .landing-icon-core::before,
+  .audience-card > .landing-illustration .landing-icon-core::before {
+    inset: -6px;
+  }
+  .illustrated-card > h3,
+  .audience-card > h3 {
+    grid-column: 2;
+    align-self: center;
+    margin: 0;
+  }
+  .illustrated-card > :not(.landing-illustration):not(h3),
+  .audience-card > :not(.landing-illustration):not(h3) {
+    grid-column: 1 / -1;
+  }
+
+  /* 100vw includes a desktop scrollbar, so text sized to it overran the
+     edge; the column's own width is what it has. The eyebrow wraps rather
+     than running off a narrow screen. */
+  .landing-hero p:not(.eyebrow),
+  .landing-hero .hero-actions,
+  .landing-hero .hero-metrics {
+    width: auto;
+    max-width: 100%;
+  }
+  .landing-hero .eyebrow {
+    white-space: normal;
+  }
+
+  /* The gallery becomes a row to swipe through, not eight phones stacked
+     into five screens of scrolling. */
+  .app-screens-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(200px, 64%);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 12px;
+    scrollbar-width: thin;
+  }
+  .app-screen {
+    scroll-snap-align: start;
+  }
+
+  .testimonial-grid,
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-hero.is-minimal .landing-hero-scene {
+    max-width: 190px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-panel,
+  .login-copy {
+    min-width: 0;
+    padding-inline: 18px;
   }
 }

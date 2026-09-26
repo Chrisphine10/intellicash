@@ -301,8 +301,17 @@ function DashboardIntro({
   );
 }
 
+/** How many shortcuts show before "Show all": the rest are one tap away, and in the sidebar. */
+const QUICK_ACCESS_SHOWN = 6;
+
 function QuickAccessSection({ user }: { user: User }) {
   const modules = visibleModules(user);
+  // An admin has nineteen modules: listed in full they pushed the figures a
+  // dashboard exists for off the first screen (about 1,400px of links on a
+  // phone). The first six show; the rest on request.
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? modules : modules.slice(0, QUICK_ACCESS_SHOWN);
+  const hidden = modules.length - shown.length;
 
   return (
     <section className="data-card dashboard-quick-card">
@@ -311,9 +320,14 @@ function QuickAccessSection({ user }: { user: User }) {
           <h3>Quick access</h3>
           <span>{modules.length} modules available</span>
         </div>
+        {modules.length > QUICK_ACCESS_SHOWN ? (
+          <button className="button secondary" onClick={() => setShowAll((value) => !value)} type="button">
+            {showAll ? "Show fewer" : `Show all ${modules.length}`}
+          </button>
+        ) : null}
       </header>
       <div className="dashboard-module-grid">
-        {modules.map((item) => {
+        {shown.map((item) => {
           const Icon = item.icon;
 
           return (
@@ -327,6 +341,7 @@ function QuickAccessSection({ user }: { user: User }) {
           );
         })}
       </div>
+      {hidden > 0 ? <span className="sr-only">{hidden} more modules are in the menu.</span> : null}
     </section>
   );
 }
@@ -566,6 +581,24 @@ function MemberDashboard({
     [currentCycleNumber, ledger]
   );
   const currentMember = members.find((member) => member.id === user.memberId) ?? null;
+  // This cycle's savings as the server's passbook works them out (cycle
+  // stamps), not guessed here by counting share-out payouts in the ledger -
+  // the guess drifted whenever a cycle closed without one.
+  const [serverCycle, setServerCycle] = useState<{ number: number; sharesCents: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ cycle: { number: number } | null; summary: { sharesCents: number } }>("/members/me")
+      .then((book) => {
+        if (!cancelled && book?.summary) {
+          setServerCycle({ number: book.cycle?.number ?? currentCycleNumber, sharesCents: book.summary.sharesCents });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCycleNumber]);
+  const cycleSharesCents = serverCycle?.sharesCents ?? cycleHistory.current.sharePurchaseCents;
   const activeStoreRequests = storeRequests.filter(
     (request) => !["REJECTED", "CANCELLED"].includes(request.status) && request.repaymentStatus !== "PAID"
   );
@@ -613,7 +646,7 @@ function MemberDashboard({
       <QuickAccessSection user={user} />
 
       <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<CircleDollarSign size={20} />} label="Cycle shares" note={`Cycle ${currentCycleNumber}`} value={formatKes(cycleHistory.current.sharePurchaseCents)} />
+        <StatCard icon={<CircleDollarSign size={20} />} label="Cycle shares" note={`Cycle ${serverCycle?.number ?? currentCycleNumber}`} value={formatKes(cycleSharesCents)} />
         <StatCard icon={<Activity size={20} />} label="Meetings" note={`${nextMeetings.length} upcoming`} value={meetings.length.toString()} />
         <StatCard icon={<ShoppingBag size={20} />} label="Store credit" note={`${activeStoreRequests.length} active`} value={formatKes(outstandingCreditCents)} />
         <StatCard icon={<ShieldCheck size={20} />} label="Passbook" note="Meetings with records" value={passbookRows.length.toString()} />

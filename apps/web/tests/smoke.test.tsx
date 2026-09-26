@@ -1627,10 +1627,14 @@ describe("web smoke helpers", () => {
     expect(phoneScreens.length).toBeGreaterThanOrEqual(8);
     expect(phoneScreens.every((src) => src.endsWith(".webp"))).toBe(true);
     expect(screen.getByAltText(/Opening the meeting:/i)).toHaveAttribute("src", "/docs/12-unlock.webp");
-    expect(screen.getByAltText(/A member.s own passbook:/i)).toHaveAttribute(
+    // The passbook is one of the hero's three phones; the gallery below does
+    // not repeat any of them.
+    expect(screen.getByAltText(/A member.s passbook showing/i)).toHaveAttribute(
       "src",
       "/docs/21-member-passbook.webp"
     );
+    expect(screen.getByAltText(/The group.s report:/i)).toHaveAttribute("src", "/docs/19-group-report.webp");
+    expect(new Set(phoneScreens).size).toBe(phoneScreens.length);
     expect(screen.getByText("Request on credit")).toBeInTheDocument();
     expect(screen.getByText("Grace Wanjiku")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Contact us/i }).some((link) => link.getAttribute("href") === "/contact")).toBe(true);

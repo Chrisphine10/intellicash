@@ -45,7 +45,11 @@ export function PublicSiteFooter({ playStoreUrl, showAccessLinks = true }: Publi
           <img
             alt="Intelli Cash - Trusted Financial Partner"
             className="brand-logo footer-logo"
-            src="/brand/intelli-cash-logo.png"
+            height={128}
+            loading="lazy"
+            // The footer is always dark: the logo with white lettering.
+            src="/brand/intelli-cash-logo-light.webp"
+            width={516}
           />
         </Link>
         <p>

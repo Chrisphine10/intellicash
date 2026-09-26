@@ -470,13 +470,13 @@ export default function DetailedReportsPage() {
                 <StatCard
                   icon={<UsersRound size={20} />}
                   label="Members"
-                  note="Registered in this group"
+                  note="Active in this group"
                   value={String(groupReport.group.memberCount)}
                 />
                 <StatCard
                   icon={<CalendarDays size={20} />}
                   label="Meetings"
-                  note="Recorded so far"
+                  note="Held this cycle"
                   value={String(groupReport.group.meetingCount)}
                 />
                 <StatCard

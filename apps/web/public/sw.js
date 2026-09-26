@@ -1,7 +1,10 @@
-const CACHE_NAME = "intellicash-group-pwa-v3";
+// Bumped whenever a cached asset changes: /brand/ is served cache-first, so
+// without a new name existing phones would keep the old logo for ever.
+const CACHE_NAME = "intellicash-group-pwa-v4";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
-  "/brand/intelli-cash-logo.png",
+  "/brand/intelli-cash-logo.webp",
+  "/brand/intelli-cash-logo-light.webp",
   "/pwa/icon-192.png",
   "/pwa/icon-512.png",
   "/pwa/icon-maskable-512.png",

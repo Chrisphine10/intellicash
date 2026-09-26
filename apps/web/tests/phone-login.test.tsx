@@ -55,6 +55,6 @@ describe("phone-based login", () => {
 
     const logo = screen.getByAltText("Intelli Cash - Trusted Financial Partner");
     expect(logo).toBeInTheDocument();
-    expect(logo.getAttribute("src")).toBe("/brand/intelli-cash-logo.png");
+    expect(logo.getAttribute("src")).toBe("/brand/intelli-cash-logo.webp");
   });
 });
