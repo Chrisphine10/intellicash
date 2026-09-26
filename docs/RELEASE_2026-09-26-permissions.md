@@ -10,6 +10,36 @@ and fills it. It has two one-time data steps:
 
 Both were rehearsed on a copy of production (see "Rehearsal").
 
+
+## Live: 26 Sep 2026, 14:58 UTC (commit `163df8f`)
+
+- **Deploy run 36249758755.**
+  - **Attempt 1:** stopped before touching the server. The SSH handshake was
+    reset (`Connection reset by peer`), and the rollback step was a no-op.
+  - **Attempt 2:** every step green. Snapshot; the backup script installed;
+    a verified backup (`/root/backups/intellicash-20260926-145713`); deploy
+    and web rebuild; health; data guard; smoke tests; co-hosted sites
+    unharmed.
+- **Data guard: GUARD OK** after the migration and again after the backfill.
+  - 152 of 152 ledger entries unchanged; every fund equal to its ledger.
+  - 27 loans, 54 cycles and 200 members unchanged.
+  - Migration `20260926120000_group_agents` applied, making 53 lead agent
+    links.
+- **Permission correction** ran on the first signed-in requests:
+  - LENDER now holds `payments:write` only; the audit event records
+    `removed: ["store:write"]`;
+  - READ_ONLY had nothing to remove;
+  - partners hold no writes.
+- **Meeting-workflow backfill:**
+  - The dry run listed the same 13 meetings as the rehearsal.
+  - `--commit` completed 13, and a second run finds 0.
+- **Live smoke test:**
+  - `/health` returns 200;
+  - the public pages have no sideways scroll, broken images or console
+    errors at 390 and 1366 px.
+- **Phone app 2.6.4 (27):** built and committed (`806f33a`, pushed). Upload
+  `Downloads/IntelliCash-2.6.4-build27.aab` to Play (internal testing
+  first). SHA-256 `c3b87dca…6062c5`.
 ## What people will notice
 
 **Partners, lenders and read-only accounts see groups but cannot change them**
@@ -166,7 +196,7 @@ After the deploy:
 ## Verification
 
 Run on 26 Sep 2026 against local servers and scratch copies of the test
-database. Nothing was deployed or committed.
+database before the deploy (see "Live" above for production).
 - The screenshots per role are in the session scratchpad.
 - The scratch databases were deleted afterwards.
 
