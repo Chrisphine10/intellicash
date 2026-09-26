@@ -5,6 +5,7 @@ import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { seedDatabase } from "../prisma/seed";
 import { allocateLargestRemainder } from "../src/domain/share-out";
+import { closeCycleWithin } from "../src/services/cycle-service";
 
 const app = createApp();
 const DAY = 24 * 60 * 60 * 1000;
@@ -100,8 +101,10 @@ describe("the VSLA group statement", () => {
     // Cycle 1, then closed without a payout.
     const first = await meeting("Cycle 1 meeting");
     await post(first, [["Amina", "SHARE_PURCHASE", 100_000]]);
-    const closed = await request(app).post(`/api/v1/groups/${groupId}/cycles/close`).set("Cookie", admin).send({}).expect(200);
-    previousCycleId = closed.body.data.closed.id;
+    // Closed without a payout: a legacy cycle, closed before the share-out rule
+    // (the route now refuses this), so it goes through the mechanics directly.
+    const closed = await prisma.$transaction((tx) => closeCycleWithin(tx, groupId));
+    previousCycleId = closed.closed.id;
 
     // Cycle 2.
     const held = await meeting("Cycle 2 meeting");

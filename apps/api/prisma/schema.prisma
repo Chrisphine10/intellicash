@@ -405,7 +405,10 @@ model VillageAgent {
    * lose the rest.
    */
   programmeLinks           VillageAgentProgramme[]
+  /// The group's lead agent (mirror of the lead `GroupAgent` link, kept for
+  /// older clients and imports). Every agent serving a group is in `groupLinks`.
   groups                   Group[]
+  groupLinks               GroupAgent[]
   /**
    * Login accounts that act as this agent (VILLAGE_AGENT role).
    */
@@ -425,6 +428,26 @@ model VillageAgent {
  * it only through composite foreign keys that would make every read of this
  * table more awkward than the rule is worth, and the check has one entry point.
  */
+/**
+ * Every village agent / CBT serving a group. A group commonly has more than
+ * one; each linked agent has the same access to it. `isLead` marks the one
+ * reports name first, and `Group.villageAgentId` mirrors it for older phones.
+ * Removing a link deletes the row (the audit log keeps the history).
+ */
+model GroupAgent {
+  id             String   @id @default(cuid())
+  groupId        String
+  villageAgentId String
+  isLead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  group        Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  villageAgent VillageAgent @relation(fields: [villageAgentId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, villageAgentId])
+  @@index([villageAgentId])
+}
+
 model VillageAgentProgramme {
   id             String   @id @default(cuid())
   villageAgentId String
@@ -686,6 +709,7 @@ model Group {
   programme                Programme?                @relation(fields: [programmeId], references: [id])
   programmeLinks           ProgrammeGroup[]
   villageAgent             VillageAgent?             @relation(fields: [villageAgentId], references: [id])
+  agentLinks               GroupAgent[]
   userAccounts             User[]
   members                  Member[]
   meetings                 Meeting[]

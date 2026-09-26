@@ -10,6 +10,7 @@ import { DataTable } from "../../../components/dashboard/data-table";
 import { ProgrammePicker } from "../../../components/dashboard/programme-picker";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { AgentRow, GroupRow, ProgrammeRow, User } from "../../../components/dashboard/types";
+import { sourceLabel } from "../../../features/reports/model";
 
 const defaultAgentForm = {
   name: "",
@@ -674,7 +675,7 @@ export default function AgentsPage() {
               key: "source",
               label: "Source",
               allLabel: "All sources",
-              getValue: (agent) => agent.sourceSystem ?? "Native"
+              getValue: (agent) => sourceLabel(agent.sourceSystem)
             }
           ]}
           getRowKey={(agent) => agent.id}

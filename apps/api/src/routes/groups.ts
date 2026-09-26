@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import {
   fundTypes,
   groupPhases,
+  isOversightRole,
   ledgerEntryTypes,
   meetingStepLabels,
   meetingSteps,
@@ -28,6 +29,7 @@ import { allocateLargestRemainder } from "../domain/share-out";
 import { loadLoanPositions } from "../services/loan-position-service";
 import {
   activeCycleEntriesWhere,
+  assertMayManageCycles,
   assertMeetingWritable,
   closeCycleWithin,
   currentCycleSharesWhere,
@@ -49,9 +51,12 @@ import {
 import { buildMemberOverview, buildMemberPassbook } from "../services/member-passbook-service";
 import {
   assertGroupAccess,
+  assertGroupSteward,
+  isGroupSteward,
   ledgerScopeForUser,
   memberScopeForUser,
-  scopeGroupWhere
+  scopeGroupWhere,
+  villageAgentScopeForUser
 } from "../services/account-scope";
 import { ApiHttpError, ok } from "../lib/http";
 import { decryptJson, derivePinVerifier, sha256 } from "../lib/crypto";
@@ -59,6 +64,8 @@ import { canViewMemberContact, maskPhone } from "../lib/privacy";
 import { looksLikePhone, normalisePhone, phoneTail, samePhone } from "../lib/phone";
 import { linkMembership, MemberAlreadyLinkedError, reconcileMembership } from "../services/membership-service";
 import { prisma } from "../lib/prisma";
+import { groupAgentLinksInclude, setGroupAgents } from "../services/group-agent-service";
+import { assignOffice } from "../services/member-role-service";
 import { assertModuleEnabled, modulesForGroup } from "../services/module-service";
 import { assertFollowsGroupRules, groupRules } from "../services/group-rules-service";
 import { assertMayCreateMemberLogin, memberAccountsEnabledFor, visibleMembershipsFor } from "../services/member-accounts-service";
@@ -97,12 +104,52 @@ const groupCreateSchema = z.object({
   constitutionVersion: z.string().trim().optional(),
   cycleNumber: z.number().int().min(1).optional(),
   programmeIds: z.array(z.string()).default([]),
-  villageAgentId: z.string().nullish()
+  /** The lead agent alone (older screens). */
+  villageAgentId: z.string().nullish(),
+  /** Every agent / CBT serving the group; each gets the same access. */
+  agentIds: z.array(z.string()).max(20).optional(),
+  leadAgentId: z.string().nullish()
 });
 
 const groupUpdateSchema = groupCreateSchema.partial().extend({
   programmeIds: z.array(z.string()).optional()
 });
+
+/**
+ * The agents a create/update asks for, checked against what the caller may
+ * see. `villageAgentId` alone (older screens) means "this is the lead"; it is
+ * added to the group's agents without removing the others. Undefined = no
+ * change requested.
+ */
+async function requestedAgents(
+  user: Express.Request["user"],
+  payload: { villageAgentId?: string | null; agentIds?: string[]; leadAgentId?: string | null },
+  current: string[]
+): Promise<{ ids: string[]; lead: string | null } | undefined> {
+  let ids: string[];
+  let lead: string | null;
+  if (payload.agentIds !== undefined) {
+    ids = Array.from(new Set(payload.agentIds));
+    lead = payload.leadAgentId ?? (payload.villageAgentId || null);
+    if (lead && !ids.includes(lead)) ids.push(lead);
+  } else if (payload.villageAgentId !== undefined) {
+    lead = payload.villageAgentId || null;
+    // Clearing the single field removes only the lead, not the other agents.
+    ids = lead ? Array.from(new Set([lead, ...current])) : current.slice(1);
+  } else {
+    return undefined;
+  }
+  const newcomers = ids.filter((id) => !current.includes(id));
+  if (newcomers.length > 0) {
+    const found = await prisma.villageAgent.count({
+      where: { AND: [{ id: { in: newcomers } }, villageAgentScopeForUser(user)] }
+    });
+    if (found !== newcomers.length) {
+      throw new ApiHttpError(404, "VILLAGE_AGENT_NOT_FOUND", "One or more selected agents do not exist or are outside this account.");
+    }
+  }
+  return { ids, lead };
+}
 
 const memberCreateSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
@@ -144,8 +191,79 @@ const meetingPhoneLifecycleSchema = z.object({
   /** What a person did on the phone. The server never infers either one. */
   event: z.enum(["STARTED", "CLOSED"]),
   /** When they did it, by the phone's clock. */
-  at: z.string().datetime()
+  at: z.string().datetime(),
+  /**
+   * CLOSED only (phones from build 27): the members whose PINs opened the
+   * meeting on the phone (server ids), and the meeting's notes. Older phones
+   * send neither and the meeting is still completed.
+   */
+  unlockedByMemberIds: z.array(z.string().min(1)).max(100).optional(),
+  notes: z.string().trim().max(5000).optional()
 });
+
+/**
+ * A meeting held on a phone went through the phone's own steps (PIN unlock,
+ * attendance, money, close), never the console's eight. Closing it on the
+ * server therefore marks the eight done at the close, records the phone's key
+ * holders so the unlock is visible, and keeps the notes. Idempotent: a phone
+ * that sends CLOSED twice changes nothing the second time.
+ */
+async function completePhoneMeeting(
+  tx: Prisma.TransactionClient,
+  input: {
+    groupId: string;
+    meetingId: string;
+    at: Date;
+    unlockedByMemberIds?: string[];
+    notes?: string;
+    capturedByUserId?: string | null;
+  }
+) {
+  await createMeetingSteps(tx, input.meetingId);
+  await tx.meetingStepRecord.updateMany({
+    where: { meetingId: input.meetingId, status: { not: "COMPLETED" } },
+    data: { status: "COMPLETED", completedAt: input.at }
+  });
+
+  const ids = Array.from(new Set(input.unlockedByMemberIds ?? []));
+  if (ids.length > 0) {
+    const members = await tx.member.findMany({
+      where: { id: { in: ids }, groupId: input.groupId },
+      select: { id: true }
+    });
+    for (const member of members) {
+      await tx.meetingKeySubmission.upsert({
+        where: { meetingId_memberId: { meetingId: input.meetingId, memberId: member.id } },
+        create: {
+          meetingId: input.meetingId,
+          memberId: member.id,
+          credentialType: "PHONE_PIN",
+          capturedByUserId: input.capturedByUserId ?? null,
+          capturedOfflineAt: input.at,
+          verifiedAt: input.at
+        },
+        update: {}
+      });
+    }
+  }
+
+  const meeting = await tx.meeting.findUniqueOrThrow({
+    where: { id: input.meetingId },
+    select: { unlockStatus: true, minutes: true }
+  });
+  const unlock = await evaluateMeetingUnlock(tx, input.meetingId);
+  const hasKeys = (await tx.meetingKeySubmission.count({ where: { meetingId: input.meetingId } })) > 0;
+  const data: Prisma.MeetingUpdateInput = {};
+  if (unlock.unlockStatus !== "PENDING") data.unlockStatus = unlock.unlockStatus;
+  // No keys at all: the group runs its phone without the PIN gate. Say so,
+  // rather than leaving the meeting "pending" for ever.
+  else if (!hasKeys && meeting.unlockStatus === "PENDING") data.unlockStatus = "NOT_RECORDED_ON_PHONE";
+  else if (hasKeys) data.unlockStatus = "PHONE_KEYS_BELOW_QUORUM";
+  if (input.notes && !meeting.minutes) data.minutes = input.notes;
+  if (Object.keys(data).length > 0) {
+    await tx.meeting.update({ where: { id: input.meetingId }, data });
+  }
+}
 
 const meetingScheduleSchema = z.object({
   frequency: z.enum(MEETING_FREQUENCIES),
@@ -417,7 +535,8 @@ const groupInclude = {
     },
     orderBy: { createdAt: "asc" }
   },
-  villageAgent: true,
+  villageAgent: { select: { id: true, name: true, phone: true, email: true, county: true, status: true } },
+  agentLinks: groupAgentLinksInclude,
   fundAccounts: { orderBy: { type: "asc" } },
   creditScores: { orderBy: { computedAt: "desc" }, take: 1 },
   _count: { select: { members: true, meetings: true, votes: true, ledgerEntries: true } }
@@ -1325,10 +1444,11 @@ router.get("/meetings", requireAuth("meetings:read"), async (req, res, next) => 
  */
 async function withCurrentRating<
   T extends { id: string; fundAccounts: Array<{ type: string; balanceCents: number }>; creditScores: Array<{ score: number; breakdownJson: string }> }
->(group: T): Promise<T & { totalSavingsCents: number; totalSocialFundCents: number }> {
+>(group: T): Promise<T & { totalSavingsCents: number; totalSharesCents: number; totalSocialFundCents: number }> {
   const latest = group.creditScores[0];
   
-  // Savings = the shares members bought this cycle. NOT the loan fund's cash
+  // Total shares = the shares members bought this cycle (`totalSharesCents`;
+  // `totalSavingsCents` is the same figure under its old name, for older phones). NOT the loan fund's cash
   // balance, which is what this used to report: that falls every time a loan
   // goes out, so a group that lent its savings read as having saved nothing.
   // "This cycle" by the statement's rule (activeCycleEntriesWhere).
@@ -1345,7 +1465,7 @@ async function withCurrentRating<
   const socialFund = group.fundAccounts.find((f) => f.type === "SOCIAL");
   const totalSocialFundCents = socialFund?.balanceCents ?? 0;
 
-  if (!latest) return { ...group, totalSavingsCents, totalSocialFundCents };
+  if (!latest) return { ...group, totalSavingsCents, totalSharesCents: totalSavingsCents, totalSocialFundCents };
 
   let legacy = true;
   try {
@@ -1354,16 +1474,37 @@ async function withCurrentRating<
   } catch {
     legacy = true;
   }
-  if (!legacy) return { ...group, totalSavingsCents, totalSocialFundCents };
+  if (!legacy) return { ...group, totalSavingsCents, totalSharesCents: totalSavingsCents, totalSocialFundCents };
 
   const rating = await latestCreditRating(group.id);
-  if (!rating || !rating.rated) return { ...group, creditScores: [], totalSavingsCents, totalSocialFundCents };
+  if (!rating || !rating.rated) return { ...group, creditScores: [], totalSavingsCents, totalSharesCents: totalSavingsCents, totalSocialFundCents };
 
   return {
     ...group,
     creditScores: [{ ...latest, score: rating.score }],
     totalSavingsCents,
+    totalSharesCents: totalSavingsCents,
     totalSocialFundCents
+  };
+}
+
+/**
+ * Partners, lenders and read-only viewers see who serves a group, not the
+ * agent's phone or email (Kenya Data Protection Act, 2019). The group itself
+ * and its members keep them: that is how they reach their agent.
+ */
+function agentContactsFor<
+  T extends {
+    villageAgent: { phone: string; email: string | null } | null;
+    agentLinks: Array<{ villageAgent: { phone: string; email: string | null } }>;
+  }
+>(user: AuthenticatedUser | undefined, group: T): T {
+  if (!isOversightRole(user?.role)) return group;
+  const hide = <A extends { phone: string; email: string | null }>(agent: A): A => ({ ...agent, phone: "", email: null });
+  return {
+    ...group,
+    villageAgent: group.villageAgent ? hide(group.villageAgent) : null,
+    agentLinks: group.agentLinks.map((link) => ({ ...link, villageAgent: hide(link.villageAgent) }))
   };
 }
 
@@ -1374,7 +1515,7 @@ router.get("/groups", requireAuth("groups:read"), async (req, res, next) => {
       orderBy: { createdAt: "desc" },
       include: groupInclude
     });
-    ok(res, await Promise.all(groups.map((group) => withCurrentRating(group))));
+    ok(res, await Promise.all(groups.map(async (group) => agentContactsFor(req.user, await withCurrentRating(group)))));
   } catch (error) {
     next(error);
   }
@@ -1383,8 +1524,9 @@ router.get("/groups", requireAuth("groups:read"), async (req, res, next) => {
 router.post("/groups", requireAuth("groups:write"), async (req, res, next) => {
   try {
     const payload = groupCreateSchema.parse(req.body);
+    const agents = await requestedAgents(req.user, payload, []);
     const group = await prisma.$transaction(async (tx) => {
-      const created = await tx.group.create({
+      const made = await tx.group.create({
         data: {
           name: payload.name,
           code: payload.code,
@@ -1405,7 +1547,6 @@ router.post("/groups", requireAuth("groups:write"), async (req, res, next) => {
           maxSharesPerMemberPerMeeting: payload.maxSharesPerMemberPerMeeting,
           constitutionVersion: payload.constitutionVersion,
           cycleNumber: payload.cycleNumber,
-          villageAgentId: payload.villageAgentId,
           programmeId: payload.programmeIds[0] ?? undefined,
           fundAccounts: {
             create: fundTypes.map((type) => ({ type }))
@@ -1414,10 +1555,11 @@ router.post("/groups", requireAuth("groups:write"), async (req, res, next) => {
             create: payload.programmeIds.map((programmeId) => ({ programmeId }))
           }
         },
-        include: groupInclude
+        select: { id: true }
       });
+      if (agents) await setGroupAgents(tx, made.id, agents.ids, agents.lead);
 
-      return created;
+      return tx.group.findUniqueOrThrow({ where: { id: made.id }, include: groupInclude });
     });
 
     await appendAuditEvent({
@@ -1444,7 +1586,7 @@ router.get("/groups/:id", requireAuth("groups:read"), async (req, res, next) => 
     if (!group) throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
     // Which optional modules this group's programmes have switched on, so the
     // phone and console show only what the group can use.
-    ok(res, { ...(await withCurrentRating(group)), modules: await modulesForGroup(group.id) });
+    ok(res, { ...agentContactsFor(req.user, await withCurrentRating(group)), modules: await modulesForGroup(group.id) });
   } catch (error) {
     next(error);
   }
@@ -1454,6 +1596,14 @@ router.patch("/groups/:id", requireAuth("groups:write"), async (req, res, next) 
   try {
     const payload = groupUpdateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    const currentAgents = (
+      await prisma.groupAgent.findMany({
+        where: { groupId: routeParam(req.params.id, "id") },
+        orderBy: [{ isLead: "desc" }, { createdAt: "asc" }],
+        select: { villageAgentId: true }
+      })
+    ).map((link) => link.villageAgentId);
+    const agents = await requestedAgents(req.user, payload, currentAgents);
     const group = await prisma.$transaction(async (tx) => {
       const updateData: Prisma.GroupUpdateInput = {
         ...(payload.name ? { name: payload.name } : {}),
@@ -1475,9 +1625,10 @@ router.patch("/groups/:id", requireAuth("groups:write"), async (req, res, next) 
         ...(payload.maxSharesPerMemberPerMeeting !== undefined ? { maxSharesPerMemberPerMeeting: payload.maxSharesPerMemberPerMeeting } : {}),
         ...(payload.constitutionVersion !== undefined ? { constitutionVersion: payload.constitutionVersion } : {}),
         ...(payload.cycleNumber !== undefined ? { cycleNumber: payload.cycleNumber } : {}),
-        ...(payload.villageAgentId !== undefined ? { villageAgent: payload.villageAgentId ? { connect: { id: payload.villageAgentId } } : { disconnect: true } } : {}),
         ...(payload.programmeIds ? { programme: payload.programmeIds[0] ? { connect: { id: payload.programmeIds[0] } } : { disconnect: true } } : {})
       };
+
+      if (agents) await setGroupAgents(tx, routeParam(req.params.id, "id"), agents.ids, agents.lead);
 
       if (payload.programmeIds) {
         await tx.programmeGroup.deleteMany({ where: { groupId: routeParam(req.params.id, "id") } });
@@ -1567,16 +1718,29 @@ router.post("/groups/:id/members/sync", requireAuth("members:write"), async (req
       return;
     }
 
-    const member = await prisma.member.create({
-      data: {
-        groupId,
-        fullName: payload.fullName.trim(),
-        phone,
-        role: payload.role ?? "MEMBER",
-        kycStatus: "PENDING",
-        status: "ACTIVE"
-      },
-      select: { id: true }
+    // Only the group itself or an admin appoints officials. A field agent's
+    // phone still registers the person, as an ordinary member; refusing would
+    // leave the entry stuck in that phone's queue for ever.
+    const requestedRole = payload.role ?? "MEMBER";
+    const role = requestedRole === "MEMBER" || isGroupSteward(req.user, groupId) ? requestedRole : "MEMBER";
+
+    const member = await prisma.$transaction(async (tx) => {
+      const created = await tx.member.create({
+        data: {
+          groupId,
+          fullName: payload.fullName.trim(),
+          phone,
+          role: "MEMBER",
+          kycStatus: "PENDING",
+          status: "ACTIVE"
+        },
+        select: { id: true }
+      });
+      // One chairperson per group, with history, whichever path appointed them.
+      if (role !== "MEMBER") {
+        await assignOffice(tx, { groupId, memberId: created.id, role, byUserId: req.user?.id ?? null });
+      }
+      return created;
     });
 
     await appendAuditEvent({
@@ -1584,7 +1748,12 @@ router.post("/groups/:id/members/sync", requireAuth("members:write"), async (req
       entityType: "MEMBER",
       entityId: member.id,
       type: "MEMBER_REGISTERED",
-      payload: { groupId, memberId: member.id, source: "PHONE_SYNC" }
+      payload: {
+        groupId,
+        memberId: member.id,
+        source: "PHONE_SYNC",
+        ...(role !== requestedRole ? { requestedRole } : {})
+      }
     });
 
     ok(res.status(201), { id: member.id, matched: false });
@@ -1598,6 +1767,10 @@ router.post("/groups/:id/members", requireAuth("members:write"), async (req, res
     const payload = memberCreateSchema.parse(req.body);
     const groupId = routeParam(req.params.id, "id");
     await assertGroupAccess(req.user, groupId);
+    // An agent may add members; appointing an official is the group's own
+    // decision (the same rule as /role-assignments), because who holds an
+    // office decides who can open and seal a meeting.
+    if (payload.role !== "MEMBER") assertGroupSteward(req.user, groupId, "appoint officials");
 
     // Canonicalised on the way in, for the same reason it is on update: the
     // phone is how a person is recognised later, and guarding the edit path
@@ -1620,10 +1793,15 @@ router.post("/groups/:id/members", requireAuth("members:write"), async (req, res
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const member = await tx.member.create({
-        data: { ...payload, phone, groupId },
-        select: memberSelect
+      const created = await tx.member.create({
+        data: { ...payload, role: "MEMBER", phone, groupId },
+        select: { id: true }
       });
+      // An office goes through assignOffice: one chairperson, with history.
+      if (payload.role !== "MEMBER") {
+        await assignOffice(tx, { groupId, memberId: created.id, role: payload.role, byUserId: req.user?.id ?? null });
+      }
+      const member = await tx.member.findUniqueOrThrow({ where: { id: created.id }, select: memberSelect });
       return generateAndQueueMemberPin(tx, member, {
         requestedByUserId: req.user?.id,
         select: memberSelect
@@ -1664,11 +1842,17 @@ router.patch("/groups/:id/members/:memberId", requireAuth("members:write"), asyn
 
     const member = await prisma.member.findFirst({
       where: { id: memberId, groupId },
-      select: { id: true, phone: true, fullName: true }
+      select: { id: true, phone: true, fullName: true, role: true }
     });
     if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+    if (payload.role !== undefined && payload.role !== member.role) {
+      assertGroupSteward(req.user, groupId, "change who holds an office");
+    }
 
-    const data: Record<string, unknown> = { ...payload };
+    // The office goes through assignOffice (single holders, history), not a
+    // bare column write.
+    const { role: requestedRole, ...rest } = payload;
+    const data: Record<string, unknown> = { ...rest };
 
     if (payload.phone !== undefined) {
       // Stored canonical. "0712345678" and "+254 712 345 678" are one person,
@@ -1696,6 +1880,9 @@ router.patch("/groups/:id/members/:memberId", requireAuth("members:write"), asyn
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (requestedRole !== undefined && requestedRole !== member.role) {
+        await assignOffice(tx, { groupId, memberId, role: requestedRole, byUserId: req.user?.id ?? null });
+      }
       const result = await tx.member.update({ where: { id: memberId }, data, select: memberSelect });
 
       // A member with a sign-in account signs in WITH THIS NUMBER. Leaving the
@@ -1751,6 +1938,9 @@ router.post("/groups/:id/members/:memberId/pin", requireAuth("members:write"), a
   try {
     pinRequestSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    // A PIN is one of the keys that opens the group's meeting. The group's
+    // officials hold the keys, not the field agent.
+    assertGroupSteward(req.user, routeParam(req.params.id, "id"), "issue a member's PIN");
     const existing = await prisma.member.findFirst({
       where: { id: routeParam(req.params.memberId, "memberId"), groupId: routeParam(req.params.id, "id") },
       select: memberSelect
@@ -1898,6 +2088,9 @@ router.post(
         select: { id: true, fullName: true, phone: true }
       });
       if (!member) throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member does not exist or is outside this group.");
+      // Whoever sets the first password can sign in as the member (and vote
+      // as them), so only the group itself or an admin creates the sign-in.
+      assertGroupSteward(req.user, groupId, "create a member's sign-in");
       if (req.user?.role !== "IWL_ADMIN") await assertMayCreateMemberLogin(groupId, req.user?.id ?? null);
 
       const existing = await findLoginForPhone(member.phone);
@@ -1994,6 +2187,7 @@ router.put(
       const body = z.object({ password: z.string().min(6).max(100) }).parse(req.body);
       const groupId = routeParam(req.params.id, "id");
       await assertGroupAccess(req.user, groupId);
+      assertGroupSteward(req.user, groupId, "reset a member's password");
       await assertMemberAccountsOn(req.user, groupId);
       const member = await prisma.member.findFirst({
         where: memberScopeForUser(req.user, { id: routeParam(req.params.memberId, "memberId"), groupId }),
@@ -2210,10 +2404,19 @@ router.post("/groups/:id/meetings", requireAuth("meetings:write"), async (req, r
           ledgerEntries: { none: {} }
         },
         orderBy: { scheduledAt: "asc" },
-        include: meetingInclude(req.user)
+        select: { id: true }
       });
       if (planned) {
-        ok(res, planned);
+        // A plan made by the reminder service has no workflow rows; the meeting
+        // being held now gets them, and is marked as held on the phone.
+        const adopted = await prisma.$transaction(async (tx) => {
+          await createMeetingSteps(tx, planned.id);
+          if (payload.source === "PHONE") {
+            await tx.meeting.update({ where: { id: planned.id }, data: { source: "PHONE" } });
+          }
+          return tx.meeting.findUniqueOrThrow({ where: { id: planned.id }, include: meetingInclude(req.user) });
+        });
+        ok(res, adopted);
         return;
       }
     }
@@ -2394,9 +2597,25 @@ router.post("/groups/:id/meetings/:meetingId/phone-lifecycle", requireAuth("meet
         data = { status: "SEALED", openedAt: existing.openedAt ?? at, closedAt: at };
       }
 
-      const meeting = data
-        ? await tx.meeting.update({ where: { id: meetingId }, data, include: meetingInclude(req.user) })
-        : await tx.meeting.findUniqueOrThrow({ where: { id: meetingId }, include: meetingInclude(req.user) });
+      if (data) await tx.meeting.update({ where: { id: meetingId }, data });
+      // Filled in on every CLOSED, not only the first: a phone that closed the
+      // meeting before it could send the keys and notes sends them on retry.
+      // A meeting sealed on the console (an official's PIN) is left as sealed.
+      const closedNow =
+        payload.event === "CLOSED" &&
+        existing.sealedByMemberId === null &&
+        (data !== null || existing.status === "SEALED");
+      if (closedNow) {
+        await completePhoneMeeting(tx, {
+          groupId,
+          meetingId,
+          at: existing.closedAt ?? at,
+          unlockedByMemberIds: payload.unlockedByMemberIds,
+          notes: payload.notes,
+          capturedByUserId: req.user?.id ?? null
+        });
+      }
+      const meeting = await tx.meeting.findUniqueOrThrow({ where: { id: meetingId }, include: meetingInclude(req.user) });
       return { meeting, changed: data !== null };
     });
 
@@ -2497,6 +2716,8 @@ router.post("/groups/:id/meetings/:meetingId/otp-batch", requireAuth("meeting-ke
   try {
     const payload = otpBatchSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    // Codes are sent to other members' phones: the group's call, not a member's.
+    assertGroupSteward(req.user, routeParam(req.params.id, "id"), "send meeting codes to members");
     await prisma.$transaction((tx) => assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId")));
     const results = await prisma.$transaction(async (tx) => {
       const members = await tx.member.findMany({
@@ -2762,6 +2983,9 @@ router.post("/groups/:id/offline-devices/prepare", requireAuth("meeting-keys:wri
   try {
     const payload = offlineDevicePrepareSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    // PIN checks for every member of the group, for a device the caller names:
+    // only the phone that keeps the group's book should receive them.
+    assertGroupSteward(req.user, routeParam(req.params.id, "id"), "prepare a phone to open meetings offline");
     const cacheExpiresAt = new Date(Date.now() + payload.cacheTtlHours * 60 * 60 * 1000);
     const prepared = await prisma.$transaction(async (tx) => {
       const verifiers = [];
@@ -2815,6 +3039,7 @@ router.post("/groups/:id/offline-devices/refresh", requireAuth("meeting-keys:wri
   try {
     const payload = offlineDeviceRefreshSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    assertGroupSteward(req.user, routeParam(req.params.id, "id"), "prepare a phone to open meetings offline");
     const cacheExpiresAt = new Date(Date.now() + payload.cacheTtlHours * 60 * 60 * 1000);
     const refreshed = await prisma.$transaction(async (tx) => {
       const { verifiers, skipped } = await buildAutomaticOfflineVerifiers(tx, routeParam(req.params.id, "id"), payload.deviceId);
@@ -3105,6 +3330,8 @@ router.post("/groups/:id/meetings/:meetingId/share-out/post", requireAuth("ledge
   try {
     const payload = shareOutPostSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    // A share-out ends the cycle: the same rule as the phone's share-out.
+    assertMayManageCycles(req.user, routeParam(req.params.id, "id"));
     const result = await prisma.$transaction(async (tx) => {
       await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), routeParam(req.params.meetingId, "meetingId"));
       const groupId = routeParam(req.params.id, "id");
@@ -3286,6 +3513,9 @@ router.post("/groups/:id/votes", requireAuth("votes:write"), async (req, res, ne
   try {
     const payload = voteCreateSchema.parse(req.body);
     await assertGroupAccess(req.user, routeParam(req.params.id, "id"));
+    // A resolution records the group's decision and its tally; members cast
+    // their own ballots in polls instead.
+    assertGroupSteward(req.user, routeParam(req.params.id, "id"), "record a resolution");
     await assertModuleEnabled(req.user, "voting", { groupId: routeParam(req.params.id, "id") });
     const vote = await prisma.$transaction(async (tx) => {
       if (payload.meetingId) await assertMeetingInGroup(tx, routeParam(req.params.id, "id"), payload.meetingId);

@@ -35,7 +35,7 @@ interface PolicyResponse {
 
 const FUND_LABELS: Record<string, string> = {
   SOCIAL: "Welfare (social) fund",
-  SAVINGS: "Savings fund",
+  SAVINGS: "Shares fund",
   INTERNAL_LOAN: "Loan fund"
 };
 

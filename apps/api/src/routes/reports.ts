@@ -7,7 +7,8 @@ import {
   memberScopeForUser,
   scopeGroupWhere,
   villageAgentScopeForUser,
-  demoExclusionForUser
+  demoExclusionForUser,
+  agentCaseloadWhere
 } from "../services/account-scope";
 import { ApiHttpError, ok } from "../lib/http";
 import { buildProgrammePerformanceReport } from "../services/programme-performance-report";
@@ -177,12 +178,18 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
     const groupWhere = {
       AND: [scopeGroupWhere(req.user), await demoExclusionForUser(req.user)]
     };
-    const accessibleGroups = await prisma.group.findMany({
-      where: groupWhere,
-      select: { county: true }
-    });
+    // The FtMA county KPIs describe that programme's groups in a county. A
+    // partner sees a county's figures only where it has FtMA groups of its own
+    // there; a county it merely shares with FtMA is someone else's portfolio.
+    const platformWide = req.user?.role === "IWL_ADMIN" || req.user?.role === "READ_ONLY";
+    const accessibleGroups = platformWide
+      ? []
+      : await prisma.group.findMany({
+          where: { AND: [groupWhere, { sourceSystem: "FTMA_PERFORMANCE" }] },
+          select: { county: true }
+        });
     const scopedCounties = Array.from(new Set(accessibleGroups.map((group) => group.county)));
-    const countyWhere = Object.keys(groupWhere).length > 0 ? { county: { in: scopedCounties } } : {};
+    const countyWhere = platformWide ? {} : { county: { in: scopedCounties } };
     const userWhere = reportUserWhere(req.user);
     const canReadLedger = hasPermission(req.user, "ledger:read");
     const canReadUsers = hasPermission(req.user, "users:read");
@@ -638,8 +645,9 @@ router.get("/reports/agent", requireAuth("village-agents:read"), async (req, res
       return;
     }
 
+    // Every group this agent serves, including groups shared with other agents.
     const groups = await prisma.group.findMany({
-      where: { villageAgentId: agent.id },
+      where: agentCaseloadWhere(agent.id),
       select: {
         id: true,
         name: true,

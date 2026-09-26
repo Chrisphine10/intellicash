@@ -18,6 +18,7 @@ import {
   X
 } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../lib/api";
+import { CurrentUserProvider } from "../../lib/current-user";
 import { getNavigationItemsForRole, navigationSections } from "../../lib/navigation";
 import { FallbackImage } from "../fallback-image";
 import { DEFAULT_AVATAR_PLACEHOLDER } from "../../lib/placeholders";
@@ -667,7 +668,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <div className="page-content">{children}</div>
+        <div className="page-content">
+          <CurrentUserProvider user={user}>{children}</CurrentUserProvider>
+        </div>
       </main>
       {groupBottomNavigation.length > 0 ? (
         <nav

@@ -321,7 +321,7 @@ export default function ProgrammePerformancePage() {
             <header>
               <div>
                 <h3>2. Group performance</h3>
-                <span>Savings, credit, meetings and assessed capacity — group totals only</span>
+                <span>Shares, credit, meetings and assessed capacity — group totals only</span>
               </div>
             </header>
             <div className="card-body">
@@ -371,7 +371,7 @@ export default function ProgrammePerformancePage() {
                   { key: "members", header: "Members", value: (row) => row.activeMembers },
                   {
                     key: "savings",
-                    header: "Savings",
+                    header: "Shares",
                     value: (row) => row.savingsCents ?? -1,
                     cell: (row) => money(row.savingsCents),
                     exportValue: (row) => (row.savingsCents === null ? WITHHELD : row.savingsCents / 100)

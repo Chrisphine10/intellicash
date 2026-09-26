@@ -7,6 +7,7 @@ import { ArrowLeft, UserPlus } from "@/lib/theme-icons";
 import { ApiClientError, apiFetch } from "../../../../../lib/api";
 import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { User } from "../../../../../components/dashboard/types";
+import { isGroupSteward } from "../../../../../lib/current-user";
 
 interface GroupSummary {
   id: string;
@@ -96,7 +97,9 @@ export default function GroupJoinRequestsPage({ params }: { params: Promise<{ id
     };
   }, [id]);
 
-  const canDecide = user?.permissions?.includes("members:write") ?? false;
+  // Accepting someone hands them the group's records: the API lets only the
+  // group's own account or an admin answer, not a field agent.
+  const canDecide = isGroupSteward(user, id);
   const pending = requests.filter((request) => request.status === "PENDING");
 
   async function decide(request: JoinRequestRow, approve: boolean) {
@@ -108,9 +111,9 @@ export default function GroupJoinRequestsPage({ params }: { params: Promise<{ id
         ? `${request.requestedName} gave a phone number already on the roster for ` +
           `${request.willLinkToMemberName}.\n\n` +
           `Accepting attaches this login to ${request.willLinkToMemberName}'s existing ` +
-          "savings and loan records. Only continue if you know this is the same person."
+          "shares and loan records. Only continue if you know this is the same person."
         : `Add ${request.requestedName} to ${group?.name ?? "this group"}?\n\n` +
-          "They will be able to see the group's savings, loans and meeting " +
+          "They will be able to see the group's shares, loans and meeting " +
           "records. Only approve someone the group knows.";
       if (!window.confirm(message)) return;
     }
@@ -143,7 +146,7 @@ export default function GroupJoinRequestsPage({ params }: { params: Promise<{ id
         ok: true,
         text: approve
           ? result.matchedExistingMember
-            ? `${request.requestedName} was matched to the savings already recorded for them.`
+            ? `${request.requestedName} was matched to the shares already recorded for them.`
             : `${request.requestedName} was added as a new member.`
           : `${request.requestedName}'s request was declined.`
       });

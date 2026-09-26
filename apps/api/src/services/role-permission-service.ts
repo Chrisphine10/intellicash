@@ -7,7 +7,7 @@
  * authority; every route guard resolves through it.
  */
 
-import { permissions, rolePermissions, roles, type Permission, type Role } from "@intellicash/shared";
+import { groupSideMayHold, isOversightRole, oversightMayHold, permissions, roleMayHold, rolePermissions, roles, type Permission, type Role } from "@intellicash/shared";
 import { isRole } from "../domain/authorization";
 import { prisma } from "../lib/prisma";
 import { appendAuditEvent } from "./audit-service";
@@ -122,10 +122,21 @@ export function normalizePermissionList(values: Permission[]) {
   return Array.from(new Set(values.filter((permission) => permissionSet.has(permission))));
 }
 
+/**
+ * The permissions [role] may actually use, whatever its stored row says:
+ * admin-only permissions stay with admins, and oversight roles (partner,
+ * lender, read-only) keep only reads - plus a lender's own payments - and a
+ * group or member login never holds a platform permission. This is
+ * the one place every route guard's answer passes through, so a row edited in
+ * the console or the database cannot give a partner write access to a group's
+ * welfare, ledger, meetings or members.
+ */
 function permissionsForRoleWithAdminReserve(role: Role, values: Permission[]) {
   const normalized = normalizePermissionList(values);
   if (role === "IWL_ADMIN") return normalized;
-  return normalized.filter((permission) => !adminOnlyPermissions.has(permission));
+  return normalized.filter(
+    (permission) => !adminOnlyPermissions.has(permission) && roleMayHold(role, permission)
+  );
 }
 
 export function validateRolePermissionUpdate(role: Role, values: Permission[]) {
@@ -134,6 +145,20 @@ export function validateRolePermissionUpdate(role: Role, values: Permission[]) {
 
   if (restricted.length > 0) {
     throw new Error(`Only IWL admin can hold ${restricted.join(", ")}.`);
+  }
+
+  const oversightWrites = normalized.filter((permission) => !oversightMayHold(role, permission));
+  if (oversightWrites.length > 0) {
+    throw new Error(
+      `Partners, lenders and read-only accounts can view groups but not change them, so they cannot hold ${oversightWrites.join(", ")}.`
+    );
+  }
+
+  const platformOnly = normalized.filter((permission) => !groupSideMayHold(role, permission));
+  if (platformOnly.length > 0) {
+    throw new Error(
+      `A group's own login and its members work inside one group, so they cannot hold ${platformOnly.join(", ")}.`
+    );
   }
 
   if (role === "IWL_ADMIN") {
@@ -178,6 +203,9 @@ async function ensureRolePermissionTemplatesOnce() {
     )
   );
 
+  // Before the prune: the prune would silently drop the same writes, and this
+  // correction exists to record what it removed.
+  await correctOversightPermissions();
   await pruneReservedPermissionsFromNonAdminTemplates();
   await correctPartnerMeetingPermissions();
 
@@ -246,6 +274,49 @@ async function correctPartnerMeetingPermissions() {
     type: "ROLE_PERMISSIONS_UPDATED",
     payload: { reason: PARTNER_READ_ONLY_MARKER, removed }
   });
+}
+
+/** Marks the lender and read-only view-only correction as done (see below). */
+export const OVERSIGHT_VIEW_ONLY_MARKER = "oversight-view-only-2026-09";
+
+/**
+ * Lenders and read-only accounts became view-only too (26 Sep 2026): a lender
+ * keeps only recording its own payments. `permissionsForRoleWithAdminReserve`
+ * already ignores anything else they hold, so this only makes the STORED rows
+ * say what is enforced - otherwise Access control would show a lender ticked
+ * for store requests it can no longer make. Once per database, per role, and
+ * recorded in the audit trail with what was removed.
+ */
+async function correctOversightPermissions() {
+  for (const role of ["LENDER", "READ_ONLY"] as const) {
+    const done = await prisma.auditEvent.findFirst({
+      where: {
+        type: "ROLE_PERMISSIONS_UPDATED",
+        entityType: "RolePermissionTemplate",
+        entityId: role,
+        payloadJson: { contains: OVERSIGHT_VIEW_ONLY_MARKER }
+      },
+      select: { id: true }
+    });
+    if (done) continue;
+
+    const row = await prisma.rolePermissionTemplate.findUnique({ where: { role } });
+    if (!row) continue;
+    const held = readPermissionValues(row.permissionsJson) ?? [];
+    const removed = held.filter((permission) => isOversightRole(role) && !oversightMayHold(role, permission));
+    if (removed.length > 0) {
+      await prisma.rolePermissionTemplate.update({
+        where: { role },
+        data: { permissionsJson: JSON.stringify(normalizePermissionList(held.filter((p) => !removed.includes(p)))) }
+      });
+    }
+    await appendAuditEvent({
+      entityType: "RolePermissionTemplate",
+      entityId: role,
+      type: "ROLE_PERMISSIONS_UPDATED",
+      payload: { reason: OVERSIGHT_VIEW_ONLY_MARKER, removed }
+    });
+  }
 }
 
 /**

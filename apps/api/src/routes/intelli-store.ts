@@ -330,13 +330,15 @@ function cleanNullable(value: string | null | undefined) {
 function bookingRequestScopeForUser(user: Express.Request["user"]): Prisma.AgentBookingRequestWhereInput {
   if (!user) return { id: "__no_access__" };
   if (user.role === "IWL_ADMIN" || user.role === "READ_ONLY") return {};
-
-  return {
-    OR: [
-      { programme: programmeScopeForUser(user) },
-      { villageAgent: villageAgentScopeForUser(user) }
-    ]
-  };
+  // A booking is a member of the public asking an agent for a service: their
+  // name, email and phone. A group's own login or a member has no business
+  // reading other people's requests.
+  if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") return { id: "__no_access__" };
+  // An agent: the requests addressed to them.
+  if (user.role === "VILLAGE_AGENT") return { villageAgent: villageAgentScopeForUser(user) };
+  // A partner or lender: requests on its own programmes only. Matching on the
+  // agent as well leaked requests an agent took for another partner.
+  return { programme: programmeScopeForUser(user) };
 }
 
 async function validateProgrammeIds(user: Express.Request["user"], programmeIds: string[]) {
@@ -1709,6 +1711,12 @@ router.patch("/intelli-store/credit-requests/:id", requireAuth("store:write"), a
 
     if (!existing) {
       throw new ApiHttpError(404, "STORE_CREDIT_REQUEST_NOT_FOUND", "Credit request does not exist or is outside this account.");
+    }
+
+    // Field agents see the requests in their programmes; vetting, financing
+    // and fulfilment are decided by an admin (or a lender for its own finance).
+    if (req.user?.role === "VILLAGE_AGENT") {
+      throw new ApiHttpError(403, "FORBIDDEN", "Village agents can view store requests; an admin vets and assigns them.");
     }
 
     const isRequester = req.user?.role === "GROUP_ACCOUNT" || req.user?.role === "MEMBER";

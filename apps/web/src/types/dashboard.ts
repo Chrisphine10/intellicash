@@ -67,6 +67,8 @@ export interface GroupRow {
   sourceSystem?: string | null;
   sourceReference?: string | null;
   villageAgent?: { id?: string; name: string } | null;
+  /** Every VA / CBT serving the group, lead first. */
+  agentLinks?: Array<{ isLead: boolean; villageAgent: { id: string; name: string } }>;
   programme?: { id?: string; name: string; partner?: { name: string } | null } | null;
   fundAccounts?: Array<{ id: string; type: string; balanceCents: number; currency: string }>;
   programmeLinks?: Array<{
@@ -773,4 +775,15 @@ export interface IntelliAuditChatResponse {
     content: string;
     createdAt: string;
   };
+}
+
+/** Every agent serving a group, by name ("Unassigned" when none). */
+export function groupAgentNames(group: {
+  villageAgent?: { name: string } | null;
+  agentLinks?: Array<{ villageAgent: { name: string } }>;
+}) {
+  if (group.agentLinks && group.agentLinks.length > 0) {
+    return group.agentLinks.map((link) => link.villageAgent.name).join(", ");
+  }
+  return group.villageAgent?.name ?? "Unassigned";
 }

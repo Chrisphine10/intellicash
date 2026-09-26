@@ -4,6 +4,8 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, KeyRound, ShieldCheck, SlidersHorizontal, UserPlus, UsersRound, X } from "@/lib/theme-icons";
 import {
+  groupSideMayHold,
+  oversightMayHold,
   permissions as permissionCatalogDefaults,
   rolePermissions as defaultRolePermissions,
   roles,
@@ -792,17 +794,30 @@ export default function UsersPage() {
                           const locked =
                             selectedPermissionRole === "IWL_ADMIN" &&
                             (permission === "users:read" || permission === "users:write");
+                          // The same rules the API enforces: oversight roles only
+                          // view groups, and a group or member login never runs the
+                          // platform. A stale grant can still be unticked.
+                          const refused = !oversightMayHold(selectedPermissionRole, permission)
+                            ? "View only: not for partners, lenders or read-only accounts"
+                            : !groupSideMayHold(selectedPermissionRole, permission)
+                              ? "Platform only: not for a group or member login"
+                              : null;
+                          const checked = permissionDraftSet.has(permission);
                           return (
                             <label className="permission-toggle" key={permission}>
                               <input
-                                checked={permissionDraftSet.has(permission)}
-                                disabled={locked}
+                                checked={checked}
+                                disabled={locked || (Boolean(refused) && !checked)}
                                 onChange={() => togglePermission(permission)}
                                 type="checkbox"
                               />
                               <span>
                                 <strong>{permission}</strong>
-                                <em>{locked ? "Required for admin recovery" : humanizeEnum(permission.split(":")[1] ?? "access")}</em>
+                                <em>
+                                  {locked
+                                    ? "Required for admin recovery"
+                                    : refused ?? humanizeEnum(permission.split(":")[1] ?? "access")}
+                                </em>
                               </span>
                             </label>
                           );

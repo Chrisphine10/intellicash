@@ -6,7 +6,7 @@ import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
-import { ensureActiveCycle } from "../services/cycle-service";
+import { assignOffice } from "../services/member-role-service";
 
 export const memberRolesRouter = Router();
 
@@ -18,9 +18,6 @@ export const memberRolesRouter = Router();
  * taken by whoever is secretary today. Assignments are ENDED, never edited, so
  * the record of who was responsible survives every reshuffle.
  */
-
-/** Offices where only one member may hold the post at a time. */
-const SINGLETON_ROLES = new Set(["CHAIRPERSON", "SECRETARY", "TREASURER"]);
 
 async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: string) {
   const group = await prisma.group.findFirst({
@@ -90,97 +87,16 @@ memberRolesRouter.post(
       assertMayAssign(req.user, group.id);
       const body = assignSchema.parse(req.body ?? {});
 
-      const result = await prisma.$transaction(async (tx) => {
-        const member = await tx.member.findFirst({
-          where: { id: body.memberId, groupId: group.id },
-          select: { id: true, fullName: true, role: true }
-        });
-        if (!member) {
-          throw new ApiHttpError(404, "MEMBER_NOT_FOUND", "Member is not in this group.");
-        }
-
-        const cycle = await ensureActiveCycle(tx, group.id);
-        const now = new Date();
-        let replaced: { fullName: string } | null = null;
-
-        // A member holds one office at a time. Moving them — secretary to key
-        // holder, or back to ordinary member — ends the office they held, so the
-        // history does not show them in two posts at once. This is also what
-        // lets the app set a role with one call when it syncs a change.
-        const previous = await tx.memberRoleAssignment.findMany({
-          where: { groupId: group.id, memberId: member.id, endedAt: null, role: { not: body.role } },
-          select: { id: true }
-        });
-        if (previous.length > 0) {
-          await tx.memberRoleAssignment.updateMany({
-            where: { id: { in: previous.map((p) => p.id) } },
-            data: { endedAt: now }
-          });
-        }
-
-        // Holding it already is not a second term. Checked for every office, not
-        // only the single-holder ones, so a phone retrying a sync cannot record
-        // one key holder twice. The app treats this answer as "done".
-        if (body.role !== "MEMBER") {
-          const already = await tx.memberRoleAssignment.findFirst({
-            where: { groupId: group.id, memberId: member.id, role: body.role, endedAt: null },
-            select: { id: true }
-          });
-          if (already) {
-            throw new ApiHttpError(409, "ALREADY_HOLDS_ROLE", `${member.fullName} already holds this office.`);
-          }
-        }
-
-        // Back to ordinary member: no office to record, only the ones ended.
-        if (body.role === "MEMBER") {
-          await tx.member.update({ where: { id: member.id }, data: { role: "MEMBER" } });
-          return { assignment: null, member, replaced: null };
-        }
-
-        if (SINGLETON_ROLES.has(body.role)) {
-          // End the incumbent rather than deleting them: the group needs to be
-          // able to say who was secretary last March.
-          const holders = await tx.memberRoleAssignment.findMany({
-            where: { groupId: group.id, role: body.role, endedAt: null },
-            include: { member: { select: { fullName: true } } }
-          });
-          for (const holder of holders) {
-            if (holder.memberId === member.id) {
-              throw new ApiHttpError(
-                409,
-                "ALREADY_HOLDS_ROLE",
-                `${member.fullName} already holds this office.`
-              );
-            }
-            await tx.memberRoleAssignment.update({
-              where: { id: holder.id },
-              data: { endedAt: now }
-            });
-            replaced = { fullName: holder.member.fullName };
-          }
-
-          // Keep Member.role in step for everything that still reads it.
-          await tx.member.updateMany({
-            where: { groupId: group.id, role: body.role, id: { not: member.id } },
-            data: { role: "MEMBER" }
-          });
-        }
-
-        const assignment = await tx.memberRoleAssignment.create({
-          data: {
-            groupId: group.id,
-            memberId: member.id,
-            cycleId: cycle.id,
-            role: body.role,
-            startedAt: now,
-            assignedByUserId: req.user?.id ?? null,
-            note: body.note ?? null
-          }
-        });
-
-        await tx.member.update({ where: { id: member.id }, data: { role: body.role } });
-        return { assignment, member, replaced };
-      });
+      const result = await prisma.$transaction((tx) =>
+        assignOffice(tx, {
+          groupId: group.id,
+          memberId: body.memberId,
+          role: body.role,
+          byUserId: req.user?.id ?? null,
+          note: body.note ?? null,
+          refuseRepeat: true
+        })
+      );
 
       const roleWord = (result.assignment?.role ?? "MEMBER").toLowerCase().replace(/_/g, " ");
       ok(res.status(201), {

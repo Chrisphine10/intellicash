@@ -6,6 +6,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, HeartHandshake } from "@/lib/theme-icons";
 import { apiFetch, formatDate, formatKes } from "../../../../../lib/api";
+import { isViewOnlyOverGroups, useCurrentUser, userCan, ViewOnlyNotice } from "../../../../../lib/current-user";
 
 /**
  * Welfare spending.
@@ -48,6 +49,11 @@ const CATEGORIES = ["MEDICAL", "BEREAVEMENT", "EDUCATION", "EMERGENCY", "OTHER"]
 
 export default function GroupWelfarePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const user = useCurrentUser();
+  // Recording spends the group's money: the API asks for ledger:write.
+  const canRecord = userCan(user, "ledger:write");
+  // Partners, lenders and read-only viewers get categories and amounts only.
+  const viewOnly = isViewOnlyOverGroups(user);
   const [data, setData] = useState<WelfareResponse | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [openMeetings, setOpenMeetings] = useState<Meeting[]>([]);
@@ -63,10 +69,12 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    // The form's members and meetings are fetched only for someone who can use
+    // it; a lender cannot read meetings, and that must not blank the page.
     const [welfare, memberList, meetingList] = await Promise.all([
       apiFetch<WelfareResponse>(`/groups/${id}/welfare-expenses`),
-      apiFetch<Member[]>(`/groups/${id}/members`),
-      apiFetch<Meeting[]>(`/groups/${id}/meetings`)
+      canRecord ? apiFetch<Member[]>(`/groups/${id}/members`) : Promise.resolve([] as Member[]),
+      canRecord ? apiFetch<Meeting[]>(`/groups/${id}/meetings`) : Promise.resolve([] as Meeting[])
     ]);
     // The server's own rule, so the console never says "no meeting is open" beside
     // one the server would accept: a meeting kept on a phone is only ever
@@ -92,7 +100,7 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
       .catch((e) => setError(e instanceof Error ? e.message : "Unable to load welfare expenses."))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, canRecord]);
 
   const amountCents = Math.round(Number(amount || 0) * 100);
   const available = data?.welfareBalanceCents ?? 0;
@@ -159,6 +167,8 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
         <HeartHandshake size={22} />
       </header>
 
+      <ViewOnlyNotice />
+
       {message ? (
         <div className={`dashboard-notice ${message.ok ? "" : "error"}`}>{message.text}</div>
       ) : null}
@@ -168,95 +178,97 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
         Every expense here reduces what each member receives.
       </div>
 
-      <article className="data-card">
-        <header>
-          <h3>Record a payment</h3>
-        </header>
-        <form className="credential-form" onSubmit={record}>
-          {/* Which meeting this payment is being made in. Welfare leaves the
-              fund in front of the members it belongs to, so there is no way to
-              record one without naming the meeting. */}
-          {openMeetings.length === 0 ? (
-            <p className="dashboard-notice error">
-              No meeting is open. Welfare is paid out during a meeting, in front of the members —
-              open one first, then record the payment there.
-            </p>
-          ) : null}
+      {canRecord ? (
+        <article className="data-card">
+          <header>
+            <h3>Record a payment</h3>
+          </header>
+          <form className="credential-form" onSubmit={record}>
+            {/* Which meeting this payment is being made in. Welfare leaves the
+                fund in front of the members it belongs to, so there is no way to
+                record one without naming the meeting. */}
+            {openMeetings.length === 0 ? (
+              <p className="dashboard-notice error">
+                No meeting is open. Welfare is paid out during a meeting, in front of the members —
+                open one first, then record the payment there.
+              </p>
+            ) : null}
 
-          <div className="credential-grid">
-            <label className="credential-field">
-              <span>Amount (KES)</span>
-              <input
-                min="0"
-                onChange={(event) => setAmount(event.target.value)}
-                step="0.01"
-                type="number"
-                value={amount}
-              />
-            </label>
-            {openMeetings.length > 0 ? (
+            <div className="credential-grid">
               <label className="credential-field">
-                <span>Recorded in meeting</span>
-                <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
-                  {openMeetings.map((meeting) => (
-                    <option key={meeting.id} value={meeting.id}>
-                      {meeting.title} — {formatDate(meeting.scheduledAt)}
+                <span>Amount (KES)</span>
+                <input
+                  min="0"
+                  onChange={(event) => setAmount(event.target.value)}
+                  step="0.01"
+                  type="number"
+                  value={amount}
+                />
+              </label>
+              {openMeetings.length > 0 ? (
+                <label className="credential-field">
+                  <span>Recorded in meeting</span>
+                  <select onChange={(event) => setMeetingId(event.target.value)} value={meetingId}>
+                    {openMeetings.map((meeting) => (
+                      <option key={meeting.id} value={meeting.id}>
+                        {meeting.title} — {formatDate(meeting.scheduledAt)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label className="credential-field">
+                <span>What for</span>
+                <select onChange={(event) => setCategory(event.target.value)} value={category}>
+                  {CATEGORIES.map((value) => (
+                    <option key={value} value={value}>
+                      {value.charAt(0) + value.slice(1).toLowerCase()}
                     </option>
                   ))}
                 </select>
               </label>
+              <label className="credential-field">
+                <span>Paid to a member</span>
+                <select onChange={(event) => setPayeeMemberId(event.target.value)} value={payeeMemberId}>
+                  <option value="">— not a member —</option>
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="credential-field">
+                <span>…or a name</span>
+                <input
+                  onChange={(event) => setPayeeName(event.target.value)}
+                  placeholder="Family, hospital, school"
+                  type="text"
+                  value={payeeName}
+                />
+              </label>
+              <label className="credential-field">
+                <span>Note</span>
+                <input onChange={(event) => setNote(event.target.value)} type="text" value={note} />
+              </label>
+            </div>
+
+            {exceedsFund && amountCents > 0 ? (
+              <p className="dashboard-notice error">
+                The welfare fund holds {formatKes(available)} — short by{" "}
+                {formatKes(amountCents - available)}. A group cannot spend welfare money it does not
+                have.
+              </p>
             ) : null}
-            <label className="credential-field">
-              <span>What for</span>
-              <select onChange={(event) => setCategory(event.target.value)} value={category}>
-                {CATEGORIES.map((value) => (
-                  <option key={value} value={value}>
-                    {value.charAt(0) + value.slice(1).toLowerCase()}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="credential-field">
-              <span>Paid to a member</span>
-              <select onChange={(event) => setPayeeMemberId(event.target.value)} value={payeeMemberId}>
-                <option value="">— not a member —</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="credential-field">
-              <span>…or a name</span>
-              <input
-                onChange={(event) => setPayeeName(event.target.value)}
-                placeholder="Family, hospital, school"
-                type="text"
-                value={payeeName}
-              />
-            </label>
-            <label className="credential-field">
-              <span>Note</span>
-              <input onChange={(event) => setNote(event.target.value)} type="text" value={note} />
-            </label>
-          </div>
 
-          {exceedsFund && amountCents > 0 ? (
-            <p className="dashboard-notice error">
-              The welfare fund holds {formatKes(available)} — short by{" "}
-              {formatKes(amountCents - available)}. A group cannot spend welfare money it does not
-              have.
-            </p>
-          ) : null}
-
-          <div className="credential-actions">
-            <button className="button" disabled={saving || exceedsFund || amountCents <= 0} type="submit">
-              {saving ? "Recording…" : "Record expense"}
-            </button>
-          </div>
-        </form>
-      </article>
+            <div className="credential-actions">
+              <button className="button" disabled={saving || exceedsFund || amountCents <= 0} type="submit">
+                {saving ? "Recording…" : "Record expense"}
+              </button>
+            </div>
+          </form>
+        </article>
+      ) : null}
 
       <article className="data-card">
         <header>
@@ -270,7 +282,9 @@ export default function GroupWelfarePage({ params }: { params: Promise<{ id: str
               <li key={expense.id}>
                 <strong>{formatKes(expense.ledgerEntry.amountCents)}</strong> ·{" "}
                 {expense.category.charAt(0) + expense.category.slice(1).toLowerCase()} ·{" "}
-                {expense.payeeMember?.fullName ?? expense.payeeName ?? "unrecorded payee"} ·{" "}
+                {viewOnly ? null : (
+                  <>{expense.payeeMember?.fullName ?? expense.payeeName ?? "unrecorded payee"} · </>
+                )}
                 {formatDate(expense.ledgerEntry.createdAt)}
                 {expense.note ? ` — ${expense.note}` : ""}
               </li>

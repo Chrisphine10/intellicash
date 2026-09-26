@@ -211,9 +211,39 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled"
 };
 
+type EvidenceInput = { gpsCompliant: boolean; source?: string | null; status: string };
+
+/**
+ * GPS for a meeting. A meeting held on the phone never records a location, so
+ * it is "Not captured", not "Pending": nothing will ever arrive to complete it.
+ */
+export function meetingGpsLabel(meeting: EvidenceInput) {
+  if (meeting.gpsCompliant) return "Compliant";
+  if (meeting.source === "PHONE") return "Not captured (phone)";
+  if (meeting.status === "SEALED" || meeting.status === "CLOSED" || meeting.status === "CANCELLED") return "Not checked";
+  return "Pending";
+}
+
+const UNLOCK_LABELS: Record<string, string> = {
+  PENDING: "Waiting for keys",
+  OFFICIALS_VERIFIED: "3 officials verified",
+  FIVE_MEMBERS_VERIFIED: "5 members verified",
+  NOT_RECORDED_ON_PHONE: "Not recorded (phone)",
+  PHONE_KEYS_BELOW_QUORUM: "Opened on phone, below quorum"
+};
+
+export function meetingUnlockLabel(unlockStatus: string) {
+  return UNLOCK_LABELS[unlockStatus] ?? unlockStatus.replace(/_/g, " ").toLowerCase();
+}
+
 export function meetingStatusLabel(meeting: StatusInput, now = Date.now()) {
   if (isMeetingOverdue(meeting, now)) return "Not started";
   return STATUS_LABELS[meeting.status] ?? meeting.status.replace(/_/g, " ").toLowerCase();
+}
+
+/** The label for a stored status on its own, e.g. in a filter list. */
+export function meetingStatusName(status: string) {
+  return STATUS_LABELS[status] ?? status.replace(/_/g, " ").toLowerCase();
 }
 
 export function meetingStatusClass(status: string, scheduledAt?: string) {

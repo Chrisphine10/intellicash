@@ -1,6 +1,8 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CurrentUserProvider } from "@/lib/current-user";
+import type { User } from "@/types/dashboard";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/visits/vis_1",
@@ -135,12 +137,23 @@ function resolvedParams(id: string) {
   }) as unknown as Promise<{ id: string }>;
 }
 
-async function renderPage() {
+/** The signed-in account, as the dashboard shell provides it. */
+const agent: User = {
+  id: "usr_agent",
+  name: "Grace Agent",
+  email: "agent@example.test",
+  role: "VILLAGE_AGENT",
+  permissions: ["groups:read", "visits:read", "visits:write"]
+};
+
+async function renderPage(viewer: User = agent) {
   const { default: Page } = await import("@/app/dashboard/visits/[id]/page");
   const view = render(
-    <React.Suspense fallback={<div>loading</div>}>
-      <Page params={resolvedParams("vis_1")} />
-    </React.Suspense>
+    <CurrentUserProvider user={viewer}>
+      <React.Suspense fallback={<div>loading</div>}>
+        <Page params={resolvedParams("vis_1")} />
+      </React.Suspense>
+    </CurrentUserProvider>
   );
   await waitFor(() => expect(screen.getByText("Action plan")).toBeTruthy());
   return view;
@@ -268,6 +281,22 @@ describe("field visit detail", () => {
       // Reopening must not claim the item was finished at this visit.
       expect(patch!.body).not.toHaveProperty("closedAtVisitId");
     });
+  });
+
+  it("shows programme staff the plan but no controls to change it", async () => {
+    // A partner reads visits (visits:read) but does not conduct them; the API
+    // refuses their writes, so the page must not offer any.
+    await renderPage({
+      id: "usr_partner",
+      name: "Programme Officer",
+      email: "partner@example.test",
+      role: "PARTNER_OFFICER",
+      permissions: ["groups:read", "visits:read"]
+    });
+
+    expect(screen.queryByRole("button", { name: "Agree an action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reopen" })).toBeNull();
   });
 
   it("renders dates as spelled months, not as an ambiguous numeric order", async () => {

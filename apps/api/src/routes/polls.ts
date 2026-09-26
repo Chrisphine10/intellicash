@@ -3,11 +3,12 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { appendAuditEvent } from "../services/audit-service";
 import { requireAuth, type AuthenticatedUser } from "../middleware/auth";
-import { scopeGroupWhere } from "../services/account-scope";
+import { assertGroupSteward, scopeGroupWhere } from "../services/account-scope";
 import { assertModuleEnabled } from "../services/module-service";
 import { signLedgerEntry } from "../domain/ledger";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { assignOffice } from "../services/member-role-service";
 
 /**
  * Voting / polls — the group's democratic decisions, taken in a meeting.
@@ -175,6 +176,8 @@ router.post("/groups/:id/polls", requireAuth("votes:write"), async (req, res, ne
     if (!group) {
       throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
     }
+    // Members vote; opening a poll is the group's decision.
+    assertGroupSteward(req.user, group.id, "open a poll");
     await assertModuleEnabled(req.user, "voting", { groupId: group.id });
 
     if (body.type === "ROLE_ELECTION" && !body.targetRole) {
@@ -459,6 +462,7 @@ router.post("/polls/:pollId/close", requireAuth("votes:write"), async (req, res,
     if (!existing) {
       throw new ApiHttpError(404, "POLL_NOT_FOUND", "Vote not found or outside this account.");
     }
+    assertGroupSteward(user, existing.groupId, "close a poll");
     await assertModuleEnabled(user, "voting", { groupId: existing.groupId });
     if (existing.status === "CLOSED") {
       throw new ApiHttpError(409, "ALREADY_CLOSED", "This vote is already closed.");
@@ -495,7 +499,7 @@ router.post("/polls/:pollId/close", requireAuth("votes:write"), async (req, res,
     const noCount = Math.max(totalVotes - yesCount, 0);
     const result = totalVotes === 0 ? "DEFERRED" : tied ? "TIED" : yesCount > noCount ? "PASSED" : "FAILED";
 
-    const { poll, vote } = await prisma.$transaction(async (tx) => {
+    const { poll, vote, elected } = await prisma.$transaction(async (tx) => {
       const updated = await tx.poll.update({
         where: { id: existing.id },
         data: { status: "CLOSED", closedAt: new Date(), resultSummary },
@@ -530,7 +534,37 @@ router.post("/polls/:pollId/close", requireAuth("votes:write"), async (req, res,
         }
       });
 
-      return { poll: updated, vote: minute };
+      // An election with a clear winner decides the office: the winner takes
+      // it and the previous holder's term ends (history kept). A tie, an empty
+      // ballot or a "no change" (MEMBER) result changes nothing.
+      let elected: { memberId: string; role: string } | null = null;
+      const winner = sorted[0];
+      if (
+        existing.type === "ROLE_ELECTION" &&
+        existing.targetRole &&
+        existing.targetRole !== "MEMBER" &&
+        !tied &&
+        totalVotes > 0 &&
+        winner?.memberId
+      ) {
+        // A winner who has since left the group takes no office; the result
+        // still stands in the minute book.
+        const stillMember = await tx.member.count({
+          where: { id: winner.memberId, groupId: existing.groupId, status: "ACTIVE" }
+        });
+        if (stillMember > 0) {
+          await assignOffice(tx, {
+            groupId: existing.groupId,
+            memberId: winner.memberId,
+            role: existing.targetRole,
+            byUserId: user?.id ?? null,
+            note: `Elected: ${resultSummary}`
+          });
+          elected = { memberId: winner.memberId, role: existing.targetRole };
+        }
+      }
+
+      return { poll: updated, vote: minute, elected };
     });
 
     const serialized = serializePoll(poll);
@@ -547,11 +581,12 @@ router.post("/polls/:pollId/close", requireAuth("votes:write"), async (req, res,
         result,
         resultSummary,
         totalVotes,
+        ...(elected ? { elected } : {}),
         tally: tally.map((option) => ({ label: option.label, voteCount: option.voteCount }))
       }
     });
 
-    ok(res, { ...serialized, voteId: vote.id, result });
+    ok(res, { ...serialized, voteId: vote.id, result, elected });
   } catch (error) {
     next(error);
   }

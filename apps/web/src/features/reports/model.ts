@@ -34,9 +34,9 @@ export type ReportId =
   | "programme-performance"
   | "partner-linkage"
   | "partner-coverage"
-  | "ftma-vsla-kpi"
-  | "ftma-training-kpi"
-  | "ftma-fsc-kpi";
+  | "programme-vsla-kpi"
+  | "programme-training-kpi"
+  | "programme-fsc-kpi";
 
 export interface ReportCard {
   id: ReportId;
@@ -222,9 +222,12 @@ export function latestCreditScore(group: GroupRow) {
   return group.creditScores[0]?.score ?? 0;
 }
 
+/** Records brought in from a programme's performance workbook (stored as FTMA_PERFORMANCE). */
+export const WORKBOOK_SOURCE_LABEL = "Programme workbook";
+
 export function sourceLabel(sourceSystem?: string | null) {
   if (!sourceSystem) return "Native";
-  if (sourceSystem === "FTMA_PERFORMANCE") return "FtMA Performance";
+  if (sourceSystem === "FTMA_PERFORMANCE") return WORKBOOK_SOURCE_LABEL;
   return humanizeEnum(sourceSystem);
 }
 
@@ -277,6 +280,7 @@ export function activeApiKeyCount(user: UserAccessSource) {
 
 export function categoryLabel(category: ReportCategory) {
   if (category === "all") return "All";
+  if (category === "data") return "Programme KPIs";
   return `${category.slice(0, 1).toUpperCase()}${category.slice(1)}`;
 }
 
@@ -313,9 +317,9 @@ export const reportPermissionRequirements: Record<ReportId, string[]> = {
   "programme-performance": ["analytics:read", "programmes:read"],
   "partner-linkage": ["analytics:read", "partners:read"],
   "partner-coverage": ["analytics:read", "partners:read", "programmes:read"],
-  "ftma-vsla-kpi": ["analytics:read", "programmes:read"],
-  "ftma-training-kpi": ["analytics:read", "programmes:read"],
-  "ftma-fsc-kpi": ["analytics:read", "programmes:read"]
+  "programme-vsla-kpi": ["analytics:read", "programmes:read"],
+  "programme-training-kpi": ["analytics:read", "programmes:read"],
+  "programme-fsc-kpi": ["analytics:read", "programmes:read"]
 };
 
 export const reportVisibilityRequirements: Partial<Record<ReportId, Array<keyof ReportVisibility>>> = {
@@ -326,9 +330,9 @@ export const reportVisibilityRequirements: Partial<Record<ReportId, Array<keyof 
   "ledger-transactions": ["ledgerEntries"],
   "access-rbac": ["users"],
   "meeting-monitor": ["meetings"],
-  "ftma-vsla-kpi": ["importedKpis"],
-  "ftma-training-kpi": ["importedKpis"],
-  "ftma-fsc-kpi": ["importedKpis"]
+  "programme-vsla-kpi": ["importedKpis"],
+  "programme-training-kpi": ["importedKpis"],
+  "programme-fsc-kpi": ["importedKpis"]
 };
 
 export function canUseReport(
@@ -364,9 +368,9 @@ export function reportBasisLabel(reportId: ReportId) {
       return "Audit events";
     case "meeting-monitor":
       return "Meetings";
-    case "ftma-vsla-kpi":
-    case "ftma-training-kpi":
-    case "ftma-fsc-kpi":
+    case "programme-vsla-kpi":
+    case "programme-training-kpi":
+    case "programme-fsc-kpi":
       return "Imported KPIs";
     case "integrations":
       return "Integrations";

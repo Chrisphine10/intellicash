@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2 } from "@/lib/theme-icons";
 import { apiFetch, formatDate } from "../../../../../lib/api";
+import { useCan, ViewOnlyNotice } from "../../../../../lib/current-user";
 
 /**
  * The businesses a group runs.
@@ -97,6 +98,8 @@ const BLANK = {
 
 export default function GroupEnterprisesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // Enterprises are recorded on visits: the API asks for visits:write.
+  const canEdit = useCan("visits:write");
   const [data, setData] = useState<EnterprisesResponse | null>(null);
   const [reference, setReference] = useState<Reference | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,10 +248,14 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
             own history, because a poultry unit and a cereal store do not share a margin.
           </p>
         </div>
-        <button className="button" onClick={openNew} type="button">
-          Add an enterprise
-        </button>
+        {canEdit ? (
+          <button className="button" onClick={openNew} type="button">
+            Add an enterprise
+          </button>
+        ) : null}
       </header>
+
+      <ViewOnlyNotice />
 
       {message ? (
         <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div>
@@ -449,6 +456,7 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
 
       {data.enterprises.map((enterprise) => (
         <EnterpriseCard
+          canEdit={canEdit}
           enterprise={enterprise}
           key={enterprise.id}
           onAddNeed={addNeed}
@@ -462,12 +470,14 @@ export default function GroupEnterprisesPage({ params }: { params: Promise<{ id:
 }
 
 function EnterpriseCard({
+  canEdit,
   enterprise,
   onAddNeed,
   onEdit,
   onNeedStatus,
   reference
 }: {
+  canEdit: boolean;
   enterprise: Enterprise;
   onAddNeed: (enterpriseId: string, needKey: string, priority: string) => void;
   onEdit: () => void;
@@ -495,9 +505,11 @@ function EnterpriseCard({
             {enterprise.status === "ACTIVE" ? "" : ` · ${enterprise.status.toLowerCase()}`}
           </p>
         </div>
-        <button className="button secondary" onClick={onEdit} type="button">
-          Edit
-        </button>
+        {canEdit ? (
+          <button className="button secondary" onClick={onEdit} type="button">
+            Edit
+          </button>
+        ) : null}
       </header>
 
       <div className="enterprise-figures">
@@ -575,7 +587,7 @@ function EnterpriseCard({
               <th>Category</th>
               <th>Priority</th>
               <th>Status</th>
-              <th />
+              {canEdit ? <th /> : null}
             </tr>
           </thead>
           <tbody>
@@ -594,59 +606,63 @@ function EnterpriseCard({
                   </span>
                 </td>
                 <td>{need.status.replace("_", " ").toLowerCase()}</td>
-                <td>
-                  {need.status === "MET" ? (
-                    <button
-                      className="link-button"
-                      onClick={() => onNeedStatus(need.id, "OPEN")}
-                      type="button"
-                    >
-                      Reopen
-                    </button>
-                  ) : (
-                    <button
-                      className="link-button"
-                      onClick={() => onNeedStatus(need.id, "MET")}
-                      type="button"
-                    >
-                      Mark met
-                    </button>
-                  )}
-                </td>
+                {canEdit ? (
+                  <td>
+                    {need.status === "MET" ? (
+                      <button
+                        className="link-button"
+                        onClick={() => onNeedStatus(need.id, "OPEN")}
+                        type="button"
+                      >
+                        Reopen
+                      </button>
+                    ) : (
+                      <button
+                        className="link-button"
+                        onClick={() => onNeedStatus(need.id, "MET")}
+                        type="button"
+                      >
+                        Mark met
+                      </button>
+                    )}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      <div className="form-actions">
-        <select onChange={(event) => setNeedKey(event.target.value)} value={needKey}>
-          <option value="">Add a support need…</option>
-          {reference?.supportNeedTypes.map((type) => (
-            <option key={type.key} value={type.key}>
-              {type.category.toLowerCase()} — {type.title}
-            </option>
-          ))}
-        </select>
-        <select onChange={(event) => setPriority(event.target.value)} value={priority}>
-          {reference?.priorities.map((entry) => (
-            <option key={entry} value={entry}>
-              {entry.toLowerCase()}
-            </option>
-          ))}
-        </select>
-        <button
-          className="button secondary"
-          disabled={!needKey}
-          onClick={() => {
-            onAddNeed(enterprise.id, needKey, priority);
-            setNeedKey("");
-          }}
-          type="button"
-        >
-          Add
-        </button>
-      </div>
+      {canEdit ? (
+        <div className="form-actions">
+          <select onChange={(event) => setNeedKey(event.target.value)} value={needKey}>
+            <option value="">Add a support need…</option>
+            {reference?.supportNeedTypes.map((type) => (
+              <option key={type.key} value={type.key}>
+                {type.category.toLowerCase()} — {type.title}
+              </option>
+            ))}
+          </select>
+          <select onChange={(event) => setPriority(event.target.value)} value={priority}>
+            {reference?.priorities.map((entry) => (
+              <option key={entry} value={entry}>
+                {entry.toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <button
+            className="button secondary"
+            disabled={!needKey}
+            onClick={() => {
+              onAddNeed(enterprise.id, needKey, priority);
+              setNeedKey("");
+            }}
+            type="button"
+          >
+            Add
+          </button>
+        </div>
+      ) : null}
 
       {chronological.length > 0 ? (
         <>

@@ -18,6 +18,7 @@ import { apiFetch, formatKes, humanizeEnum } from "../../lib/api";
 import { isMeetingUpcoming, meetingStatusLabel } from "../../features/meetings/model";
 import { SavingsTrendChart } from "../../components/savings-trend-chart";
 import { StatCard } from "../../components/dashboard/stat-card";
+import { GroupMoneyCards, type GroupMoneyStatement } from "../../features/groups/group-money";
 import { getNavigationItemsForRole } from "../../lib/navigation";
 import { CredentialButton } from "../../components/dashboard/credential-button";
 import type {
@@ -49,7 +50,7 @@ function portfolioMoneyCards(portfolio: PortfolioSummary | null) {
     <>
       <StatCard
         icon={<CircleDollarSign size={20} />}
-        label="Savings this cycle"
+        label="Shares this cycle"
         note={`Loan fund cash ${formatKes(portfolio?.loanFundCents ?? 0)}`}
         value={formatKes(portfolio?.totalSavingsCents ?? 0)}
       />
@@ -807,11 +808,30 @@ function GroupAccountDashboard({
   const nextMeetings = [...meetings]
     .filter((meeting) => meeting.status === "IN_PROGRESS" || isMeetingUpcoming(meeting))
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
-  const liveMeetings = meetings.filter((meeting) => meeting.status === "IN_PROGRESS").length;
   const recentRecords = recentLedgerList(ledger);
   const activeRequests = activeStoreRequestList(storeRequests);
   const membersHref = primaryGroup ? `/dashboard/groups/${primaryGroup.id}/members` : "/dashboard";
   const ledgerHref = primaryGroup ? `/dashboard/groups/${primaryGroup.id}/ledger` : "/dashboard";
+
+  // The group's money this cycle, from its own statement, so the dashboard and
+  // the reports can never disagree.
+  const groupId = primaryGroup?.id ?? user.groupId ?? null;
+  const [statement, setStatement] = useState<GroupMoneyStatement | null>(null);
+  const [moneyError, setMoneyError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!groupId) return;
+    let live = true;
+    apiFetch<{ statement: GroupMoneyStatement }>(`/reports/group/${groupId}`)
+      .then((report) => {
+        if (live) setStatement(report.statement);
+      })
+      .catch((error) => {
+        if (live) setMoneyError(error instanceof Error ? error.message : "The money figures could not be loaded.");
+      });
+    return () => {
+      live = false;
+    };
+  }, [groupId]);
 
   return (
     <>
@@ -825,13 +845,9 @@ function GroupAccountDashboard({
 
       <QuickAccessSection user={user} />
 
-      <section className="stat-grid dashboard-stat-grid">
-        <StatCard icon={<Activity size={20} />} label="Next meetings" note={`${liveMeetings} live now`} value={nextMeetings.length.toString()} />
-        <StatCard icon={<UsersRound size={20} />} label="Members" note={primaryGroup?.phase ? humanizeEnum(primaryGroup.phase) : "Group scope"} value={members.length.toString()} />
-        <StatCard icon={<CircleDollarSign size={20} />} label="Records" note="Ledger entries" value={ledger.length.toString()} />
-        {user.modules?.store !== false ? (
-          <StatCard icon={<ShoppingBag size={20} />} label="Requests" note={`${activeRequests.length} active`} value={storeRequests.length.toString()} />
-        ) : null}
+      {moneyError ? <div className="dashboard-notice">{moneyError}</div> : null}
+      <section className="stat-grid dashboard-stat-grid" aria-label="Money this cycle">
+        <GroupMoneyCards statement={statement} />
       </section>
 
       <section className="dashboard-data-grid">

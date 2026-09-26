@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { isOversightRole } from "@intellicash/shared";
 import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
@@ -204,9 +205,23 @@ welfareExpensesRouter.get(
 
       const spentCents = expenses.reduce((sum, e) => sum + e.ledgerEntry.amountCents, 0);
 
+      // Partners, lenders and read-only viewers see what was paid and why in
+      // category terms only. Who received it and the note (often an illness or
+      // a death) identify a member (Kenya Data Protection Act, 2019).
+      const shown = isOversightRole(req.user?.role)
+        ? expenses.map((expense) => ({
+            ...expense,
+            payeeMemberId: null,
+            payeeName: null,
+            payeeMember: null,
+            note: null,
+            approvedByUserId: null
+          }))
+        : expenses;
+
       ok(res, {
         group,
-        expenses,
+        expenses: shown,
         spentCents,
         /**
          * The closing balance — contributions minus expenses. THIS is what

@@ -52,7 +52,8 @@ import {
   moneySignal,
   reportBasisLabel,
   reportUpdatedAt,
-  sourceLabel
+  sourceLabel,
+  WORKBOOK_SOURCE_LABEL
 } from "../../../features/reports/model";
 import type {
   ReportCard,
@@ -383,7 +384,7 @@ export default function ReportsPage() {
               band === "Finance ready"
                 ? "Prioritise lender pipeline"
                 : band === "Watchlist"
-                  ? "Monitor repayment and savings depth"
+                  ? "Monitor repayment and share depth"
                   : "Strengthen governance and transaction history"
           };
         })
@@ -823,8 +824,8 @@ export default function ReportsPage() {
       if (reportVisibility?.importedKpis !== false) {
         rows.push({
           area: "Imported workbook data",
-          status: sourceRows.some((row) => row.source === "FtMA Performance") ? "Loaded" : "Not loaded",
-          records: sourceRows.find((row) => row.source === "FtMA Performance")?.groups ?? 0,
+          status: sourceRows.some((row) => row.source === WORKBOOK_SOURCE_LABEL) ? "Loaded" : "Not loaded",
+          records: sourceRows.find((row) => row.source === WORKBOOK_SOURCE_LABEL)?.groups ?? 0,
           signal: `${ftmaCountyVslaKpis.length} county KPI rows`,
           nextAction: "Validate imported source totals after every import"
         });
@@ -887,7 +888,7 @@ export default function ReportsPage() {
         id: "cash-concentration",
         category: "financial",
         title: "Cash Concentration Report",
-        description: "Find the highest-value groups by combined savings, social, and loan balances.",
+        description: "Find the highest-value groups by combined shares, social, and loan balances.",
         audience: "Portfolio risk",
         cadence: "Weekly",
         metric: `${formatNumber(cashConcentrationRows.length)} groups`,
@@ -960,7 +961,7 @@ export default function ReportsPage() {
         description: "Separate workbook imports from native records for validation and audit-ready exports.",
         audience: "Data quality",
         cadence: "After imports",
-        metric: `${formatNumber(sourceRows.find((row) => row.source === "FtMA Performance")?.groups ?? 0)} FtMA groups`,
+        metric: `${formatNumber(sourceRows.find((row) => row.source === WORKBOOK_SOURCE_LABEL)?.groups ?? 0)} workbook groups`,
         icon: <ClipboardList size={22} />
       },
       {
@@ -1074,19 +1075,19 @@ export default function ReportsPage() {
         icon: <Building2 size={22} />
       },
       {
-        id: "ftma-vsla-kpi",
+        id: "programme-vsla-kpi",
         category: "data",
-        title: "FtMA VSLA County KPI",
-        description: "County financial KPI report for savings, social fund, external loans, and readiness rates.",
+        title: "Programme VSLA KPIs by county",
+        description: "County financial KPI report for shares, social fund, external loans, and readiness rates.",
         audience: "MEL teams",
         cadence: "After imports",
         metric: `${formatNumber(ftmaCountyVslaKpis.length)} counties`,
         icon: <WalletCards size={22} />
       },
       {
-        id: "ftma-training-kpi",
+        id: "programme-training-kpi",
         category: "data",
-        title: "FtMA Training and Linkage KPI",
+        title: "Programme training and linkage KPIs",
         description: "BDS modules, NHIF sensitisation, market linkages, finance linkages, and value addition training.",
         audience: "MEL teams",
         cadence: "After imports",
@@ -1094,9 +1095,9 @@ export default function ReportsPage() {
         icon: <ClipboardList size={22} />
       },
       {
-        id: "ftma-fsc-kpi",
+        id: "programme-fsc-kpi",
         category: "data",
-        title: "FtMA FSC Performance KPI",
+        title: "Programme FSC performance KPIs",
         description: "FSC business plan readiness, NHIF membership, market, input, finance, and training linkages.",
         audience: "MEL teams",
         cadence: "After imports",
@@ -1249,11 +1250,11 @@ export default function ReportsPage() {
           return programmeRows.length;
         case "partner-linkage":
           return partnerRows.length;
-        case "ftma-vsla-kpi":
+        case "programme-vsla-kpi":
           return ftmaCountyVslaKpis.length;
-        case "ftma-training-kpi":
+        case "programme-training-kpi":
           return ftmaTrainingMetrics.length;
-        case "ftma-fsc-kpi":
+        case "programme-fsc-kpi":
           return ftmaFscKpis.length;
         case "executive":
         default:
@@ -1369,10 +1370,10 @@ export default function ReportsPage() {
         action: "Review linkage register and programme coverage"
       },
       {
-        visible: hasReport(["data-source", "ftma-vsla-kpi", "ftma-training-kpi", "ftma-fsc-kpi"]),
+        visible: hasReport(["data-source", "programme-vsla-kpi", "programme-training-kpi", "programme-fsc-kpi"]),
         section: "Data reports",
         metric: "Scoped data sources",
-        value: `${formatNumber(sourceRows.find((row) => row.source === "FtMA Performance")?.groups ?? 0)} groups`,
+        value: `${formatNumber(sourceRows.find((row) => row.source === WORKBOOK_SOURCE_LABEL)?.groups ?? 0)} groups`,
         signal: `${formatNumber(ftmaCountyVslaKpis.length)} county KPI rows`,
         owner: "Data stewardship",
         action: "Validate imports and source reconciliation reports"
@@ -1866,7 +1867,7 @@ export default function ReportsPage() {
             title="Partner linkage register"
           />
         );
-      case "ftma-vsla-kpi":
+      case "programme-vsla-kpi":
         return (
           <DataTable
             columns={[
@@ -1880,13 +1881,13 @@ export default function ReportsPage() {
               { key: "marketing", header: "Marketing Plan", value: (row) => row.actionableMarketingPlanRate ?? 0, exportValue: (row) => formatPercent(row.actionableMarketingPlanRate), cell: (row) => formatPercent(row.actionableMarketingPlanRate) }
             ]}
             defaultSort={{ key: "savings", direction: "desc" }}
-            exportName="intelli-cash-ftma-vsla-county-kpi"
+            exportName="intelli-cash-programme-vsla-county-kpi"
             getRowKey={(row) => row.id}
             rows={ftmaCountyVslaKpis}
-            title="FtMA VSLA county KPI"
+            title="Programme VSLA KPIs by county"
           />
         );
-      case "ftma-training-kpi":
+      case "programme-training-kpi":
         return (
           <DataTable
             columns={[
@@ -1900,13 +1901,13 @@ export default function ReportsPage() {
               { key: "value", header: "Value Addition", value: (row) => row.valueAdditionTrainingCount }
             ]}
             defaultSort={{ key: "assessed", direction: "desc" }}
-            exportName="intelli-cash-ftma-training-linkage-kpi"
+            exportName="intelli-cash-programme-training-linkage-kpi"
             getRowKey={(row) => row.id}
             rows={ftmaTrainingMetrics}
-            title="FtMA training and linkage KPI"
+            title="Programme training and linkage KPIs"
           />
         );
-      case "ftma-fsc-kpi":
+      case "programme-fsc-kpi":
         return (
           <DataTable
             columns={[
@@ -1920,10 +1921,10 @@ export default function ReportsPage() {
               { key: "other", header: "Other Trainings", value: (row) => row.otherTrainings }
             ]}
             defaultSort={{ key: "bds", direction: "desc" }}
-            exportName="intelli-cash-ftma-fsc-performance-kpi"
+            exportName="intelli-cash-programme-fsc-performance-kpi"
             getRowKey={(row) => row.id}
             rows={ftmaFscKpis}
-            title="FtMA FSC performance KPI"
+            title="Programme FSC performance KPIs"
           />
         );
       case "executive":
@@ -1985,7 +1986,7 @@ export default function ReportsPage() {
               <em>
                 {user.role === "GROUP_ACCOUNT"
                   ? "Our statement: funds, loans, income, members"
-                  : "Savings, loans, PAR and returns, by group"}
+                  : "Shares, loans, PAR and returns, by group"}
               </em>
             </span>
           </Link>

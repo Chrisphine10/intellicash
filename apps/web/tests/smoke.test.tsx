@@ -823,7 +823,7 @@ describe("web smoke helpers", () => {
     expect(within(dialog).getByLabelText("Green Enterprise Fund")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("GPS latitude")).not.toBeVisible();
 
-    fireEvent.click(within(dialog).getByText("GPS and savings defaults"));
+    fireEvent.click(within(dialog).getByText("GPS and share defaults"));
     expect(within(dialog).getByLabelText("GPS latitude")).toBeVisible();
     vi.unstubAllGlobals();
   });
@@ -1362,7 +1362,7 @@ describe("web smoke helpers", () => {
     expect(screen.queryByText("Partner Linkage Register")).not.toBeInTheDocument();
     expect(screen.queryByText("Integration Readiness Matrix")).not.toBeInTheDocument();
     expect(screen.queryByText("User Access and RBAC")).not.toBeInTheDocument();
-    expect(screen.queryByText("FtMA VSLA County KPI")).not.toBeInTheDocument();
+    expect(screen.queryByText("Programme VSLA KPIs by county")).not.toBeInTheDocument();
     expect(calls.some((url) => url.includes("/partners"))).toBe(false);
     expect(calls.some((url) => url.includes("/village-agents"))).toBe(false);
     expect(calls.some((url) => url.includes("/audit/events"))).toBe(false);
@@ -1443,7 +1443,7 @@ describe("web smoke helpers", () => {
     expect(screen.queryByText("Append-only Ledger Transactions")).not.toBeInTheDocument();
     expect(screen.queryByText("User Access and RBAC")).not.toBeInTheDocument();
     expect(screen.queryByText("Meeting Monitor Report")).not.toBeInTheDocument();
-    expect(screen.queryByText("FtMA Training and Linkage KPI")).not.toBeInTheDocument();
+    expect(screen.queryByText("Programme training and linkage KPIs")).not.toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 

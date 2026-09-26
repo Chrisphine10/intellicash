@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
-import { assertMayManageCycles, closeCycleAndOpenNext, listCycles } from "../services/cycle-service";
+import { assertMayManageCycles, closeCycleAndOpenNext, listCycles, shareOutStatus } from "../services/cycle-service";
 
 export const cyclesRouter = Router();
 
@@ -22,11 +22,14 @@ cyclesRouter.get("/groups/:groupId/cycles", requireAuth("groups:read"), async (r
   try {
     const group = await loadGroupInScope(req.user, req.params.groupId as string);
     const cycles = await listCycles(group.id);
+    const shareOut = await shareOutStatus(prisma, group.id);
 
     ok(res, {
       group: { id: group.id, name: group.name, code: group.code },
       currentCycleNumber: group.cycleNumber,
       cycles,
+      // A cycle with shares ends with its share-out, not with "Close cycle".
+      closeNeedsShareOut: shareOut.hasShares && !shareOut.sharedOut,
       canManage:
         Boolean(req.user?.permissions.includes("groups:write")) ||
         (req.user?.role === "GROUP_ACCOUNT" && req.user?.groupId === group.id)

@@ -23,7 +23,9 @@ import {
   fallbackGoogleMapsApiKey,
   isMeetingOverdue,
   meetingStatusClass,
+  meetingGpsLabel,
   meetingStatusLabel,
+  meetingUnlockLabel,
   projectKenyaPoint
 } from "../../../features/meetings/model";
 import type {
@@ -547,11 +549,11 @@ export default function MeetingsPage() {
                       </div>
                       <div>
                         <span>Unlock</span>
-                        <strong>{humanizeEnum(meeting.unlockStatus)}</strong>
+                        <strong>{meetingUnlockLabel(meeting.unlockStatus)}</strong>
                       </div>
                       <div>
                         <span>GPS</span>
-                        <strong>{meeting.gpsCompliant ? "Compliant" : "Pending"}</strong>
+                        <strong>{meetingGpsLabel(meeting)}</strong>
                       </div>
                       <div>
                         <span>Progress</span>
@@ -624,15 +626,15 @@ export default function MeetingsPage() {
             {
               key: "unlock",
               header: "Unlock",
-              value: (meeting) => humanizeEnum(meeting.unlockStatus)
+              value: (meeting) => meetingUnlockLabel(meeting.unlockStatus)
             },
             {
               key: "gps",
               header: "GPS",
-              value: (meeting) => (meeting.gpsCompliant ? "Compliant" : "Pending"),
+              value: (meeting) => meetingGpsLabel(meeting),
               cell: (meeting) => (
                 <span className={meeting.gpsCompliant ? "pill" : "pill gold"}>
-                  {meeting.gpsCompliant ? "Compliant" : "Pending"}
+                  {meetingGpsLabel(meeting)}
                 </span>
               )
             },
@@ -691,7 +693,7 @@ export default function MeetingsPage() {
               key: "gps",
               label: "GPS",
               allLabel: "All GPS",
-              getValue: (meeting) => (meeting.gpsCompliant ? "Compliant" : "Pending")
+              getValue: (meeting) => meetingGpsLabel(meeting)
             },
             {
               key: "group",

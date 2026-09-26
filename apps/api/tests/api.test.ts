@@ -1186,17 +1186,20 @@ describe("Intellicash API", () => {
     );
     expect(createdMember.body.data.pinHash).toBeUndefined();
 
+    // MONEY_COUNTER, not SECRETARY: a group has one secretary, so appointing
+    // a second now steps the seed's secretary down (26 Sep 2026) and the
+    // three-official unlock below would lose a key holder.
     const updatedMember = await groupAgent
       .patch(`/api/v1/groups/${groupId}/members/${createdMember.body.data.id}`)
       .send({
-        role: "SECRETARY",
+        role: "MONEY_COUNTER",
         kycStatus: "VERIFIED"
       })
       .expect(200);
 
     expect(updatedMember.body.data).toEqual(
       expect.objectContaining({
-        role: "SECRETARY",
+        role: "MONEY_COUNTER",
         kycStatus: "VERIFIED"
       })
     );
@@ -2159,7 +2162,10 @@ describe("Intellicash API", () => {
 
     const lenderAgent = await authenticatedAgent("lender@intellicash.co.ke");
     const lenderMe = await lenderAgent.get("/api/v1/auth/me").expect(200);
-    expect(lenderMe.body.data.permissions).toEqual(expect.arrayContaining(["store:read", "store:write"]));
+    // Lenders are view-only over groups (26 Sep 2026): they read the store's
+    // requests but no longer hold store:write.
+    expect(lenderMe.body.data.permissions).toContain("store:read");
+    expect(lenderMe.body.data.permissions).not.toContain("store:write");
 
     const firstInstallment = approvedCredit.body.data.installments[0];
     await lenderAgent

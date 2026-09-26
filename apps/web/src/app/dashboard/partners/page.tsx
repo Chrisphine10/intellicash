@@ -9,6 +9,7 @@ import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { PartnerRow, ProgrammeRow, User } from "../../../components/dashboard/types";
+import { sourceLabel } from "../../../features/reports/model";
 
 const defaultPartnerForm = {
   name: "",
@@ -403,7 +404,7 @@ export default function PartnersPage() {
                 key: "source",
                 label: "Source",
                 allLabel: "All sources",
-                getValue: (partner) => partner.sourceSystem ?? "Native"
+                getValue: (partner) => sourceLabel(partner.sourceSystem)
               }
             ]}
             getRowKey={(partner) => partner.id}

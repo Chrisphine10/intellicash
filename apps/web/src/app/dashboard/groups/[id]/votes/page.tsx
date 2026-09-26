@@ -9,6 +9,7 @@ import { resolutionTypes } from "@intellicash/shared";
 import { apiFetch, humanizeEnum } from "../../../../../lib/api";
 import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { MeetingRow, User, VoteRow } from "../../../../../components/dashboard/types";
+import { isGroupSteward, userCan, ViewOnlyNotice } from "../../../../../lib/current-user";
 
 interface GroupSummary {
   modules?: { store: boolean; voting: boolean };
@@ -45,7 +46,9 @@ export default function GroupVotesPage({ params }: { params: Promise<{ id: strin
     const [groupResponse, voteResponse, meetingResponse, meResponse] = await Promise.all([
       apiFetch<GroupSummary>(`/groups/${id}`),
       apiFetch<VoteRow[]>(`/groups/${id}/votes`),
-      apiFetch<MeetingRow[]>(`/groups/${id}/meetings`),
+      // Only for picking the meeting a resolution was passed in. A lender reads
+      // votes but not meetings, and that must not blank the page.
+      apiFetch<MeetingRow[]>(`/groups/${id}/meetings`).catch(() => [] as MeetingRow[]),
       apiFetch<User>("/auth/me")
     ]);
     setGroup(groupResponse);
@@ -71,7 +74,9 @@ export default function GroupVotesPage({ params }: { params: Promise<{ id: strin
   // Voting switched off for this group's programmes: the record stays readable,
   // but new resolutions are not taken (the API refuses them too).
   const votingOn = group?.modules?.voting !== false;
-  const canWrite = votingOn && (user?.permissions?.includes("votes:write") ?? false);
+  // A resolution records the group's decision and its tally, so the API takes
+  // it from the group's own account or an admin; members vote in polls.
+  const canWrite = votingOn && userCan(user, "votes:write") && isGroupSteward(user, id);
 
   async function createVote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -119,6 +124,8 @@ export default function GroupVotesPage({ params }: { params: Promise<{ id: strin
         </div>
         <span className="pill">{votes.length} votes</span>
       </section>
+
+      <ViewOnlyNotice />
 
       {message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
 

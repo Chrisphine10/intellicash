@@ -403,6 +403,7 @@ router.post(
           const group = await tx.group.create({
             data: {
               villageAgentId: request.assignedVillageAgentId,
+              agentLinks: { create: { villageAgentId: request.assignedVillageAgentId, isLead: true } },
               name: request.organizationName,
               code: await generateGroupCode(tx, request.county),
               phase: "MOBILISATION",

@@ -6,6 +6,7 @@ import { languagePreferences, permissions, roles, type Role } from "@intellicash
 import { requireAuth } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
 import { setAgentProgrammes } from "../services/village-agent-service";
+import { setAgentCaseload } from "../services/group-agent-service";
 import {
   partnerScopeForUser,
   programmeScopeForUser,
@@ -1546,23 +1547,11 @@ router.get(
             include: { programme: { include: { partner: true } } },
             orderBy: { createdAt: "asc" }
           },
-          groups: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              county: true,
-              phase: true
-            },
-            orderBy: { name: "asc" }
-          },
-          _count: {
-            select: { groups: true }
-          }
+          groupLinks: agentGroupLinksFor(req.user)
         }
       });
 
-      ok(res, agents);
+      ok(res, agents.map(presentAgent));
     } catch (error) {
       next(error);
     }
@@ -1606,32 +1595,45 @@ const villageAgentUpdateSchema = z.object({
   groupIds: z.array(z.string()).optional()
 });
 
-const villageAgentInclude = {
-  partner: true,
-  programmeLinks: {
-    include: {
-      programme: {
-        include: {
-          partner: true
-        }
-      }
-    },
-    orderBy: { createdAt: "asc" }
-  },
-  groups: {
+/**
+ * An agent's caseload, through the group links (a group can have several
+ * agents). Only groups the caller may see are listed: an agent can serve
+ * groups outside a partner's programmes, and a partner must not learn them.
+ */
+function agentGroupLinksFor(user: Express.Request["user"]) {
+  return {
+    where: { group: scopeGroupWhere(user) },
     select: {
-      id: true,
-      name: true,
-      code: true,
-      county: true,
-      phase: true
+      isLead: true,
+      group: { select: { id: true, name: true, code: true, county: true, phase: true } }
     },
-    orderBy: { name: "asc" }
-  },
-  _count: {
-    select: { groups: true }
-  }
-} satisfies Prisma.VillageAgentInclude;
+    orderBy: { group: { name: "asc" } }
+  } satisfies Prisma.VillageAgent$groupLinksArgs;
+}
+
+/** The response shape screens already read: `groups[]` and `_count.groups`. */
+function presentAgent<T extends { groupLinks: Array<{ isLead: boolean; group: { id: string } }> }>(agent: T) {
+  const { groupLinks, ...rest } = agent;
+  const groups = groupLinks.map((link) => ({ ...link.group, isLead: link.isLead }));
+  return { ...rest, groups, _count: { groups: groups.length } };
+}
+
+function villageAgentIncludeFor(user: Express.Request["user"]) {
+  return {
+    partner: true,
+    programmeLinks: {
+      include: {
+        programme: {
+          include: {
+            partner: true
+          }
+        }
+      },
+      orderBy: { createdAt: "asc" }
+    },
+    groupLinks: agentGroupLinksFor(user)
+  } satisfies Prisma.VillageAgentInclude;
+}
 
 async function assertProgrammeWriteScope(user: Express.Request["user"], programmeId?: string | null) {
   if (!programmeId) return null;
@@ -1680,20 +1682,9 @@ async function setAgentGroups(
   agentId: string,
   groupIds: string[]
 ) {
-  await tx.group.updateMany({
-    where: {
-      villageAgentId: agentId,
-      id: { notIn: groupIds.length > 0 ? groupIds : ["__no_selected_groups__"] }
-    },
-    data: { villageAgentId: null }
-  });
-
-  if (groupIds.length > 0) {
-    await tx.group.updateMany({
-      where: { id: { in: groupIds } },
-      data: { villageAgentId: agentId }
-    });
-  }
+  // Links, not the single column: adding this agent to a group leaves the
+  // group's other agents in place.
+  await setAgentCaseload(tx, agentId, groupIds);
 }
 
 router.post(
@@ -1731,10 +1722,12 @@ router.post(
 
         await setAgentGroups(tx, created.id, assignmentIds);
 
-        return tx.villageAgent.findUniqueOrThrow({
-          where: { id: created.id },
-          include: villageAgentInclude
-        });
+        return presentAgent(
+          await tx.villageAgent.findUniqueOrThrow({
+            where: { id: created.id },
+            include: villageAgentIncludeFor(req.user)
+          })
+        );
       });
 
       await appendAuditEvent({
@@ -1831,10 +1824,12 @@ router.patch(
           await setAgentGroups(tx, existing.id, assignmentIds);
         }
 
-        return tx.villageAgent.findUniqueOrThrow({
-          where: { id: existing.id },
-          include: villageAgentInclude
-        });
+        return presentAgent(
+          await tx.villageAgent.findUniqueOrThrow({
+            where: { id: existing.id },
+            include: villageAgentIncludeFor(req.user)
+          })
+        );
       });
 
       await appendAuditEvent({

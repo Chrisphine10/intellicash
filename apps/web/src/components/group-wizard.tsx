@@ -145,7 +145,7 @@ export function GroupSetupWizard({ programmeIds }: { programmeIds?: string[] }) 
 
         {step === "savings" && (
           <div className="wizard-form">
-            <h3>Savings Config</h3>
+            <h3>Shares Config</h3>
             <label>Share Value (KSh per share)
               <input type="number" value={data.shareValueCents / 100} onChange={(e) => updateField("shareValueCents", Number(e.target.value) * 100)} />
             </label>
@@ -165,7 +165,7 @@ export function GroupSetupWizard({ programmeIds }: { programmeIds?: string[] }) 
             <label>Interest Rate (%)
               <input type="number" value={data.interestRateBps / 100} onChange={(e) => updateField("interestRateBps", Number(e.target.value) * 100)} />
             </label>
-            <label>Max Loan Multiplier (x savings)
+            <label>Max Loan Multiplier (x shares)
               <input type="number" value={data.maxLoanMultiplier} onChange={(e) => updateField("maxLoanMultiplier", Number(e.target.value))} />
             </label>
             <p className="wizard-hint">A member with KSh 3,300 savings can borrow up to {formatKes(3300 * data.maxLoanMultiplier * 100)}</p>

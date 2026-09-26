@@ -5,7 +5,7 @@ import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { seedDatabase } from "../prisma/seed";
 import { appendLedgerEntry } from "../src/routes/groups";
-import { closeCycleAndOpenNext } from "../src/services/cycle-service";
+import { closeCycleWithin } from "../src/services/cycle-service";
 
 const app = createApp();
 
@@ -105,7 +105,8 @@ describe("the restore bundle", () => {
     loanEntryId = (await entry(groupId, brian, "INTERNAL_LOAN_DISBURSEMENT", 200_000, "DEBIT", "INTERNAL_LOAN", meetingId)).id;
     repaymentEntryId = (await entry(groupId, brian, "LOAN_REPAYMENT", 50_000, "CREDIT", "INTERNAL_LOAN", meetingId)).id;
 
-    await closeCycleAndOpenNext(groupId);
+    // A cycle closed before the share-out rule existed (legacy history).
+    await prisma.$transaction((tx) => closeCycleWithin(tx, groupId));
     // One entry in the new cycle.
     await entry(groupId, alice, "SHARE_PURCHASE", 100_000, "CREDIT", "INTERNAL_LOAN");
   }, 60000);

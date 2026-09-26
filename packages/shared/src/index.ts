@@ -220,6 +220,9 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:write",
     "analytics:read"
   ],
+  // View-only over groups (decided 26 Sep 2026): a lender reviews its
+  // portfolio and records its own programme contributions and payments. It
+  // does not file loan or store requests in a group's name.
   LENDER: [
     "programmes:read",
     "groups:read",
@@ -228,7 +231,6 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "payments:read",
     "payments:write",
     "store:read",
-    "store:write",
     "votes:read",
     "analytics:read"
   ],
@@ -275,6 +277,79 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "store:read"
   ],
 };
+
+/**
+ * Roles that oversee groups from outside: programme partners, lenders and
+ * read-only viewers. They see; they never change a group's records - its
+ * welfare, ledger, meetings, members, rules or documents.
+ *
+ * Permission sets live in the database and an administrator can edit them, so
+ * this is enforced where permissions are READ (the API drops anything else),
+ * not only in the defaults above. The one change an oversight role may make is
+ * moving its own organisation's money (payments:write).
+ */
+export const oversightRoles = ["PARTNER_OFFICER", "LENDER", "READ_ONLY"] as const;
+
+/**
+ * The only writes an oversight role may hold: moving its OWN organisation's
+ * money (partner wallet deposits and withdrawals, programme contributions).
+ * None of them touches a group's records. A lender holds it by default; a
+ * partner only when an admin grants it.
+ */
+const OVERSIGHT_WRITES: Partial<Record<Role, readonly Permission[]>> = {
+  PARTNER_OFFICER: ["payments:write"],
+  LENDER: ["payments:write"]
+};
+
+export function isOversightRole(role: string | null | undefined): boolean {
+  return (oversightRoles as readonly string[]).includes(role ?? "");
+}
+
+/** Whether [role] may hold [permission] at all. Reads are always allowed. */
+export function oversightMayHold(role: string, permission: string): boolean {
+  if (!isOversightRole(role)) return true;
+  if (permission.endsWith(":read")) return true;
+  return (OVERSIGHT_WRITES[role as Role] ?? []).includes(permission as Permission);
+}
+
+/** The accounts that belong to one group: the group's own login and its members. */
+export const groupSideRoles = ["GROUP_ACCOUNT", "MEMBER"] as const;
+
+/**
+ * Running the platform: people, partners, programmes, agents, every group,
+ * approvals and the scorecard. A group's own login or a member never holds
+ * these, whatever a stored row says, because each one reaches beyond the
+ * group into everyone else's records.
+ */
+export const platformPermissions: readonly Permission[] = [
+  "users:read",
+  "users:write",
+  "partners:write",
+  "programmes:write",
+  "village-agents:write",
+  "groups:write",
+  "payments:write",
+  "payments:approve",
+  "signup-requests:read",
+  "signup-requests:approve",
+  "visits:amend",
+  "assessment-templates:write"
+];
+
+export function isGroupSideRole(role: string | null | undefined): boolean {
+  return (groupSideRoles as readonly string[]).includes(role ?? "");
+}
+
+/** Whether a group or member login may hold [permission]. */
+export function groupSideMayHold(role: string, permission: string): boolean {
+  if (!isGroupSideRole(role)) return true;
+  return !platformPermissions.includes(permission as Permission);
+}
+
+/** Whether [role] may hold [permission] at all (both rules above). */
+export function roleMayHold(role: string, permission: string): boolean {
+  return oversightMayHold(role, permission) && groupSideMayHold(role, permission);
+}
 
 export const groupPhases = [
   "MOBILISATION",
@@ -512,6 +587,7 @@ export const auditEventTypes = [
   "MEETING_CANCELLED",
   "MEETING_STARTED_ON_PHONE",
   "MEETING_CLOSED_ON_PHONE",
+  "MEETING_WORKFLOW_BACKFILLED",
   "MEETING_SCHEDULE_UPDATED",
   "ATTENDANCE_RECORDED",
   "INTELLIAUDIT_EVIDENCE_UPLOADED",
@@ -615,9 +691,10 @@ export const memberRoles = [
   "SECRETARY",
   "TREASURER",
   "MONEY_COUNTER",
-  "KEY_HOLDER",
-  "VILLAGE_AGENT"
+  "KEY_HOLDER"
 ] as const;
+// VILLAGE_AGENT is a login role (a CBT serving groups), never an office a
+// group member holds; it was listed here and let any member be "made" one.
 export type MemberRole = (typeof memberRoles)[number];
 
 export interface ApiEnvelope<T> {

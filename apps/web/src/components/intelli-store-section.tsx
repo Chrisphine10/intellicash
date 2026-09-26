@@ -41,17 +41,17 @@ const defaultBookingForm = {
 };
 
 function publicStoreCopy(value?: string | null) {
-  if (!value) return "Savings records and grant eligibility are reviewed before fulfilment.";
+  if (!value) return "Share records and grant eligibility are reviewed before fulfilment.";
 
   return value
-    .replace(/programme-backed credit/gi, "credit access from savings records")
-    .replace(/program-backed credit/gi, "credit access from savings records")
+    .replace(/programme-backed credit/gi, "credit access from share records")
+    .replace(/program-backed credit/gi, "credit access from share records")
     .replace(/programme-backed/gi, "grant-linked")
     .replace(/program-backed/gi, "grant-linked")
-    .replace(/programme credit review/gi, "savings record and grant review")
-    .replace(/program credit review/gi, "savings record and grant review")
-    .replace(/programme review/gi, "savings record review")
-    .replace(/program review/gi, "savings record review");
+    .replace(/programme credit review/gi, "share record and grant review")
+    .replace(/program credit review/gi, "share record and grant review")
+    .replace(/programme review/gi, "share record review")
+    .replace(/program review/gi, "share record review");
 }
 
 
@@ -117,7 +117,7 @@ export function IntelliStoreSection() {
     () => [
       { label: `${store?.products.length ?? 0} products`, icon: ShoppingBag },
       { label: `${store?.agents.length ?? 0} field officers you can book`, icon: UsersRound },
-      { label: "Pay over time from your savings record", icon: HandCoins }
+      { label: "Pay over time from your share record", icon: HandCoins }
     ],
     [store]
   );
@@ -237,7 +237,7 @@ export function IntelliStoreSection() {
         <h2>Buy the equipment your group needs, and pay over time</h2>
         <p>
           An incubator, a milling machine, a water tank &mdash; things a group
-          could not buy outright. Your savings record is what qualifies you, so
+          could not buy outright. Your share record is what qualifies you, so
           the years of meeting and saving count for something. You can also book
           a field officer to come and help you set it up.
         </p>

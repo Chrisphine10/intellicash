@@ -542,7 +542,9 @@ async function main() {
 
   const sourcePartner = await prisma.partner.create({
     data: {
-      name: "FtMA Performance Test Data",
+      // Display names say what the records are, not whose workbook they came
+      // from; the workbook itself is kept in sourceReference.
+      name: "Programme workbook (test data)",
       type: "NGO",
       status: "ACTIVE",
       apiScope: "PROGRAMME",
@@ -553,9 +555,9 @@ async function main() {
   const programme = await prisma.programme.create({
     data: {
       partnerId: sourcePartner.id,
-      name: "FtMA VSLA & FSC Performance",
+      name: "Programme VSLA & FSC performance",
       country: "Kenya",
-      description: "Imported test data from FtMA Performance - VSLA & FSCs workbook.",
+      description: "Test data imported from a programme's VSLA & FSC performance workbook.",
       sourceSystem,
       sourceReference: basename(workbookPath)
     }

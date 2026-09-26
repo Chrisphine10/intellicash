@@ -19,8 +19,10 @@ import {
   loadGoogleMaps,
   markerColor,
   markerTextColor,
+  meetingGpsLabel,
   meetingStatusClass,
   meetingStatusLabel,
+  meetingUnlockLabel,
   shiftCalendarDate,
   startOfMonth,
   startOfWeek
@@ -552,11 +554,11 @@ export function MeetingDetailDialog({
             </div>
             <div>
               <span>Unlock</span>
-              <strong>{humanizeEnum(meeting.unlockStatus)}</strong>
+              <strong>{meetingUnlockLabel(meeting.unlockStatus)}</strong>
             </div>
             <div>
               <span>GPS</span>
-              <strong>{meeting.gpsCompliant ? "Compliant" : "Pending"}</strong>
+              <strong>{meetingGpsLabel(meeting)}</strong>
             </div>
             <div>
               <span>Attendance</span>
@@ -564,7 +566,8 @@ export function MeetingDetailDialog({
             </div>
             <div>
               <span>Transactions</span>
-              <strong>{formatKes(meeting.transactionTotal)}</strong>
+              {/* A count of ledger rows (and votes), not money. */}
+              <strong>{meeting.transactionTotal} recorded</strong>
             </div>
             <div>
               <span>Keys</span>
@@ -591,11 +594,19 @@ export function MeetingDetailDialog({
                     <span className={step.status === "COMPLETED" ? "pill" : "pill gold"}>{humanizeEnum(step.status)}</span>
                     <div>
                       <strong>{step.name}</strong>
-                      <small>{step.completedAt ? `Completed ${formatMeetingDate(step.completedAt)}` : "Pending"}</small>
+                      <small>
+                        {step.completedAt
+                          ? `${meeting.source === "PHONE" ? "Done on the phone" : "Completed"} ${formatMeetingDate(step.completedAt)}`
+                          : "Pending"}
+                      </small>
                     </div>
                   </div>
                 ))}
-                {meeting.steps.length === 0 ? <div className="empty-state">No workflow steps</div> : null}
+                {meeting.steps.length === 0 ? (
+                  <div className="empty-state">
+                    {meeting.source === "PHONE" ? "Held on the phone; steps arrive when the phone closes it." : "No workflow steps"}
+                  </div>
+                ) : null}
               </div>
             </section>
             <section>

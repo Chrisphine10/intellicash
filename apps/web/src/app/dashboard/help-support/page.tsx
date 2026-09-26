@@ -31,8 +31,8 @@ const gettingStarted = [
 ] as const;
 
 const roleGuide = [
-  ["Members", "See your own passbook, savings and loan records, meeting history, and store requests."],
-  ["Group accounts", "Run meetings, register members, record savings and repayments, and submit store requests for the group."],
+  ["Members", "See your own passbook, share and loan records, meeting history, and store requests."],
+  ["Group accounts", "Run meetings, register members, record shares and repayments, and submit store requests for the group."],
   ["Partners & donors", "Track programme reach, group activity, field quality, and impact reports for the groups you support."],
   ["Lenders & funds", "Review credit readiness, portfolio, and repayment signals to identify businesses ready for capital."],
   ["Platform admins", "Manage groups, users, payments, integrations, SMS, and audit across every programme."]
@@ -42,13 +42,13 @@ const featureGuides = [
   {
     title: "Meetings",
     icon: Activity,
-    text: "Open a meeting with three independent key-holders, record attendance, capture savings and loan transactions, and close with a signed summary.",
+    text: "Open a meeting with three independent key-holders, record attendance, capture share and loan transactions, and close with a signed summary.",
     href: "/dashboard/meetings",
     action: "Open meetings",
     roles: "Group accounts, members, partners"
   },
   {
-    title: "Passbook & savings",
+    title: "Passbook & shares",
     icon: BookOpenText,
     text: "Every contribution, share purchase, loan, and repayment is recorded to an append-only passbook you can review any time.",
     href: "/dashboard/passbook",

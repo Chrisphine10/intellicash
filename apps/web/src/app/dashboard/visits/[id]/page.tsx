@@ -15,6 +15,7 @@ import {
   AssessmentRecord,
   type AssessmentRecordData
 } from "../../../../components/dashboard/assessment-record";
+import { useCan } from "../../../../lib/current-user";
 
 /**
  * One field visit, with the evidence collected during it.
@@ -159,6 +160,9 @@ const ACTION_OWNERS = [
 
 export default function VisitDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // Agreeing and closing actions is part of conducting visits (visits:write).
+  // Programme staff and the group read the plan.
+  const canManageActions = useCan("visits:write");
   const [visit, setVisit] = useState<Visit | null>(null);
   const [group, setGroup] = useState<VisitGroup | null>(null);
   const [agent, setAgent] = useState<VisitDetail["agent"]>(null);
@@ -550,20 +554,22 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <span className="pill">{openItems.length} open</span>
             )}
-            <button
-              className="button subtle"
-              onClick={() => {
-                setAddingAction((open) => !open);
-                setError(null);
-              }}
-              type="button"
-            >
-              {addingAction ? "Cancel" : "Agree an action"}
-            </button>
+            {canManageActions ? (
+              <button
+                className="button subtle"
+                onClick={() => {
+                  setAddingAction((open) => !open);
+                  setError(null);
+                }}
+                type="button"
+              >
+                {addingAction ? "Cancel" : "Agree an action"}
+              </button>
+            ) : null}
           </div>
         </header>
 
-        {addingAction ? (
+        {addingAction && canManageActions ? (
           <form className="action-form" onSubmit={addAction}>
             <p className="card-note">
               Recorded against this visit, and shown to the agent at the start of the
@@ -667,7 +673,7 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
                   <th>Owner</th>
                   <th>Due</th>
                   <th>State</th>
-                  <th className="column-actions">Manage</th>
+                  {canManageActions ? <th className="column-actions">Manage</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -690,40 +696,42 @@ export default function VisitDetailPage({ params }: { params: Promise<{ id: stri
                     <td>
                       <span className={actionPill(item.state.state)}>{item.state.label}</span>
                     </td>
-                    <td className="column-actions">
-                      {/* Closing and reopening rather than editing in place: an
-                          action plan is a record of what was agreed, and a row
-                          quietly rewritten months later is not one. */}
-                      {item.state.open ? (
-                        <div className="row-actions">
-                          <button
-                            className="button subtle"
-                            disabled={busyItem === item.id}
-                            onClick={() => setItemStatus(item.id, "DONE")}
-                            type="button"
-                          >
-                            Mark done
-                          </button>
+                    {canManageActions ? (
+                      <td className="column-actions">
+                        {/* Closing and reopening rather than editing in place: an
+                            action plan is a record of what was agreed, and a row
+                            quietly rewritten months later is not one. */}
+                        {item.state.open ? (
+                          <div className="row-actions">
+                            <button
+                              className="button subtle"
+                              disabled={busyItem === item.id}
+                              onClick={() => setItemStatus(item.id, "DONE")}
+                              type="button"
+                            >
+                              Mark done
+                            </button>
+                            <button
+                              className="button quiet"
+                              disabled={busyItem === item.id}
+                              onClick={() => setItemStatus(item.id, "CANCELLED")}
+                              type="button"
+                            >
+                              Drop
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             className="button quiet"
                             disabled={busyItem === item.id}
-                            onClick={() => setItemStatus(item.id, "CANCELLED")}
+                            onClick={() => setItemStatus(item.id, "OPEN")}
                             type="button"
                           >
-                            Drop
+                            Reopen
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="button quiet"
-                          disabled={busyItem === item.id}
-                          onClick={() => setItemStatus(item.id, "OPEN")}
-                          type="button"
-                        >
-                          Reopen
-                        </button>
-                      )}
-                    </td>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

@@ -10,8 +10,8 @@ export function SavingsTrendChart({ data }: SavingsTrendChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="stat-card">
-        <h3>Savings Trend</h3>
-        <p className="muted">No savings data yet</p>
+        <h3>Shares Trend</h3>
+        <p className="muted">No shares recorded yet</p>
       </div>
     );
   }
@@ -21,7 +21,7 @@ export function SavingsTrendChart({ data }: SavingsTrendChartProps) {
 
   return (
     <div className="stat-card savings-trend-chart">
-      <h3>Savings Trend</h3>
+      <h3>Shares Trend</h3>
       <div className="savings-chart-bars">
         {data.map((point, i) => {
           const heightPct = (point.savingsCents / maxCents) * 100;

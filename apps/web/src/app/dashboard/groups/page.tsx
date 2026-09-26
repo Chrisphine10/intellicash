@@ -9,6 +9,8 @@ import { apiFetch, humanizeEnum } from "../../../lib/api";
 import { CollectionView } from "../../../components/dashboard/collection-view";
 import { DataTable } from "../../../components/dashboard/data-table";
 import type { AgentRow, GroupRow, ProgrammeRow, User } from "../../../components/dashboard/types";
+import { groupAgentNames } from "../../../types/dashboard";
+import { sourceLabel } from "../../../features/reports/model";
 
 const defaultGroupForm = {
   name: "",
@@ -363,7 +365,7 @@ export default function GroupsPage() {
                 </details>
 
                 <details className="group-form-details" open={Boolean(editingGroup)}>
-                  <summary>GPS and savings defaults</summary>
+                  <summary>GPS and share defaults</summary>
                   <div className="credential-grid group-details-grid">
                     <label className="credential-field">
                       <span>GPS latitude</span>
@@ -529,7 +531,7 @@ export default function GroupsPage() {
                       </div>
                       <div>
                         <span>VA / CBT</span>
-                        <strong>{group.villageAgent?.name ?? "Unassigned"}</strong>
+                        <strong>{groupAgentNames(group)}</strong>
                       </div>
                       <div>
                         <span>{isMember ? "Member" : "Members"}</span>
@@ -606,7 +608,7 @@ export default function GroupsPage() {
             {
               key: "village-agent",
               header: "Village Agent",
-              value: (group) => group.villageAgent?.name ?? "Unassigned"
+              value: (group) => groupAgentNames(group)
             },
             {
               key: "objective",
@@ -673,13 +675,13 @@ export default function GroupsPage() {
               key: "agent",
               label: "VA",
               allLabel: "All VAs",
-              getValue: (group) => group.villageAgent?.name ?? "Unassigned"
+              getValue: (group) => groupAgentNames(group)
             },
             {
               key: "source",
               label: "Source",
               allLabel: "All sources",
-              getValue: (group) => group.sourceSystem ?? "Native"
+              getValue: (group) => sourceLabel(group.sourceSystem)
             }
           ]}
           getRowKey={(group) => group.id}

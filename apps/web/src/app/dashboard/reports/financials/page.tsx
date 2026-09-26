@@ -251,7 +251,7 @@ function GroupStatementView({ groupId, onBack }: { groupId: string; onBack?: () 
         <div className="report-grid statement-grid">
           <article className="data-card">
             <header>
-              <h3>Loan fund (savings and lending)</h3>
+              <h3>Loan fund (shares and lending)</h3>
             </header>
             <Lines
               rows={[
@@ -408,7 +408,7 @@ export default function FinancialReportsPage() {
           <p className="eyebrow">Portfolio Financial Report</p>
           <h2>{user.role === "IWL_ADMIN" ? "Platform portfolio" : user.role === "VILLAGE_AGENT" ? "My caseload" : "Programme portfolio"}</h2>
           <p className="card-note">
-            Savings, lending and welfare across your groups, each group&apos;s {cycle === "current" ? "current" : "last closed"} cycle.
+            Shares, lending and welfare across your groups, each group&apos;s {cycle === "current" ? "current" : "last closed"} cycle.
           </p>
         </div>
         <div className="page-heading-actions no-print">
@@ -495,7 +495,7 @@ export default function FinancialReportsPage() {
             />
           </section>
           <p className="card-note">
-            Generated {formatDate(report.generatedAt)}. Savings are shares bought this cycle; loans are valued with interest to date;
+            Generated {formatDate(report.generatedAt)}. Shares are those bought this cycle; loans are valued with interest to date;
             repayment counts only loans that have fallen due.
           </p>
         </>

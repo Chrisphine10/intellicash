@@ -32,6 +32,17 @@ function impossibleGroupScope(): Prisma.GroupWhereInput {
   return { id: "__no_access__" };
 }
 
+/**
+ * The groups one agent serves. A group can have several agents (`GroupAgent`);
+ * `Group.villageAgentId` is the lead's mirror and is kept in the filter so a
+ * group written by an older path, before its link existed, is not lost.
+ */
+export function agentCaseloadWhere(villageAgentId: string): Prisma.GroupWhereInput {
+  return {
+    OR: [{ agentLinks: { some: { villageAgentId } } }, { villageAgentId }]
+  };
+}
+
 export function groupScopeForUser(user?: AuthenticatedUser): Prisma.GroupWhereInput {
   if (!user) return impossibleGroupScope();
 
@@ -95,11 +106,10 @@ export function groupScopeForUser(user?: AuthenticatedUser): Prisma.GroupWhereIn
     return user.memberId ? { members: { some: { id: user.memberId } } } : impossibleGroupScope();
   }
 
-  // A village agent / CBT sees exactly their assigned caseload.
+  // A village agent / CBT sees exactly their caseload: every group they are
+  // linked to, alongside any other agents serving the same group.
   if (user.role === "VILLAGE_AGENT") {
-    return user.villageAgentId
-      ? { villageAgentId: user.villageAgentId }
-      : impossibleGroupScope();
+    return user.villageAgentId ? agentCaseloadWhere(user.villageAgentId) : impossibleGroupScope();
   }
 
   // Fall-through is platform-wide (IWL_ADMIN / READ_ONLY). Any new role MUST
@@ -165,8 +175,8 @@ export function programmeScopeForUser(user?: AuthenticatedUser): Prisma.Programm
       ? {
           OR: [
             { villageAgentLinks: { some: { villageAgentId: user.villageAgentId } } },
-            { groups: { some: { villageAgentId: user.villageAgentId } } },
-            { groupLinks: { some: { group: { villageAgentId: user.villageAgentId } } } }
+            { groups: { some: agentCaseloadWhere(user.villageAgentId) } },
+            { groupLinks: { some: { group: agentCaseloadWhere(user.villageAgentId) } } }
           ]
         }
       : { id: "__no_access__" };
@@ -249,10 +259,26 @@ export function villageAgentScopeForUser(user?: AuthenticatedUser): Prisma.Villa
       : { id: "__no_access__" };
   }
 
-  if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") {
-    return user.groupId ? { groups: { some: { id: user.groupId } } } : { id: "__no_access__" };
+  // A lender sees the agents serving the programmes it lends to.
+  if (user.role === "LENDER") {
+    return user.partnerId
+      ? {
+          programmeLinks: {
+            some: { programme: { partnerLinks: { some: { partnerId: user.partnerId, role: "LENDER" } } } }
+          }
+        }
+      : { id: "__no_access__" };
   }
 
+  // A group's own login or a member sees the agents serving their group.
+  if (user.role === "GROUP_ACCOUNT" || user.role === "MEMBER") {
+    const groupWhere = memberGroupWhere(user);
+    return groupWhere
+      ? { OR: [{ groupLinks: { some: { group: groupWhere } } }, { groups: { some: groupWhere } }] }
+      : { id: "__no_access__" };
+  }
+
+  // Fall-through is platform-wide (IWL_ADMIN / READ_ONLY).
   return {};
 }
 
@@ -335,6 +361,23 @@ export async function assertGroupAccess(user: AuthenticatedUser | undefined, gro
   if (!group) {
     throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
   }
+}
+
+/**
+ * Whether [user] speaks for the group itself: a platform admin, or the group's
+ * own account. Decisions that belong to the group - who holds an office, what
+ * a vote resolved, opening a poll, handing out meeting keys - are theirs, not
+ * a village agent's, a member's or an outside partner's.
+ */
+export function isGroupSteward(user: AuthenticatedUser | undefined, groupId: string) {
+  if (!user) return false;
+  if (user.role === "IWL_ADMIN" || user.permissions.includes("groups:write")) return true;
+  return user.role === "GROUP_ACCOUNT" && user.groupId === groupId;
+}
+
+export function assertGroupSteward(user: AuthenticatedUser | undefined, groupId: string, what: string) {
+  if (isGroupSteward(user, groupId)) return;
+  throw new ApiHttpError(403, "FORBIDDEN", `Only the group's own account or a platform admin may ${what}.`);
 }
 
 /**

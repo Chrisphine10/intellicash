@@ -11,6 +11,7 @@ import { CollectionView } from "../../../../../components/dashboard/collection-v
 import { DataTable } from "../../../../../components/dashboard/data-table";
 import type { Member, User } from "../../../../../components/dashboard/types";
 import { CredentialButton } from "../../../../../components/dashboard/credential-button";
+import { isGroupSteward, userCan, ViewOnlyNotice } from "../../../../../lib/current-user";
 
 interface GroupSummary {
   id: string;
@@ -90,6 +91,11 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
   }, [editingMember, erasingMember]);
 
   const canWrite = user?.permissions?.includes("members:write") ?? false;
+  // Offices, PINs, meeting codes and erasure belong to the group itself (or an
+  // admin). A field agent adds members and corrects their details.
+  const canSteward = canWrite && isGroupSteward(user, id);
+  const canSendOtp = canSteward && userCan(user, "meeting-keys:write");
+  const roleChoices = canSteward ? memberRoles : (["MEMBER"] as const);
 
   function openEditMember(member: Member) {
     setEditingMember(member);
@@ -272,6 +278,8 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
         <span className="pill">{members.length} members</span>
       </section>
 
+      <ViewOnlyNotice />
+
       {!editingMember && message ? <div className={message.ok ? "notice success" : "notice warning"}>{message.text}</div> : null}
 
       {erasingMember ? (
@@ -384,7 +392,9 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
                 <label className="credential-field">
                   <span>Role</span>
                   <select
+                    disabled={!canSteward}
                     onChange={(event) => setEditForm((current) => ({ ...current, role: event.target.value }))}
+                    title={canSteward ? undefined : "Officials are appointed by the group's own account."}
                     value={editForm.role}
                   >
                     {memberRoles.map((role) => (
@@ -463,7 +473,7 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
                   onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
                   value={form.role}
                 >
-                  {memberRoles.map((role) => (
+                  {roleChoices.map((role) => (
                     <option key={role} value={role}>
                       {humanizeEnum(role)}
                     </option>
@@ -492,7 +502,7 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
         </section>
       ) : null}
 
-      {canWrite ? (
+      {canSteward ? (
         <section className="data-card">
           <header>
             <h3>Default PIN</h3>
@@ -523,7 +533,7 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
         </section>
       ) : null}
 
-      {canWrite ? (
+      {canSendOtp ? (
         <section className="data-card">
           <header>
             <h3>Meeting OTP</h3>
@@ -612,15 +622,17 @@ export default function GroupMembersPage({ params }: { params: Promise<{ id: str
                         <ShieldCheck size={15} />
                         Verify
                       </button>
-                      <button
-                        className="link-button danger"
-                        disabled={saving}
-                        onClick={() => startErasingMember(member)}
-                        type="button"
-                      >
-                        <Trash2 size={15} />
-                        Erase details
-                      </button>
+                      {canSteward ? (
+                        <button
+                          className="link-button danger"
+                          disabled={saving}
+                          onClick={() => startErasingMember(member)}
+                          type="button"
+                        >
+                          <Trash2 size={15} />
+                          Erase details
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </article>

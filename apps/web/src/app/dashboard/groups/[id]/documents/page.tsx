@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ClipboardList } from "@/lib/theme-icons";
 import { apiFetch, formatDate, humanizeEnum } from "../../../../../lib/api";
+import { useCurrentUser, userCan, ViewOnlyNotice } from "../../../../../lib/current-user";
 
 /**
  * A group's document register.
@@ -45,6 +46,11 @@ interface RegisterResponse {
 
 export default function GroupDocumentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const user = useCurrentUser();
+  // Recording what is held needs documents:write; judging it genuine is kept
+  // from the field agent who collected it, as the API does.
+  const canRecord = userCan(user, "documents:write");
+  const canVerify = canRecord && user?.role !== "VILLAGE_AGENT";
   const [data, setData] = useState<RegisterResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +126,8 @@ export default function GroupDocumentsPage({ params }: { params: Promise<{ id: s
         <ClipboardList size={22} />
       </header>
 
+      <ViewOnlyNotice />
+
       {message ? (
         <div className={`dashboard-notice ${message.ok ? "" : "error"}`}>{message.text}</div>
       ) : null}
@@ -132,7 +140,7 @@ export default function GroupDocumentsPage({ params }: { params: Promise<{ id: s
               <th>Status</th>
               <th>Expires</th>
               <th>Held?</th>
-              <th>Decision</th>
+              {canVerify ? <th>Decision</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -157,41 +165,49 @@ export default function GroupDocumentsPage({ params }: { params: Promise<{ id: s
                   )}
                 </td>
                 <td>
-                  <button
-                    className="button subtle"
-                    disabled={busy === doc.documentType}
-                    onClick={() =>
-                      setPresence(
-                        doc.documentType,
-                        doc.presence === "PRESENT" ? "MISSING" : "PRESENT"
-                      )
-                    }
-                  >
-                    {doc.presence === "PRESENT" ? "Held" : "Not held"}
-                  </button>
-                </td>
-                <td>
-                  {doc.presence === "PRESENT" ? (
-                    <div className="button-row">
-                      <button
-                        className="button subtle"
-                        disabled={busy === doc.documentType || doc.verification === "VERIFIED"}
-                        onClick={() => verify(doc.documentType, "VERIFIED")}
-                      >
-                        Verify
-                      </button>
-                      <button
-                        className="button subtle"
-                        disabled={busy === doc.documentType || doc.verification === "REJECTED"}
-                        onClick={() => verify(doc.documentType, "REJECTED")}
-                      >
-                        Reject
-                      </button>
-                    </div>
+                  {canRecord ? (
+                    <button
+                      className="button subtle"
+                      disabled={busy === doc.documentType}
+                      onClick={() =>
+                        setPresence(
+                          doc.documentType,
+                          doc.presence === "PRESENT" ? "MISSING" : "PRESENT"
+                        )
+                      }
+                    >
+                      {doc.presence === "PRESENT" ? "Held" : "Not held"}
+                    </button>
+                  ) : doc.presence === "PRESENT" ? (
+                    "Held"
                   ) : (
-                    <span className="eyebrow">Record it as held first</span>
+                    "Not held"
                   )}
                 </td>
+                {canVerify ? (
+                  <td>
+                    {doc.presence === "PRESENT" ? (
+                      <div className="button-row">
+                        <button
+                          className="button subtle"
+                          disabled={busy === doc.documentType || doc.verification === "VERIFIED"}
+                          onClick={() => verify(doc.documentType, "VERIFIED")}
+                        >
+                          Verify
+                        </button>
+                        <button
+                          className="button subtle"
+                          disabled={busy === doc.documentType || doc.verification === "REJECTED"}
+                          onClick={() => verify(doc.documentType, "REJECTED")}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="eyebrow">Record it as held first</span>
+                    )}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

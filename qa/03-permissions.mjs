@@ -72,6 +72,10 @@ function inScope(account, groupId) {
 }
 
 const has = (account, perm) => rolePermissions[account.role].includes(perm);
+// Offices, PINs, resolutions and meeting keys belong to the group itself: its
+// own account or a platform admin (account-scope.ts isGroupSteward).
+const isSteward = (account, groupId) =>
+  account.role === "IWL_ADMIN" || (account.role === "GROUP_ACCOUNT" && account.user.groupId === groupId);
 
 // One fresh target group for the destructive operations, so nothing here can
 // touch the demo groups' books.
@@ -127,6 +131,8 @@ const ops = [
   { id: "create-group", perm: "groups:write", group: false, call: (c) => api(c, "POST", "/groups", { name: `QA P-Group ${run}-${phoneSeq++}`, code: `QA-PG-${run}-${phoneSeq}`, county: "Embu", phase: "INTENSIVE", programmeIds: [programmeId] }) },
   { id: "update-group", perm: "groups:write", call: async (c, g) => api(c, "PATCH", `/groups/${g}`, { name: (await prepare(g)).name }) },
   { id: "add-member", perm: "members:write", call: (c, g) => api(c, "POST", `/groups/${g}/members`, { fullName: "QA Perm Member", phone: nextPhone() }) },
+  { id: "add-official", perm: "members:write", steward: true, call: (c, g) => api(c, "POST", `/groups/${g}/members`, { fullName: "QA Perm Treasurer", phone: nextPhone(), role: "TREASURER" }) },
+  { id: "issue-member-pin", perm: "members:write", steward: true, call: async (c, g) => api(c, "POST", `/groups/${g}/members/${(await prepare(g)).member}/pin`, {}) },
   { id: "edit-member", perm: "members:write", call: async (c, g) => api(c, "PATCH", `/groups/${g}/members/${(await prepare(g)).member}`, { status: "ACTIVE" }) },
   { id: "create-meeting", perm: "meetings:write", call: (c, g) => api(c, "POST", `/groups/${g}/meetings`, { title: "QA perm meeting", scheduledAt: new Date().toISOString() }) },
   { id: "post-ledger-batch", perm: "ledger:write", call: async (c, g) => { const p = await prepare(g); return api(c, "POST", `/groups/${g}/meetings/${p.meeting}/ledger/batch`, { entries: [{ memberId: p.member, type: "SOCIAL_CONTRIBUTION", amountCents: 100, clientRequestId: requestId("perm") }] }); } },
@@ -161,6 +167,7 @@ for (const [key, account] of Object.entries(accounts)) {
         has(account, op.perm) &&
         (kind === "n/a" || inScope(account, groupId)) &&
         !(op.id === "read-member-passbook" && oversight) &&
+        (!op.steward || isSteward(account, groupId)) &&
         !someoneElses;
       const r = await op.call(account.cookie, groupId);
       const allowed = !isDenied(r);

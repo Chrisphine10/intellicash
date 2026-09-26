@@ -178,6 +178,15 @@ router.post(
   try {
     const user = req.user;
     if (!user?.id) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
+    // Only a saver joins a group. A staff, partner or group login filing one
+    // would put an office account on a group's roster.
+    if (user.role !== "MEMBER") {
+      throw new ApiHttpError(
+        403,
+        "FORBIDDEN",
+        "Only a member's own account can ask to join a group."
+      );
+    }
     const body = requestSchema.parse(req.body);
 
     const account = await prisma.user.findUnique({

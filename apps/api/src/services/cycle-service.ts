@@ -123,7 +123,41 @@ export async function closeCycleAndOpenNext(
   groupId: string,
   options: CloseCycleOptions = {}
 ): Promise<CloseCycleResult> {
-  return prisma.$transaction((tx) => closeCycleWithin(tx, groupId, options));
+  return prisma.$transaction(async (tx) => {
+    await assertShareOutDone(tx, groupId);
+    return closeCycleWithin(tx, groupId, options);
+  });
+}
+
+/**
+ * A cycle in which members bought shares ends with its share-out, never by a
+ * bare close: closing first would lock the shares away with nobody paid.
+ * The two share-out paths write their payouts and then close in the same
+ * transaction, so they never reach this check; it guards the manual close.
+ * A cycle nobody bought shares in has nothing to share out and may close.
+ */
+export async function shareOutStatus(tx: Tx, groupId: string) {
+  const current = await ensureActiveCycle(tx, groupId);
+  const inCycle: Prisma.LedgerEntryWhereInput = {
+    groupId,
+    OR: [{ cycleId: current.id }, { cycleId: null, createdAt: { gte: current.startedAt } }]
+  };
+  const [shares, payouts] = await Promise.all([
+    tx.ledgerEntry.count({ where: { AND: [inCycle, { type: "SHARE_PURCHASE" }] } }),
+    tx.ledgerEntry.count({ where: { AND: [inCycle, { type: "SHARE_OUT_PAYOUT" }] } })
+  ]);
+  return { cycleNumber: current.number, hasShares: shares > 0, sharedOut: payouts > 0 };
+}
+
+export async function assertShareOutDone(tx: Tx, groupId: string) {
+  const status = await shareOutStatus(tx, groupId);
+  if (status.hasShares && !status.sharedOut) {
+    throw new ApiHttpError(
+      409,
+      "SHARE_OUT_REQUIRED",
+      `Members bought shares in cycle ${status.cycleNumber}. Do the share-out first - it pays members and closes the cycle.`
+    );
+  }
 }
 
 export interface CloseCycleOptions {

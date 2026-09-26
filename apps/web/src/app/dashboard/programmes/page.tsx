@@ -10,6 +10,7 @@ import { DataTable } from "../../../components/dashboard/data-table";
 import { FallbackImage } from "../../../components/fallback-image";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { GroupRow, PartnerRow, ProgrammeAsset, ProgrammeRow, User } from "../../../components/dashboard/types";
+import { sourceLabel } from "../../../features/reports/model";
 
 const publicProgrammeStatuses = ["DRAFT", "ONGOING", "PAUSED", "CLOSED"];
 
@@ -376,7 +377,7 @@ export default function ProgrammesPage() {
           <h2
             aria-label="Programs"
             className="has-hint"
-            data-hint="Members belong to groups, groups belong to programs, and every program can carry implementing partners, support partners, and lenders. FtMA is represented as a program when test data is imported."
+            data-hint="Members belong to groups, groups belong to programs, and every program can carry implementing partners, support partners, and lenders. A programme performance workbook is imported as its own program."
             tabIndex={0}
           >
             Programs
@@ -798,7 +799,7 @@ export default function ProgrammesPage() {
               key: "source",
               label: "Source",
               allLabel: "All sources",
-              getValue: (programme) => programme.sourceSystem ?? "Native"
+              getValue: (programme) => sourceLabel(programme.sourceSystem)
             }
           ]}
           getRowKey={(programme) => programme.id}

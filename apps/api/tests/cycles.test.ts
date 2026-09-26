@@ -7,8 +7,13 @@ import { seedDatabase } from "../prisma/seed";
 import {
   assertCycleWritable,
   closeCycleAndOpenNext,
+  closeCycleWithin,
   ensureActiveCycle
 } from "../src/services/cycle-service";
+
+// The close mechanics, without the share-out rule (tested on its own below).
+const closeMechanics = (groupId: string, options: Parameters<typeof closeCycleWithin>[2] = {}) =>
+  prisma.$transaction((tx) => closeCycleWithin(tx, groupId, options));
 
 const app = createApp();
 
@@ -104,7 +109,7 @@ describe("saving cycles", () => {
       orderBy: { type: "asc" }
     });
 
-    const result = await closeCycleAndOpenNext(groupId, { notes: "test close" });
+    const result = await closeMechanics(groupId, { notes: "test close" });
 
     expect(result.opened.number).toBe(result.closed.number + 1);
 
@@ -141,7 +146,7 @@ describe("saving cycles", () => {
       }
     });
 
-    await expect(closeCycleAndOpenNext(groupId)).rejects.toMatchObject({
+    await expect(closeMechanics(groupId)).rejects.toMatchObject({
       code: "CYCLE_HAS_OPEN_MEETINGS"
     });
 
@@ -178,7 +183,7 @@ describe("saving cycles", () => {
       data: { groupId, cycleId: active.id, title: "Next month", status: "SCHEDULED", scheduledAt: new Date(Date.now() + 30 * 24 * 3600 * 1000) }
     });
 
-    const result = await closeCycleAndOpenNext(groupId, { notes: "phone-held meetings" });
+    const result = await closeMechanics(groupId, { notes: "phone-held meetings" });
 
     const sealed = await prisma.meeting.findUniqueOrThrow({ where: { id: held.id } });
     expect(sealed.status).toBe("SEALED");
@@ -205,5 +210,43 @@ describe("saving cycles", () => {
     expect(cycles.length).toBeGreaterThanOrEqual(2);
     expect(cycles.filter((c: { editable: boolean }) => c.editable)).toHaveLength(1);
     expect(cycles[0].number).toBeGreaterThan(cycles[1].number); // newest first
+  });
+
+  it("refuses to close a cycle with shares that were never shared out", async () => {
+    const active = await ensureActiveCycle(prisma, groupId);
+    const member = await prisma.member.findFirstOrThrow({ where: { groupId }, select: { id: true } });
+    const fund = await prisma.fundAccount.findFirstOrThrow({ where: { groupId, type: "INTERNAL_LOAN" } });
+    const share = await prisma.ledgerEntry.create({
+      data: {
+        groupId,
+        cycleId: active.id,
+        memberId: member.id,
+        fundAccountId: fund.id,
+        type: "SHARE_PURCHASE",
+        direction: "CREDIT",
+        amountCents: 10_000,
+        description: "share before close",
+        signature: `test-share-${Date.now()}`
+      }
+    });
+
+    await expect(closeCycleAndOpenNext(groupId)).rejects.toMatchObject({ code: "SHARE_OUT_REQUIRED" });
+    const cookies = await adminCookies();
+    const listed = await request(app).get(`/api/v1/groups/${groupId}/cycles`).set("Cookie", cookies).expect(200);
+    expect(listed.body.data.closeNeedsShareOut).toBe(true);
+    const refused = await request(app).post(`/api/v1/groups/${groupId}/cycles/close`).set("Cookie", cookies).send({}).expect(409);
+    expect(refused.body.error.code).toBe("SHARE_OUT_REQUIRED");
+    expect(await prisma.cycle.findUniqueOrThrow({ where: { id: active.id } })).toMatchObject({ status: "ACTIVE" });
+
+    await prisma.ledgerEntry.delete({ where: { id: share.id } });
+  });
+
+  it("lets a cycle nobody bought shares in close without a share-out", async () => {
+    await prisma.meeting.updateMany({
+      where: { groupId, status: { in: ["KEY_UNLOCK_PENDING", "IN_PROGRESS"] } },
+      data: { status: "SEALED" }
+    });
+    const result = await closeCycleAndOpenNext(groupId, { notes: "empty cycle" });
+    expect(result.opened.number).toBe(result.closed.number + 1);
   });
 });

@@ -47,6 +47,16 @@ import { SMALL_GROUP_THRESHOLD as THRESHOLD, buildGroupStatement, type GroupStat
  * nothing here can be older than the data it describes.
  */
 
+
+/** The agents serving a group: its links, or the lead column for a group written before links existed. */
+function agentsOf(group: {
+  villageAgent: { id: string; name: string } | null;
+  agentLinks: Array<{ villageAgent: { id: string; name: string } }>;
+}) {
+  if (group.agentLinks.length > 0) return group.agentLinks.map((link) => link.villageAgent);
+  return group.villageAgent ? [group.villageAgent] : [];
+}
+
 export const SMALL_GROUP_THRESHOLD = THRESHOLD;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -90,7 +100,12 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
           county: true,
           phase: true,
           programme: { select: { name: true } },
-          villageAgent: { select: { id: true, name: true } }
+          villageAgent: { select: { id: true, name: true } },
+          // Every agent serving the group, lead first (a group can have several).
+          agentLinks: {
+            orderBy: [{ isLead: "desc" }, { createdAt: "asc" }],
+            select: { villageAgent: { select: { id: true, name: true } } }
+          }
         },
         orderBy: { name: "asc" }
       }),
@@ -237,7 +252,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
       county: group.county,
       phase: group.phase,
       programme: group.programme?.name ?? null,
-      cbt: group.villageAgent?.name ?? null,
+      cbt: agentsOf(group).map((agent) => agent.name).join(", ") || null,
       activeMembers,
       meetingsScheduled: groupMeetings.length,
       meetingsHeld: held.length,
@@ -294,9 +309,13 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
       .sort((left, right) => right.count - left.count);
 
   // ---- 3. CBT delivery ------------------------------------------------------
-  const agentIds = [...new Set(groups.map((group) => group.villageAgent?.id).filter((id): id is string => Boolean(id)))];
+  // Agents serving a group, plus any agent who visited one in the period: a
+  // visit by a second CBT counts for that CBT, not only for the lead.
+  const agentNames = new Map<string, string>();
+  for (const group of groups) for (const agent of agentsOf(group)) agentNames.set(agent.id, agent.name);
+  const agentIds = [...agentNames.keys()];
   const cbtRows = agentIds.map((agentId) => {
-    const assigned = groups.filter((group) => group.villageAgent?.id === agentId);
+    const assigned = groups.filter((group) => agentsOf(group).some((agent) => agent.id === agentId));
     const agentVisits = visits.filter((visit) => visit.villageAgentId === agentId);
     const agentSessions = sessions.filter((session) => session.visit.villageAgentId === agentId);
     const agentRatings = ratings.filter((rating) => rating.visit.villageAgentId === agentId);
@@ -307,7 +326,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
 
     return {
       id: agentId,
-      name: assigned[0]?.villageAgent?.name ?? "",
+      name: agentNames.get(agentId) ?? "",
       groupsAssigned: assigned.length,
       groupsVisited: visitedGroups.size,
       coverageRate: pct(visitedGroups.size, assigned.length),
@@ -371,7 +390,7 @@ export async function buildProgrammePerformanceReport(groupIds: string[], period
       phases: countBy(groups.map((group) => group.phase)),
       programmes: countBy(groups.map((group) => group.programme?.name ?? "Unassigned")),
       cbts: agentIds.length,
-      groupsWithoutCbt: groups.filter((group) => !group.villageAgent).length
+      groupsWithoutCbt: groups.filter((group) => agentsOf(group).length === 0).length
     },
     performance: {
       totals: {

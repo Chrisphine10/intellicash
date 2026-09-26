@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { appendAuditEvent } from "../services/audit-service";
 import { requireAuth, type AuthenticatedUser } from "../middleware/auth";
-import { partnerScopeForUser, scopeGroupWhere } from "../services/account-scope";
+import { assertGroupSteward, partnerScopeForUser, scopeGroupWhere } from "../services/account-scope";
 import { computeCreditRating, latestCreditRating } from "../services/credit-rating-service";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -230,6 +230,9 @@ router.post("/external-loans/applications", requireAuth("store:write"), async (r
     if (!group) {
       throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside this account.");
     }
+    // Borrowing commits the whole group, so the group's own account (run by
+    // its officials) or an admin applies, not one member or a field agent.
+    assertGroupSteward(user, group.id, "apply for a loan in the group's name");
 
     if (body.amountCents < product.minAmountCents || body.amountCents > product.maxAmountCents) {
       throw new ApiHttpError(
@@ -297,7 +300,9 @@ router.get("/external-loans/applications", requireAuth("store:read"), async (req
       user?.role === "IWL_ADMIN"
         ? {}
         : user?.role === "PARTNER_OFFICER"
-          ? { product: { partner: partnerScopeForUser(user) } }
+          ? // Their partner's products, and only from groups in their programmes:
+            // a co-partner's product is not a licence to read every applicant.
+            { product: { partner: partnerScopeForUser(user) }, group: scopeGroupWhere(user, {}) }
           : { group: scopeGroupWhere(user, {}) };
     const groupId = typeof req.query.groupId === "string" ? req.query.groupId : undefined;
     const applications = await prisma.externalLoanApplication.findMany({

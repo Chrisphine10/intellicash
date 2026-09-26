@@ -7,7 +7,7 @@ import { ArrowLeft, Activity } from "@/lib/theme-icons";
 import { apiFetch, formatDate, formatKes } from "../../../../../lib/api";
 
 /**
- * Saving cycles.
+ * Share cycles.
  *
  * A closed cycle is READ-ONLY, not deleted — its meetings and ledger stay fully
  * visible in history and reports. The page states that plainly, because
@@ -30,6 +30,8 @@ interface CyclesResponse {
   currentCycleNumber: number;
   cycles: Cycle[];
   canManage: boolean;
+  /** Members bought shares this cycle and they have not been shared out yet. */
+  closeNeedsShareOut?: boolean;
 }
 
 export default function GroupCyclesPage({ params }: { params: Promise<{ id: string }> }) {
@@ -55,8 +57,8 @@ export default function GroupCyclesPage({ params }: { params: Promise<{ id: stri
     const current = data?.cycles.find((cycle) => cycle.editable);
     const confirmed = window.confirm(
       `Close cycle ${current?.number ?? ""} and start the next?\n\n` +
-        `Its ${current?.meetings ?? 0} meeting(s) become read-only. Members, roles and balances ` +
-        `carry over. This cannot be undone.`
+        `No shares were bought in it, so there is nothing to share out. Its ${current?.meetings ?? 0} ` +
+        `meeting(s) become read-only; members and roles carry over. This cannot be undone.`
     );
     if (!confirmed) return;
 
@@ -88,7 +90,7 @@ export default function GroupCyclesPage({ params }: { params: Promise<{ id: stri
             <ArrowLeft size={17} />
             <span>{data.group.name}</span>
           </Link>
-          <h2>Saving cycles</h2>
+          <h2>Share cycles</h2>
           <p>Currently on cycle {data.currentCycleNumber}.</p>
         </div>
         <Activity size={22} />
@@ -103,7 +105,14 @@ export default function GroupCyclesPage({ params }: { params: Promise<{ id: stri
         ledger entry stays visible in history and reports.
       </div>
 
-      {data.canManage ? (
+      {data.canManage && data.closeNeedsShareOut ? (
+        <div className="dashboard-notice">
+          Members bought shares in cycle {data.currentCycleNumber}, so this cycle ends with its{" "}
+          <strong>share-out</strong>, not with a plain close. Run it from the phone (More, Share-Out) or
+          in the cycle&apos;s last meeting here (<Link href="/dashboard/meetings">Meetings</Link>, then Entry):
+          it pays every member and closes the cycle in one step.
+        </div>
+      ) : data.canManage ? (
         <div className="form-actions">
           <button className="button" disabled={busy} onClick={closeCycle} type="button">
             {busy ? "Closing…" : "Close cycle and start the next"}
