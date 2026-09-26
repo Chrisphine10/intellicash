@@ -97,6 +97,8 @@ export interface SourceGroup {
   sourceSystem?: string | null;
   programme?: { name: string } | null;
   villageAgent?: { name: string } | null;
+  /** Every agent serving the group, lead first. */
+  agentLinks?: Array<{ villageAgent: { name: string } }>;
   _count?: { members: number; meetings: number; votes: number };
 }
 

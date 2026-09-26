@@ -35,6 +35,7 @@ import type {
   ProgrammeRow,
   User
 } from "../../../components/dashboard/types";
+import { groupAgentNames } from "../../../types/dashboard";
 import {
   activeApiKeyCount,
   activeSessionCount,
@@ -200,7 +201,7 @@ export default function ReportsPage() {
         code: account.group.code,
         county: account.group.county,
         programme: account.group.programme?.name ?? "Unassigned",
-        agent: account.group.villageAgent?.name ?? "Unassigned",
+        agent: groupAgentNames(account.group),
         fundType: humanizeEnum(account.type),
         rawFundType: account.type,
         balanceCents: account.balanceCents,
@@ -331,7 +332,7 @@ export default function ReportsPage() {
           outstandingCents: account.balanceCents,
           outstanding: formatKes(account.balanceCents),
           members: account.group._count?.members ?? 0,
-          agent: account.group.villageAgent?.name ?? "Unassigned",
+          agent: groupAgentNames(account.group),
           source: sourceLabel(account.group.sourceSystem),
           exposureSignal:
             account.balanceCents >= 50_000_000
@@ -420,6 +421,8 @@ export default function ReportsPage() {
 
       entry.groups += 1;
       entry.members += group._count.members;
+      // Every agent serving the group: a county's second CBTs count too.
+      for (const link of group.agentLinks ?? []) entry.agents.add(link.villageAgent.name);
       if (group.villageAgent?.name) entry.agents.add(group.villageAgent.name);
       const score = latestCreditScore(group);
       if (score > 0) entry.scores.push(score);

@@ -227,6 +227,12 @@ router.get("/reports/foundation", requireAuth("analytics:read"), async (req, res
                   sourceSystem: true,
                   programme: { select: { name: true } },
                   villageAgent: { select: { name: true } },
+                  // Every agent serving the group, lead first: a group can
+                  // have several, and naming only the lead hid the others.
+                  agentLinks: {
+                    orderBy: [{ isLead: "desc" }, { createdAt: "asc" }],
+                    select: { villageAgent: { select: { name: true } } }
+                  },
                   _count: { select: { members: true, meetings: true, votes: true } }
                 }
               }

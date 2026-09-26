@@ -1200,26 +1200,27 @@ router.get("/public/intelli-store", async (_req, res, next) => {
             },
             orderBy: { createdAt: "asc" }
           },
-          groups: {
-            // A demo group must not be listed under a real agent's coverage.
-            where: { isDemo: false },
+          // Every group the agent serves (a group can have several agents),
+          // not only those where they are the lead. A demo group must not be
+          // listed under a real agent's coverage.
+          groupLinks: {
+            where: { group: { isDemo: false } },
             select: {
-              id: true,
-              name: true,
-              code: true,
-              county: true,
-              phase: true
+              group: { select: { id: true, name: true, code: true, county: true, phase: true } }
             },
-            orderBy: { name: "asc" }
-          },
-          _count: { select: { groups: true } }
+            orderBy: { group: { name: "asc" } }
+          }
         }
       })
     ]);
 
     ok(res, {
       products,
-      agents,
+      // The shape the storefront already reads: groups[] and _count.groups.
+      agents: agents.map(({ groupLinks, ...agent }) => {
+        const groups = groupLinks.map((link) => link.group);
+        return { ...agent, groups, _count: { groups: groups.length } };
+      }),
       serviceTypes: [
         "Group onboarding",
         "Business coaching",
