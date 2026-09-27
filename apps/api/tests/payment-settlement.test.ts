@@ -2,7 +2,10 @@ import { createHmac } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { demoAccounts, demoPassword } from "@intellicash/shared";
+import { demoAccounts, demoPassword, roleMayHold } from "@intellicash/shared";
+import type { AuthenticatedUser } from "../src/middleware/auth";
+import { mayConfigureGroupPayments } from "../src/services/group-payment-access";
+import { validateRolePermissionUpdate } from "../src/services/role-permission-service";
 import { createApp } from "../src/app";
 import { env } from "../src/config/env";
 import { prisma } from "../src/lib/prisma";
@@ -659,6 +662,85 @@ describe("payment and settlement layer", () => {
         .set("Cookie", member)
         .send({ provider: "PAYSTACK", purpose: "SHARE_PURCHASE", groupAmountCents: amount })
         .expect(400);
+    });
+  });
+
+  describe("payment module permissions", () => {
+    it("only an IWL admin or the group's own account may ever hold group-payments:configure", () => {
+      for (const role of ["PARTNER_OFFICER", "LENDER", "READ_ONLY", "VILLAGE_AGENT", "MEMBER"] as const) {
+        expect(roleMayHold(role, "group-payments:configure")).toBe(false);
+        expect(() => validateRolePermissionUpdate(role, ["groups:read", "group-payments:configure"])).toThrow();
+      }
+      expect(roleMayHold("GROUP_ACCOUNT", "group-payments:configure")).toBe(true);
+      expect(roleMayHold("IWL_ADMIN", "group-payments:configure")).toBe(true);
+      // Reading may be granted to a partner on purpose; it is a read.
+      expect(roleMayHold("PARTNER_OFFICER", "group-payments:read")).toBe(true);
+    });
+
+    it("a group's account configures its own group only; the permission alone is not enough", () => {
+      const as = (role: string, userGroupId: string | null) =>
+        ({ id: "u", role, groupId: userGroupId, permissions: ["group-payments:configure"] }) as unknown as AuthenticatedUser;
+      expect(mayConfigureGroupPayments(as("GROUP_ACCOUNT", groupId), groupId)).toBe(true);
+      expect(mayConfigureGroupPayments(as("GROUP_ACCOUNT", "another-group"), groupId)).toBe(false);
+      expect(mayConfigureGroupPayments(as("IWL_ADMIN", null), groupId)).toBe(true);
+      // A partner handed the permission by a stale template row still cannot.
+      expect(mayConfigureGroupPayments(as("PARTNER_OFFICER", null), groupId)).toBe(false);
+      expect(mayConfigureGroupPayments({ ...as("GROUP_ACCOUNT", groupId), permissions: [] }, groupId)).toBe(false);
+    });
+
+    it("a partner who can see the group cannot change how it is paid, even with a stored grant, nor list its payments", async () => {
+      const partnerAccount = demoAccounts.find((account) => account.role === "PARTNER_OFFICER")!;
+      const partnerUser = await prisma.user.findFirstOrThrow({ where: { phone: partnerAccount.phone } });
+      expect(partnerUser.partnerId).toBeTruthy();
+      const programme = await prisma.programme.create({
+        data: { partnerId: partnerUser.partnerId!, name: "Payments permission test" }
+      });
+      const before = await prisma.group.findUniqueOrThrow({ where: { id: groupId }, select: { programmeId: true } });
+      const template = await prisma.rolePermissionTemplate.findUniqueOrThrow({ where: { role: "PARTNER_OFFICER" } });
+      try {
+        // In the partner's scope, so any refusal below is the payment rule, not a 404.
+        await prisma.group.update({ where: { id: groupId }, data: { programmeId: programme.id } });
+        // A console that slipped the write in (or an old row) must not hand it over.
+        const stored = JSON.parse(template.permissionsJson) as string[];
+        await prisma.rolePermissionTemplate.update({
+          where: { role: "PARTNER_OFFICER" },
+          data: { permissionsJson: JSON.stringify([...stored, "group-payments:configure", "groups:write"]) }
+        });
+        const cookie = await signIn("PARTNER_OFFICER");
+        await request(app).get(`/api/v1/groups/${groupId}`).set("Cookie", cookie).expect(200);
+        const me = await request(app).get("/api/v1/auth/me").set("Cookie", cookie).expect(200);
+        expect(me.body.data.permissions).not.toContain("group-payments:configure");
+
+        const settings = { collectionMode: "SYSTEM", enabledProviders: [], memberSelfPayEnabled: false };
+        await request(app).put(`/api/v1/groups/${groupId}/payment-settings`).set("Cookie", cookie).send(settings).expect(403);
+        await request(app)
+          .put(`/api/v1/groups/${groupId}/payment-providers/PAYSTACK`)
+          .set("Cookie", cookie)
+          .send({ credentials: { PAYSTACK_SECRET_KEY: "sk_test_x", PAYSTACK_PUBLIC_KEY: "pk_test_x" } })
+          .expect(403);
+        await request(app).delete(`/api/v1/groups/${groupId}/payment-providers/PAYSTACK`).set("Cookie", cookie).expect(403);
+        await request(app)
+          .post(`/api/v1/groups/${groupId}/settlement-destinations`)
+          .set("Cookie", cookie)
+          .send({ type: "MPESA_PHONE", accountNumber: "0712345678", accountName: "Partner" })
+          .expect(403);
+        // Member-level payment records are the group's, not a partner's.
+        await request(app).get(`/api/v1/groups/${groupId}/payments`).set("Cookie", cookie).expect(403);
+        await request(app).get(`/api/v1/groups/${groupId}/payment-settings`).set("Cookie", cookie).expect(403);
+        await request(app).get(`/api/v1/groups/${groupId}/payment-providers`).set("Cookie", cookie).expect(403);
+
+        // The group itself still can, and is told so.
+        const own = await request(app).get(`/api/v1/groups/${groupId}/payment-settings`).set("Cookie", groupAccount).expect(200);
+        expect(own.body.data.canConfigure).toBe(true);
+        await request(app).put(`/api/v1/groups/${groupId}/payment-settings`).set("Cookie", groupAccount).send({
+          ...settings,
+          enabledProviders: ["MPESA_DARAJA", "PAYSTACK"]
+        }).expect(200);
+      } finally {
+        await prisma.rolePermissionTemplate.update({ where: { role: "PARTNER_OFFICER" }, data: { permissionsJson: template.permissionsJson } });
+        await prisma.group.update({ where: { id: groupId }, data: { programmeId: before.programmeId } });
+        await prisma.programme.delete({ where: { id: programme.id } });
+      }
     });
   });
 });

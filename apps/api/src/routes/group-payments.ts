@@ -20,6 +20,7 @@ import {
   type GatewayProvider
 } from "../services/payment-settings-service";
 import { ApiHttpError, ok } from "../lib/http";
+import { assertMaySeeGroupPayments } from "../services/group-payment-access";
 import { prisma } from "../lib/prisma";
 
 /**
@@ -448,6 +449,7 @@ router.post("/groups/:id/payments", requireAuth("ledger:write"), async (req, res
 router.get("/groups/:id/payments/member-context/:memberId", requireAuth("ledger:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.id));
+    assertMaySeeGroupPayments(req.user);
     await assertMemberInGroup(req, group.id, String(req.params.memberId));
     const settings = await paymentSettingsFor(group.id);
     ok(res, {
@@ -467,6 +469,9 @@ router.get("/groups/:id/payments/member-context/:memberId", requireAuth("ledger:
 router.get("/groups/:id/payments", requireAuth("ledger:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.id));
+    // Names members and their phones: the group and IWL staff only, never a
+    // partner (who reads the ledger, but gets group-level figures).
+    assertMaySeeGroupPayments(req.user);
     const unlinked = req.query.unlinked === "1" || req.query.unlinked === "true";
     const payments = await prisma.groupPayment.findMany({
       where: {
@@ -508,6 +513,7 @@ router.get("/groups/:id/payments", requireAuth("ledger:read"), async (req, res, 
 router.get("/groups/:id/payments/:paymentId", requireAuth("ledger:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.id));
+    assertMaySeeGroupPayments(req.user);
     const full = await prisma.groupPayment.findFirst({
       where: { id: String(req.params.paymentId), groupId: group.id }
     });

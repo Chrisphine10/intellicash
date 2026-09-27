@@ -29,6 +29,7 @@ import { ChampionAccessCard } from "../../../../components/dashboard/champion-ac
 import {
   isGroupSteward,
   isViewOnlyOverGroups,
+  maySeeGroupPayments,
   useCurrentUser,
   userCan,
   ViewOnlyNotice
@@ -308,7 +309,7 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
         { href: `${base}/ledger`, label: "Ledger", note: "Shares, loans, repayments", icon: FileText, show: canRead("ledger:read") },
         { href: `${base}/welfare`, label: "Welfare", note: "Social fund payments", icon: HeartHandshake, show: canRead("ledger:read") },
         { href: `${base}/policy`, label: "Loan rules", note: "Share value, interest, limits", icon: Settings, show: canRead("groups:read") },
-        { href: `${base}/payment-providers`, label: "Payment providers", note: "M-Pesa and bank set-up", icon: Banknote, show: canRead("groups:read") }
+        { href: `${base}/payment-providers`, label: "Payments", note: "M-Pesa, Paystack and settlement", icon: Banknote, show: maySeeGroupPayments(user) }
       ]
     },
     {

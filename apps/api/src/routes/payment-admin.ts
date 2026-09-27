@@ -3,6 +3,11 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { requireAdmin, requireAuth, type AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
+import {
+  assertMayConfigureGroupPayments,
+  assertMaySeeGroupPayments,
+  mayConfigureGroupPayments
+} from "../services/group-payment-access";
 import { prisma } from "../lib/prisma";
 import { scopeGroupWhere } from "../services/account-scope";
 import { appendAuditEvent } from "../services/audit-service";
@@ -51,14 +56,6 @@ function actor(req: Request) {
   return req.user;
 }
 
-/** Same rule as the group's gateway credentials: an admin or the group's own account. */
-function assertMayConfigure(user: AuthenticatedUser | undefined, groupId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue.");
-  if (user.permissions.includes("groups:write")) return;
-  if (user.role === "GROUP_ACCOUNT" && user.groupId === groupId) return;
-  throw new ApiHttpError(403, "FORBIDDEN", "Only a platform admin or the group's own account may change how it is paid.");
-}
-
 async function groupInScope(req: Request, groupId: string) {
   const group = await prisma.group.findFirst({
     where: scopeGroupWhere(req.user, { id: groupId }),
@@ -79,6 +76,7 @@ function maskAccount(value: string) {
 router.get("/groups/:groupId/payment-settings", requireAuth("groups:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.groupId));
+    assertMaySeeGroupPayments(req.user);
     const [settings, destinations, settlements] = await Promise.all([
       paymentSettingsFor(group.id),
       prisma.settlementDestination.findMany({ where: { groupId: group.id }, orderBy: { createdAt: "desc" }, take: 20 }),
@@ -93,9 +91,11 @@ router.get("/groups/:groupId/payment-settings", requireAuth("groups:read"), asyn
     const readiness = destinationReady(active);
     // The group sees its own account numbers in full; nobody else outside the
     // platform does.
-    const fullNumbers = req.user?.role === "IWL_ADMIN" || (req.user?.role === "GROUP_ACCOUNT" && req.user.groupId === group.id);
+    const canConfigure = mayConfigureGroupPayments(req.user, group.id);
+    const fullNumbers = canConfigure;
     ok(res, {
       group,
+      canConfigure,
       settings: {
         collectionMode: settings.collectionMode,
         explicit: settings.explicit,
@@ -129,7 +129,7 @@ const settingsSchema = z.object({
 router.put("/groups/:groupId/payment-settings", requireAuth("groups:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.groupId));
-    assertMayConfigure(req.user, group.id);
+    assertMayConfigureGroupPayments(req.user, group.id);
     const body = settingsSchema.parse(req.body);
     const current = await paymentSettingsFor(group.id);
     if (body.collectionMode === "OWN_ACCOUNT") {
@@ -179,7 +179,7 @@ const destinationSchema = z.object({
 router.post("/groups/:groupId/settlement-destinations", requireAuth("groups:read"), async (req, res, next) => {
   try {
     const group = await groupInScope(req, String(req.params.groupId));
-    assertMayConfigure(req.user, group.id);
+    assertMayConfigureGroupPayments(req.user, group.id);
     const body = destinationSchema.parse(req.body);
     ok(res.status(201), await proposeDestination(group.id, body, actor(req).id));
   } catch (error) {
@@ -210,9 +210,7 @@ router.post("/settlement-destinations/:id/retire", requireAuth("groups:read"), a
     const destination = await prisma.settlementDestination.findUnique({ where: { id: String(req.params.id) } });
     if (!destination) throw new ApiHttpError(404, "DESTINATION_NOT_FOUND", "Settlement account not found.");
     await groupInScope(req, destination.groupId);
-    if (!req.user?.permissions.includes("payments:approve") || req.user.role !== "IWL_ADMIN") {
-      assertMayConfigure(req.user, destination.groupId);
-    }
+    assertMayConfigureGroupPayments(req.user, destination.groupId);
     ok(res, await retireDestination(destination.id, actor(req).id));
   } catch (error) {
     next(error);

@@ -39,6 +39,21 @@ export function isGroupSteward(user: User | null | undefined, groupId: string | 
   return user.role === "GROUP_ACCOUNT" && Boolean(groupId) && user.groupId === groupId;
 }
 
+/**
+ * A group's online payments name members, so they are the group's and IWL
+ * staff's to see — not a partner's. Mirrors the API's `maySeeGroupPayments`.
+ */
+export function maySeeGroupPayments(user: User | null | undefined) {
+  return userCan(user, "group-payments:read") || userCan(user, "ledger:write");
+}
+
+/** Who may change how a group is paid: an IWL admin or that group's own account. */
+export function mayConfigureGroupPayments(user: User | null | undefined, groupId: string | null | undefined) {
+  if (!user || !userCan(user, "group-payments:configure")) return false;
+  if (user.role === "IWL_ADMIN") return true;
+  return user.role === "GROUP_ACCOUNT" && Boolean(groupId) && user.groupId === groupId;
+}
+
 /** Partners, lenders and read-only viewers: they see groups, never change them. */
 export function isViewOnlyOverGroups(user: User | null | undefined) {
   return isOversightRole(user?.role);

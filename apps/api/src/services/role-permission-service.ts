@@ -7,7 +7,7 @@
  * authority; every route guard resolves through it.
  */
 
-import { groupSideMayHold, isOversightRole, oversightMayHold, permissions, roleMayHold, rolePermissions, roles, type Permission, type Role } from "@intellicash/shared";
+import { groupPaymentsMayHold, groupSideMayHold, isOversightRole, oversightMayHold, permissions, roleMayHold, rolePermissions, roles, type Permission, type Role } from "@intellicash/shared";
 import { isRole } from "../domain/authorization";
 import { prisma } from "../lib/prisma";
 import { appendAuditEvent } from "./audit-service";
@@ -75,7 +75,15 @@ const permissionBackfills: readonly (readonly Permission[])[] = [
    * Separate batch rather than added to the one above, because that one is
    * already delivered for MEMBER; extending it would be skipped.
    */
-  ["votes:read"]
+  ["votes:read"],
+  /*
+   * The group payment module (27 Sep 2026). Two batches, each naming only its
+   * own new permission, so one being curated away by an admin never stops the
+   * other arriving. Before these, the settings were gated on `groups:write`
+   * (admins) or "is this group's own account" in code.
+   */
+  ["group-payments:read"],
+  ["group-payments:configure"]
 ];
 /**
  * Read-only view for `permission-delivery.test.ts`, which checks these batches
@@ -158,6 +166,13 @@ export function validateRolePermissionUpdate(role: Role, values: Permission[]) {
   if (platformOnly.length > 0) {
     throw new Error(
       `A group's own login and its members work inside one group, so they cannot hold ${platformOnly.join(", ")}.`
+    );
+  }
+
+  const paymentRouting = normalized.filter((permission) => !groupPaymentsMayHold(role, permission));
+  if (paymentRouting.length > 0) {
+    throw new Error(
+      `Only an IWL admin or the group's own account may change where a group's money is paid and collected, so this role cannot hold ${paymentRouting.join(", ")}.`
     );
   }
 

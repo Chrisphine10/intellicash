@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, KeyRound, ShieldCheck, SlidersHorizontal, UserPlus, UsersRound, X } from "@/lib/theme-icons";
 import {
+  groupPaymentsMayHold,
   groupSideMayHold,
   oversightMayHold,
   permissions as permissionCatalogDefaults,
@@ -148,6 +149,7 @@ const permissionLabels: Record<string, string> = {
   meetings: "Meetings",
   ledger: "Ledger",
   payments: "Payments",
+  "group-payments": "Group payments",
   "signup-requests": "Signup Requests",
   votes: "Votes",
   analytics: "Analytics",
@@ -801,7 +803,9 @@ export default function UsersPage() {
                             ? "View only: not for partners, lenders or read-only accounts"
                             : !groupSideMayHold(selectedPermissionRole, permission)
                               ? "Platform only: not for a group or member login"
-                              : null;
+                              : !groupPaymentsMayHold(selectedPermissionRole, permission)
+                                ? "Only an IWL admin or the group's own account routes a group's money"
+                                : null;
                           const checked = permissionDraftSet.has(permission);
                           return (
                             <label className="permission-toggle" key={permission}>

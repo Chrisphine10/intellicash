@@ -10,6 +10,11 @@ import {
   encryptCredentials,
   sanitizeCredentials
 } from "../services/integration-credentials";
+import {
+  assertMayConfigureGroupPayments,
+  assertMaySeeGroupPayments,
+  mayConfigureGroupPayments
+} from "../services/group-payment-access";
 
 export const groupPaymentProvidersRouter = Router();
 
@@ -128,17 +133,6 @@ function isConfigurableProvider(value: string): value is ConfigurableProvider {
  * permission would never reach existing RolePermissionTemplate rows and the
  * check would silently pass for nobody.
  */
-function assertMayConfigure(user: AuthenticatedUser | undefined, groupId: string) {
-  if (!user) throw new ApiHttpError(401, "UNAUTHENTICATED", "Please sign in to continue. If you were signed in, your session has ended.");
-  if (user.permissions.includes("groups:write")) return;
-  if (user.role === "GROUP_ACCOUNT" && user.groupId === groupId) return;
-
-  throw new ApiHttpError(
-    403,
-    "FORBIDDEN",
-    "Only a platform admin or the group's own account may change its payment provider."
-  );
-}
 
 /** Confirms the group exists AND is visible to this caller. */
 async function loadGroupInScope(user: AuthenticatedUser | undefined, groupId: string) {
@@ -188,6 +182,7 @@ groupPaymentProvidersRouter.get(
     try {
       const groupId = req.params.groupId as string;
       const group = await loadGroupInScope(req.user, groupId);
+      assertMaySeeGroupPayments(req.user);
 
       const rows = await prisma.groupIntegrationConfig.findMany({ where: { groupId: group.id } });
       const byProvider = new Map(rows.map((row) => [row.provider, row]));
@@ -200,9 +195,7 @@ groupPaymentProvidersRouter.get(
         // Stated explicitly so the UI can tell a group "you are currently using
         // the platform's account" rather than leaving it ambiguous.
         fallback: "Providers left unconfigured use the platform's own credentials.",
-        canConfigure:
-          Boolean(req.user?.permissions.includes("groups:write")) ||
-          (req.user?.role === "GROUP_ACCOUNT" && req.user?.groupId === group.id)
+        canConfigure: mayConfigureGroupPayments(req.user, group.id)
       });
     } catch (error) {
       next(error);
@@ -233,7 +226,7 @@ groupPaymentProvidersRouter.put(
       }
 
       const group = await loadGroupInScope(req.user, groupId);
-      assertMayConfigure(req.user, group.id);
+      assertMayConfigureGroupPayments(req.user, group.id);
 
       const body = upsertSchema.parse(req.body ?? {});
       const incoming = sanitizeCredentials(body.credentials, PROVIDER_KEYS[provider]);
@@ -305,7 +298,7 @@ groupPaymentProvidersRouter.delete(
       }
 
       const group = await loadGroupInScope(req.user, groupId);
-      assertMayConfigure(req.user, group.id);
+      assertMayConfigureGroupPayments(req.user, group.id);
 
       await prisma.groupIntegrationConfig
         .delete({ where: { groupId_provider: { groupId: group.id, provider } } })

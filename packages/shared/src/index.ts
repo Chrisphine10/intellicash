@@ -112,6 +112,19 @@ export const permissions = [
   "payments:read",
   "payments:write",
   "payments:approve",
+  /**
+   * A group's own online payments: how its members pay (M-Pesa / Paystack
+   * switched on or off, where the money is collected, passbook payments), its
+   * own provider accounts and the account its money is settled to.
+   *
+   * Separate from `payments:*`, which is partner wallets and the platform's
+   * fee rules and settlements. `group-payments:configure` routes a group's
+   * money, so only an IWL admin or the group's own account may ever hold it
+   * (`groupPaymentsMayHold`). Charging a member is recording money into the
+   * group's books and stays on `ledger:write`.
+   */
+  "group-payments:read",
+  "group-payments:configure",
   "store:read",
   "store:write",
   "signup-requests:read",
@@ -193,6 +206,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "meeting-keys:write",
     "ledger:read",
     "ledger:write",
+    "group-payments:read",
+    "group-payments:configure",
     "store:read",
     "store:write",
     "votes:read",
@@ -347,8 +362,25 @@ export function groupSideMayHold(role: string, permission: string): boolean {
 }
 
 /** Whether [role] may hold [permission] at all (both rules above). */
+/**
+ * Who may ever route a group's money: an IWL admin, or that group's own
+ * account (the route also checks it is THAT group). Not a partner, lender or
+ * read-only viewer, not a village agent, not a member — whatever a stored
+ * template or a console grant says.
+ */
+export const groupPaymentStewardRoles = ["IWL_ADMIN", "GROUP_ACCOUNT"] as const;
+
+export function groupPaymentsMayHold(role: string, permission: string): boolean {
+  if (permission !== "group-payments:configure") return true;
+  return (groupPaymentStewardRoles as readonly string[]).includes(role);
+}
+
 export function roleMayHold(role: string, permission: string): boolean {
-  return oversightMayHold(role, permission) && groupSideMayHold(role, permission);
+  return (
+    oversightMayHold(role, permission) &&
+    groupSideMayHold(role, permission) &&
+    groupPaymentsMayHold(role, permission)
+  );
 }
 
 export const groupPhases = [
