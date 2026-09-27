@@ -7,7 +7,7 @@
  * into their account rather than the platform's.
  */
 
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env";
 import { ApiHttpError } from "../lib/http";
 import { releaseHold, settleHeldDebit } from "./wallet-service";
@@ -32,6 +32,8 @@ interface IncomingPaymentInput {
   phoneNumber?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
+  /** Where Paystack returns the payer after checkout. Defaults to the partner portal. */
+  returnUrl?: string | null;
 }
 
 interface PayoutInput {
@@ -47,6 +49,15 @@ interface PayoutInput {
   phoneNumber?: string | null;
   recipientCode?: string | null;
   description: string;
+  /**
+   * For M-Pesa: PHONE pays a person (B2C, the default); PAYBILL and TILL pay
+   * a business (B2B). Settlements to a group's own paybill or till use B2B.
+   */
+  mpesaPayoutKind?: "PHONE" | "PAYBILL" | "TILL";
+  /** B2B: the receiving shortcode (paybill or till number). */
+  receiverShortcode?: string | null;
+  /** B2B to a paybill: the account number at that paybill. */
+  accountReference?: string | null;
 }
 
 interface GatewayResult {
@@ -202,22 +213,45 @@ function assertNetworkCredentials(
   }
 }
 
+/**
+ * Daraja access tokens, cached per credential. Keyed on a hash of the consumer
+ * key AND host, never on the provider name: with per-group credentials a
+ * name-keyed cache hands one group's token to another group's collection —
+ * money into the wrong account.
+ */
+const mpesaTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+function mpesaTokenCacheKey(credentials: Record<string, string>) {
+  return createHash("sha256")
+    .update(`${mpesaBaseUrl(credentials)}|${credentials.MPESA_CONSUMER_KEY ?? ""}|${credentials.MPESA_CONSUMER_SECRET ?? ""}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
 async function mpesaToken(credentials: Record<string, string>) {
   const key = credentials.MPESA_CONSUMER_KEY;
   const secret = credentials.MPESA_CONSUMER_SECRET;
   if (!key || !secret) throw new ApiHttpError(400, "MPESA_NOT_CONFIGURED", "M-Pesa credentials are incomplete.");
+
+  const cacheKey = mpesaTokenCacheKey(credentials);
+  const cached = mpesaTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt - 30_000 > Date.now()) return cached.token;
 
   const auth = Buffer.from(`${key}:${secret}`).toString("base64");
   const response = await fetch(
     `${mpesaBaseUrl(credentials)}/oauth/v1/generate?grant_type=client_credentials`,
     { headers: { Authorization: `Basic ${auth}` } }
   );
-  const payload = (await response.json().catch(() => null)) as { access_token?: string } | null;
+  const payload = (await response.json().catch(() => null)) as
+    | { access_token?: string; expires_in?: string | number }
+    | null;
 
   if (!response.ok || !payload?.access_token) {
     throw new ApiHttpError(502, "MPESA_TOKEN_FAILED", "M-Pesa access token request failed.", payload);
   }
 
+  const lifetimeSeconds = Number(payload.expires_in) > 0 ? Number(payload.expires_in) : 3599;
+  mpesaTokenCache.set(cacheKey, { token: payload.access_token, expiresAt: Date.now() + lifetimeSeconds * 1000 });
   return payload.access_token;
 }
 
@@ -259,7 +293,7 @@ export async function initiateIncomingPayment(input: IncomingPaymentInput): Prom
         email: input.customerEmail,
         currency: "KES",
         reference: input.internalReference,
-        callback_url: `${env.WEB_ORIGIN.replace(/\/$/, "")}/partners`,
+        callback_url: input.returnUrl || `${env.WEB_ORIGIN.replace(/\/$/, "")}/partners`,
         metadata: {
           ...input.metadata,
           customerName: input.customerName,
@@ -308,8 +342,12 @@ export async function initiateIncomingPayment(input: IncomingPaymentInput): Prom
       PartyB: shortcode,
       PhoneNumber: phone,
       CallBackURL: credentials.MPESA_CALLBACK_URL || callbackUrl("/api/v1/payments/mpesa/stk-callback"),
-      AccountReference: input.internalReference,
-      TransactionDesc: input.description
+      // Daraja's limits: AccountReference 12 characters, TransactionDesc 13.
+      // Longer values are refused or cut by Safaricom; cut them here so the
+      // member's statement shows something predictable. The full reference
+      // is still what CheckoutRequestID is matched against.
+      AccountReference: input.internalReference.replace(/[^A-Z0-9]/gi, "").slice(-12),
+      TransactionDesc: input.description.slice(0, 13)
     })
   });
   const payload = (await response.json().catch(() => null)) as
@@ -378,6 +416,9 @@ export async function initiatePayout(input: PayoutInput): Promise<GatewayResult>
   }
 
   const shortcode = credentials.MPESA_SHORTCODE;
+  if (input.mpesaPayoutKind === "PAYBILL" || input.mpesaPayoutKind === "TILL") {
+    return initiateMpesaB2B(input, credentials);
+  }
   const phone = input.phoneNumber;
   if (!shortcode || !phone) {
     throw new ApiHttpError(400, "MPESA_PAYOUT_DETAILS_REQUIRED", "M-Pesa payouts require shortcode and recipient phone number.");
@@ -588,10 +629,23 @@ export async function rejectWithdrawal(transactionId: string, actorUserId: strin
   });
 }
 
-export function verifyPaystackSignature(payload: unknown, signature: string | string[] | undefined, secret: string) {
-  if (!signature || Array.isArray(signature)) return false;
+/**
+ * Paystack signs the exact bytes it sent. Pass the RAW body (captured by the
+ * JSON parser's verify hook) whenever it is available: re-serialising the
+ * parsed object can reorder keys or change number formatting and then a
+ * genuine webhook fails the check. The object form is kept for callers that
+ * have nothing else.
+ */
+export function verifyPaystackSignature(
+  payload: unknown,
+  signature: string | string[] | undefined,
+  secret: string
+) {
+  if (!signature || Array.isArray(signature) || !secret) return false;
 
-  const expected = createHmac("sha512", secret).update(JSON.stringify(payload)).digest("hex");
+  const bytes =
+    Buffer.isBuffer(payload) || typeof payload === "string" ? payload : JSON.stringify(payload);
+  const expected = createHmac("sha512", secret).update(bytes).digest("hex");
   const left = Buffer.from(signature);
   const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
@@ -604,4 +658,253 @@ export async function getPaystackSecret() {
 
 export function walletAvailable(balanceCents: number, heldCents: number) {
   return Math.max(0, balanceCents - heldCents);
+}
+
+// ---------------------------------------------------------------------------
+// Verification and settlement calls (payment & settlement layer, Sep 2026).
+//
+// Nothing a provider's CALLBACK says is taken on its own word: the callback
+// URLs are public, so anyone who learns a reference could post "paid". Every
+// success is confirmed by asking the provider directly, with the credentials
+// that collected the money.
+// ---------------------------------------------------------------------------
+
+/** The Paystack secret that collected (or will collect) a payment. */
+export async function paystackSecretFor(groupId?: string | null) {
+  const credentials = await credentialsFor("PAYSTACK", groupId ?? null);
+  return credentials.PAYSTACK_SECRET_KEY || "";
+}
+
+export interface ProviderCheck {
+  /** false in mock mode: nothing was asked, the caller decides what to trust. */
+  checked: boolean;
+  status: "SUCCESS" | "FAILED" | "PENDING";
+  amountCents?: number | null;
+  currency?: string | null;
+  providerTransactionId?: string | null;
+  reason?: string | null;
+  raw?: unknown;
+}
+
+/** GET /transaction/verify/:reference with the collecting account's key. */
+export async function verifyPaystackTransaction(
+  reference: string,
+  groupId?: string | null
+): Promise<ProviderCheck> {
+  if (!env.ENABLE_PAYMENT_NETWORK_CALLS) return { checked: false, status: "SUCCESS" };
+
+  const credentials = await credentialsFor("PAYSTACK", groupId ?? null);
+  assertNetworkCredentials("PAYSTACK", credentials);
+  const response = await fetch(
+    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+    { headers: { Authorization: `Bearer ${credentials.PAYSTACK_SECRET_KEY}` } }
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        status?: boolean;
+        data?: { status?: string; amount?: number; currency?: string; id?: number | string; gateway_response?: string };
+      }
+    | null;
+  if (!response.ok || !payload?.status || !payload.data) {
+    // The provider could not be asked. That is not a failure of the payment:
+    // stay PENDING and let the next callback or poll try again.
+    return { checked: true, status: "PENDING", reason: "Paystack could not be reached to confirm.", raw: payload };
+  }
+  const data = payload.data;
+  const state = String(data.status);
+  const status = state === "success" ? "SUCCESS" : ["failed", "abandoned", "reversed"].includes(state) ? "FAILED" : "PENDING";
+  return {
+    checked: true,
+    status,
+    amountCents: typeof data.amount === "number" ? data.amount : null,
+    currency: data.currency ?? null,
+    providerTransactionId: data.id != null ? String(data.id) : null,
+    reason: data.gateway_response ?? null,
+    raw: payload
+  };
+}
+
+/**
+ * STK Push Query: did the member approve the prompt? Daraja returns no amount
+ * here, but the amount of an STK push is set by us, not by the payer, so the
+ * status is what needs confirming.
+ */
+export async function queryMpesaStk(
+  checkoutRequestId: string,
+  groupId?: string | null
+): Promise<ProviderCheck> {
+  if (!env.ENABLE_PAYMENT_NETWORK_CALLS) return { checked: false, status: "SUCCESS" };
+
+  const credentials = await credentialsFor("MPESA_DARAJA", groupId ?? null);
+  assertNetworkCredentials("MPESA_DARAJA", credentials);
+  const shortcode = credentials.MPESA_SHORTCODE ?? "";
+  const requestTimestamp = timestamp();
+  const token = await mpesaToken(credentials);
+  const response = await fetch(`${mpesaBaseUrl(credentials)}/mpesa/stkpushquery/v1/query`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      BusinessShortCode: shortcode,
+      Password: Buffer.from(`${shortcode}${credentials.MPESA_PASSKEY ?? ""}${requestTimestamp}`).toString("base64"),
+      Timestamp: requestTimestamp,
+      CheckoutRequestID: checkoutRequestId
+    })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { ResultCode?: string | number; ResultDesc?: string; errorCode?: string; errorMessage?: string }
+    | null;
+  // "The transaction is being processed" comes back as an error code.
+  if (!payload || payload.errorCode === "500.001.1001" || payload.ResultCode === undefined) {
+    return { checked: true, status: "PENDING", reason: payload?.errorMessage ?? payload?.ResultDesc ?? null, raw: payload };
+  }
+  return {
+    checked: true,
+    status: String(payload.ResultCode) === "0" ? "SUCCESS" : "FAILED",
+    reason: payload.ResultDesc ?? null,
+    raw: payload
+  };
+}
+
+/** Daraja B2B: pay a paybill (BusinessPayBill) or a till (BusinessBuyGoods). */
+async function initiateMpesaB2B(input: PayoutInput, credentials: Record<string, string>): Promise<GatewayResult> {
+  const shortcode = credentials.MPESA_SHORTCODE;
+  if (!shortcode || !input.receiverShortcode) {
+    throw new ApiHttpError(
+      400,
+      "MPESA_PAYOUT_DETAILS_REQUIRED",
+      "M-Pesa B2B payouts need our shortcode and the receiving paybill or till."
+    );
+  }
+  const token = await mpesaToken(credentials);
+  const paybill = input.mpesaPayoutKind === "PAYBILL";
+  const response = await fetch(`${mpesaBaseUrl(credentials)}/mpesa/b2b/v1/paymentrequest`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      Initiator: credentials.MPESA_INITIATOR_NAME,
+      SecurityCredential: credentials.MPESA_SECURITY_CREDENTIAL,
+      CommandID: paybill ? "BusinessPayBill" : "BusinessBuyGoods",
+      SenderIdentifierType: "4",
+      RecieverIdentifierType: paybill ? "4" : "2",
+      Amount: asWholeShillings(input.amountCents),
+      PartyA: shortcode,
+      PartyB: input.receiverShortcode,
+      AccountReference: (input.accountReference || input.internalReference).slice(0, 13),
+      Remarks: input.description.slice(0, 100),
+      QueueTimeOutURL: callbackUrl("/api/v1/payments/mpesa/b2b-timeout"),
+      ResultURL: callbackUrl("/api/v1/payments/mpesa/b2b-result"),
+      Occasion: input.internalReference
+    })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { ConversationID?: string; OriginatorConversationID?: string; ResponseCode?: string }
+    | null;
+  if (!response.ok || !payload?.ConversationID) {
+    throw new ApiHttpError(502, "MPESA_B2B_FAILED", "M-Pesa B2B payout request failed.", payload);
+  }
+  return { providerReference: payload.ConversationID, metadata: payload as Record<string, unknown> };
+}
+
+/**
+ * Daraja Transaction Status. Asynchronous: the answer arrives at the result
+ * URL. Used to resolve a payout whose outcome is UNKNOWN, never to retry it.
+ */
+export async function requestMpesaTransactionStatus(input: {
+  transactionId: string;
+  originatorConversationId?: string | null;
+  occasion: string;
+}) {
+  if (!env.ENABLE_PAYMENT_NETWORK_CALLS) {
+    return { requested: false, payload: { reason: "Payment network calls are off (mock mode)." } };
+  }
+  const credentials = await credentialsFor("MPESA_DARAJA", null);
+  assertNetworkCredentials("MPESA_DARAJA", credentials);
+  const token = await mpesaToken(credentials);
+  const response = await fetch(`${mpesaBaseUrl(credentials)}/mpesa/transactionstatus/v1/query`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      Initiator: credentials.MPESA_INITIATOR_NAME,
+      SecurityCredential: credentials.MPESA_SECURITY_CREDENTIAL,
+      CommandID: "TransactionStatusQuery",
+      TransactionID: input.transactionId,
+      OriginatorConversationID: input.originatorConversationId ?? undefined,
+      PartyA: credentials.MPESA_SHORTCODE,
+      IdentifierType: "4",
+      ResultURL: callbackUrl("/api/v1/payments/mpesa/status-result"),
+      QueueTimeOutURL: callbackUrl("/api/v1/payments/mpesa/status-timeout"),
+      Remarks: "Settlement check",
+      Occasion: input.occasion
+    })
+  });
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  return { requested: response.ok, payload };
+}
+
+/** Paystack: the current state of a transfer. */
+export async function fetchPaystackTransfer(reference: string): Promise<ProviderCheck> {
+  if (!env.ENABLE_PAYMENT_NETWORK_CALLS) return { checked: false, status: "PENDING" };
+  const credentials = await credentialsFor("PAYSTACK", null);
+  assertNetworkCredentials("PAYSTACK", credentials);
+  const response = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(reference)}`, {
+    headers: { Authorization: `Bearer ${credentials.PAYSTACK_SECRET_KEY}` }
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { status?: boolean; data?: { status?: string; amount?: number; transfer_code?: string; reason?: string } }
+    | null;
+  if (!response.ok || !payload?.status || !payload.data) {
+    return { checked: true, status: "PENDING", reason: "Paystack could not be reached.", raw: payload };
+  }
+  const state = String(payload.data.status);
+  return {
+    checked: true,
+    status: state === "success" ? "SUCCESS" : ["failed", "reversed", "rejected"].includes(state) ? "FAILED" : "PENDING",
+    amountCents: payload.data.amount ?? null,
+    providerTransactionId: payload.data.transfer_code ?? null,
+    reason: payload.data.reason ?? state,
+    raw: payload
+  };
+}
+
+/**
+ * A Paystack transfer recipient for a group's bank or mobile-money account,
+ * created once when the destination is approved.
+ */
+export async function createPaystackTransferRecipient(input: {
+  type: "PAYSTACK_BANK" | "PAYSTACK_MOBILE_MONEY";
+  accountName: string;
+  accountNumber: string;
+  bankCode: string;
+}) {
+  if (!env.ENABLE_PAYMENT_NETWORK_CALLS) {
+    return { recipientCode: `mock-RCP_${input.accountNumber.slice(-4)}`, accountName: input.accountName };
+  }
+  const credentials = await credentialsFor("PAYSTACK", null);
+  assertNetworkCredentials("PAYSTACK", credentials);
+  const response = await fetch("https://api.paystack.co/transferrecipient", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${credentials.PAYSTACK_SECRET_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: input.type === "PAYSTACK_MOBILE_MONEY" ? "mobile_money" : "kepss",
+      name: input.accountName,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: "KES"
+    })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { status?: boolean; message?: string; data?: { recipient_code?: string; details?: { account_name?: string } } }
+    | null;
+  if (!response.ok || !payload?.status || !payload.data?.recipient_code) {
+    throw new ApiHttpError(
+      502,
+      "PAYSTACK_RECIPIENT_FAILED",
+      payload?.message ?? "Paystack could not register this account.",
+      payload
+    );
+  }
+  return {
+    recipientCode: payload.data.recipient_code,
+    accountName: payload.data.details?.account_name ?? input.accountName
+  };
 }

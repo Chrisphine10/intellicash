@@ -33,10 +33,11 @@ interface PolicyResponse {
   canConfigure: boolean;
 }
 
+// The group's real funds. There is no separate "shares fund": shares are held
+// in the loan fund, which is what they are lent out from.
 const FUND_LABELS: Record<string, string> = {
   SOCIAL: "Welfare (social) fund",
-  SAVINGS: "Shares fund",
-  INTERNAL_LOAN: "Loan fund"
+  INTERNAL_LOAN: "Loan fund (holds the shares)"
 };
 
 export default function GroupPolicyPage({ params }: { params: Promise<{ id: string }> }) {
@@ -144,7 +145,7 @@ export default function GroupPolicyPage({ params }: { params: Promise<{ id: stri
       ) : null}
 
       <article className="data-card">
-        <form onSubmit={save}>
+        <form className="stacked-form policy-form" onSubmit={save}>
           <label>
             Default loan term (months)
             <input

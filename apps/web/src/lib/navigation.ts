@@ -175,6 +175,14 @@ export const navigationItems: NavigationItem[] = [
     priority: { default: 10, IWL_ADMIN: 10 }
   },
   {
+    label: "Reconciliation",
+    href: "/dashboard/payments/reconciliation",
+    icon: WalletCards,
+    roles: ["IWL_ADMIN"],
+    section: "setup",
+    priority: { default: 12, IWL_ADMIN: 12 }
+  },
+  {
     label: "Users",
     href: "/dashboard/users",
     icon: UserCog,

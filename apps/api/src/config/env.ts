@@ -59,6 +59,19 @@ const envSchema = z.object({
    * the same functions directly with their own clock.
    */
   ENABLE_MEETING_REMINDERS: envBoolean(process.env.NODE_ENV !== "test"),
+  /**
+   * Pays collected group money out to each group's approved destination
+   * (M-Pesa B2C/B2B, Paystack transfer). Off by default: holding and paying
+   * out members' money needs the owner's go-ahead. With it off, settlement
+   * batches are still built so they can be reviewed.
+   */
+  ENABLE_AUTOMATED_SETTLEMENT: envBoolean(false),
+  /** A batch above this needs a payments:approve sign-off before it is paid. */
+  SETTLEMENT_AUTO_MAX_CENTS: z.coerce.number().int().min(0).default(5_000_000),
+  /** No payouts to a destination for this long after it becomes active. */
+  SETTLEMENT_DESTINATION_COOLOFF_HOURS: z.coerce.number().min(0).default(24),
+  /** Seconds a fee quote stays valid. */
+  PAYMENT_QUOTE_TTL_SECONDS: z.coerce.number().int().min(30).default(600),
   GOOGLE_MAPS_BROWSER_API_KEY: z.string().default(""),
   INTELLIAUDIT_LLM_PROVIDER: z.string().default("disabled"),
   INTELLIAUDIT_LLM_BASE_URL: z.string().default(""),

@@ -36,6 +36,10 @@ const routeTitles = [
     title: "Users"
   },
   {
+    match: "/dashboard/payments/reconciliation",
+    title: "Reconciliation"
+  },
+  {
     match: "/dashboard/payments",
     title: "Payments"
   },
@@ -86,6 +90,10 @@ const routeTitles = [
   {
     match: "/dashboard/integrations",
     title: "Integrations"
+  },
+  {
+    match: "/dashboard/settings/payments",
+    title: "Payment fees"
   },
   {
     match: "/dashboard/settings",
@@ -444,10 +452,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <span className="nav-section-label">{section.label}</span>
               {section.items.map((item) => {
                 const Icon = item.icon;
+                // The most specific item wins: on /dashboard/payments/reconciliation
+                // only Reconciliation lights up, not Payments as well.
+                const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
                 const active =
                   item.href === "/dashboard"
                     ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
+                    : matches(item.href) &&
+                      !visibleNavigation.some((other) => other.href.length > item.href.length && matches(other.href));
 
                 return (
                   <Link

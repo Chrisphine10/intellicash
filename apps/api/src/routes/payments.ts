@@ -10,15 +10,17 @@ import {
   createPaymentReference,
   failIncomingTransaction,
   failWithdrawal,
-  getPaystackSecret,
   initiateIncomingPayment,
   initiatePayout,
+  paystackSecretFor,
   rejectWithdrawal,
   updateTransactionGatewayFields,
   verifyPaystackSignature,
   walletAvailable
 } from "../services/payment-service";
 import { completeGroupPayment, failGroupPayment } from "../services/group-payment-service";
+import { credentialGroupId } from "../services/payment-settings-service";
+import { completeSettlement, failSettlement, markSettlementUnknown } from "../services/settlement-service";
 import { holdFunds } from "../services/wallet-service";
 
 const router = Router();
@@ -419,6 +421,11 @@ router.post("/payment-requests/:id/reject-withdrawal", requireAuth("payments:app
   }
 });
 
+/**
+ * Store a provider event once. The insert IS the check: `eventId` is unique,
+ * so of two copies arriving together exactly one is created and the other
+ * reads as a duplicate. (A find-then-create let both through the find.)
+ */
 async function storeWebhook(input: {
   provider: string;
   eventId: string;
@@ -426,23 +433,37 @@ async function storeWebhook(input: {
   signatureValid?: boolean;
   payload: unknown;
 }) {
-  const existing = await prisma.paymentWebhookEvent.findUnique({
-    where: { eventId: input.eventId }
-  });
-  if (existing) return { event: existing, duplicate: true };
-
-  const event = await prisma.paymentWebhookEvent.create({
-    data: {
-      provider: input.provider,
-      eventId: input.eventId,
-      reference: input.reference,
-      signatureValid: input.signatureValid ?? true,
-      payloadJson: JSON.stringify(input.payload),
-      processed: false
+  try {
+    const event = await prisma.paymentWebhookEvent.create({
+      data: {
+        provider: input.provider,
+        eventId: input.eventId,
+        reference: input.reference,
+        signatureValid: input.signatureValid ?? true,
+        payloadJson: JSON.stringify(input.payload),
+        processed: false
+      }
+    });
+    return { event, duplicate: false };
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      const existing = await prisma.paymentWebhookEvent.findUnique({ where: { eventId: input.eventId } });
+      if (existing) return { event: existing, duplicate: true };
     }
-  });
+    throw error;
+  }
+}
 
-  return { event, duplicate: false };
+async function markProcessed(eventId: string) {
+  await prisma.paymentWebhookEvent.update({ where: { id: eventId }, data: { processed: true } });
+}
+
+function itemsToRecord<T extends { Name?: string; Key?: string; Value?: unknown }>(items: T[] | undefined) {
+  return Object.fromEntries(
+    (items ?? [])
+      .map((item) => [item.Name ?? item.Key, item.Value] as const)
+      .filter((pair): pair is readonly [string, unknown] => Boolean(pair[0]))
+  );
 }
 
 router.post("/payments/mpesa/stk-callback", async (req, res, next) => {
@@ -470,33 +491,28 @@ router.post("/payments/mpesa/stk-callback", async (req, res, next) => {
     });
 
     if (!webhook.duplicate) {
-      const metadataItems = callback?.CallbackMetadata?.Item ?? [];
-      const metadata = Object.fromEntries(
-        metadataItems
-          .filter((item): item is { Name: string; Value: unknown } => Boolean(item.Name))
-          .map((item) => [item.Name, item.Value])
-      );
+      const metadata = itemsToRecord(callback?.CallbackMetadata?.Item);
 
       if (callback?.ResultCode === 0) {
-        const success = {
-          ...metadata,
-          providerTransactionId:
-            typeof metadata.MpesaReceiptNumber === "string" ? metadata.MpesaReceiptNumber : undefined
-        };
+        const receipt = typeof metadata.MpesaReceiptNumber === "string" ? metadata.MpesaReceiptNumber : undefined;
         // The reference belongs to either a partner wallet transaction or a
         // group payment; the one that doesn't own it is a no-op.
-        await completeIncomingTransaction(reference, success);
-        await completeGroupPayment(reference, success);
+        await completeIncomingTransaction(reference, { ...metadata, providerTransactionId: receipt });
+        await completeGroupPayment(reference, {
+          source: "MPESA_CALLBACK",
+          // Daraja reports whole shillings.
+          amountCents: typeof metadata.Amount === "number" ? Math.round(metadata.Amount * 100) : null,
+          phoneNumber: metadata.PhoneNumber != null ? String(metadata.PhoneNumber) : null,
+          providerTransactionId: receipt ?? null,
+          raw: metadata
+        });
       } else {
         const reason = callback?.ResultDesc ?? "M-Pesa payment failed.";
         await failIncomingTransaction(reference, reason, payload);
         await failGroupPayment(reference, reason, payload);
       }
 
-      await prisma.paymentWebhookEvent.update({
-        where: { id: webhook.event.id },
-        data: { processed: true }
-      });
+      await markProcessed(webhook.event.id);
     }
 
     ok(res, { received: true });
@@ -504,60 +520,69 @@ router.post("/payments/mpesa/stk-callback", async (req, res, next) => {
     next(error);
   }
 });
+
+/** B2C and B2B results share one shape; both serve wallets and settlements. */
+async function handlePayoutResult(kind: "b2c" | "b2b", body: unknown) {
+  const payload = body as {
+    Result?: {
+      ConversationID?: string;
+      OriginatorConversationID?: string;
+      ResultCode?: number | string;
+      ResultDesc?: string;
+      TransactionID?: string;
+      ResultParameters?: { ResultParameter?: Array<{ Key?: string; Value?: unknown }> };
+    };
+  };
+  const result = payload.Result;
+  const reference = result?.ConversationID ?? result?.OriginatorConversationID;
+  if (!reference) throw new ApiHttpError(400, "MPESA_REFERENCE_MISSING", "M-Pesa payout reference is missing.");
+
+  const webhook = await storeWebhook({
+    provider: "MPESA_DARAJA",
+    eventId: `mpesa-${kind}-${reference}-${result?.ResultCode ?? "unknown"}`,
+    reference,
+    payload
+  });
+  if (webhook.duplicate) return;
+
+  const metadata = itemsToRecord(result?.ResultParameters?.ResultParameter);
+  const receipt =
+    typeof metadata.TransactionReceipt === "string" ? metadata.TransactionReceipt : result?.TransactionID ?? null;
+
+  if (String(result?.ResultCode) === "0") {
+    if (kind === "b2c") await completeWithdrawal(reference, { ...metadata, providerTransactionId: receipt ?? undefined });
+    await completeSettlement(reference, receipt, payload);
+  } else {
+    const reason = result?.ResultDesc ?? "M-Pesa payout failed.";
+    if (kind === "b2c") await failWithdrawal(reference, reason, payload);
+    await failSettlement(reference, reason, payload);
+  }
+  await markProcessed(webhook.event.id);
+}
 
 router.post("/payments/mpesa/b2c-result", async (req, res, next) => {
   try {
-    const payload = req.body as {
-      Result?: {
-        ConversationID?: string;
-        OriginatorConversationID?: string;
-        ResultCode?: number;
-        ResultDesc?: string;
-        ResultParameters?: { ResultParameter?: Array<{ Key?: string; Value?: unknown }> };
-      };
-    };
-    const result = payload.Result;
-    const reference = result?.ConversationID ?? result?.OriginatorConversationID;
-
-    if (!reference) throw new ApiHttpError(400, "MPESA_REFERENCE_MISSING", "M-Pesa payout reference is missing.");
-
-    const webhook = await storeWebhook({
-      provider: "MPESA_DARAJA",
-      eventId: `mpesa-b2c-${reference}-${result?.ResultCode ?? "unknown"}`,
-      reference,
-      payload
-    });
-
-    if (!webhook.duplicate) {
-      const metadataItems = result?.ResultParameters?.ResultParameter ?? [];
-      const metadata = Object.fromEntries(
-        metadataItems
-          .filter((item): item is { Key: string; Value: unknown } => Boolean(item.Key))
-          .map((item) => [item.Key, item.Value])
-      );
-
-      if (result?.ResultCode === 0) {
-        await completeWithdrawal(reference, {
-          ...metadata,
-          providerTransactionId:
-            typeof metadata.TransactionReceipt === "string" ? metadata.TransactionReceipt : undefined
-        });
-      } else {
-        await failWithdrawal(reference, result?.ResultDesc ?? "M-Pesa payout failed.", payload);
-      }
-
-      await prisma.paymentWebhookEvent.update({
-        where: { id: webhook.event.id },
-        data: { processed: true }
-      });
-    }
-
+    await handlePayoutResult("b2c", req.body);
     ok(res, { received: true });
   } catch (error) {
     next(error);
   }
 });
 
+router.post("/payments/mpesa/b2b-result", async (req, res, next) => {
+  try {
+    await handlePayoutResult("b2b", req.body);
+    ok(res, { received: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * A payout timed out in Safaricom's queue. For a partner withdrawal this was
+ * already treated as a failure. For a settlement it is NOT: the money may
+ * still have moved, so it becomes UNKNOWN and is checked, never re-sent.
+ */
 router.post("/payments/mpesa/b2c-timeout", async (req, res, next) => {
   try {
     const payload = req.body as { Result?: { ConversationID?: string; OriginatorConversationID?: string } };
@@ -565,6 +590,7 @@ router.post("/payments/mpesa/b2c-timeout", async (req, res, next) => {
 
     if (reference) {
       await failWithdrawal(reference, "M-Pesa payout timed out.", payload);
+      await markSettlementUnknown(reference, "M-Pesa payout timed out in the queue.", payload);
     }
 
     ok(res, { received: true });
@@ -573,15 +599,72 @@ router.post("/payments/mpesa/b2c-timeout", async (req, res, next) => {
   }
 });
 
+router.post("/payments/mpesa/b2b-timeout", async (req, res, next) => {
+  try {
+    const payload = req.body as { Result?: { ConversationID?: string; OriginatorConversationID?: string } };
+    const reference = payload.Result?.ConversationID ?? payload.Result?.OriginatorConversationID;
+    if (reference) await markSettlementUnknown(reference, "M-Pesa B2B payout timed out in the queue.", payload);
+    ok(res, { received: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Answer to a Transaction Status query sent for an UNKNOWN settlement. The
+ * query's Occasion carries our settlement reference.
+ */
+router.post("/payments/mpesa/status-result", async (req, res, next) => {
+  try {
+    const payload = req.body as {
+      Result?: {
+        ResultCode?: number | string;
+        ResultDesc?: string;
+        ReferenceData?: { ReferenceItem?: { Key?: string; Value?: unknown } | Array<{ Key?: string; Value?: unknown }> };
+        ResultParameters?: { ResultParameter?: Array<{ Key?: string; Value?: unknown }> };
+      };
+    };
+    const result = payload.Result;
+    const referenceItems = result?.ReferenceData?.ReferenceItem;
+    const references = itemsToRecord(Array.isArray(referenceItems) ? referenceItems : referenceItems ? [referenceItems] : []);
+    const parameters = itemsToRecord(result?.ResultParameters?.ResultParameter);
+    const occasion = typeof references.Occasion === "string" ? references.Occasion : null;
+
+    if (occasion) {
+      await storeWebhook({
+        provider: "MPESA_DARAJA",
+        eventId: `mpesa-status-${occasion}-${Date.now()}`,
+        reference: occasion,
+        payload
+      });
+      const status = String(parameters.TransactionStatus ?? "").toLowerCase();
+      const receipt = typeof parameters.ReceiptNo === "string" ? parameters.ReceiptNo : null;
+      if (String(result?.ResultCode) === "0" && status === "completed") {
+        await completeSettlement(occasion, receipt, payload);
+      } else if (String(result?.ResultCode) === "0" && (status === "failed" || status === "cancelled")) {
+        await failSettlement(occasion, `M-Pesa reports the payout ${status}.`, payload);
+      }
+      // Anything else leaves it UNKNOWN for a person.
+    }
+    ok(res, { received: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/payments/mpesa/status-timeout", (_req, res) => {
+  ok(res, { received: true });
+});
+
+/**
+ * Paystack webhooks. The payment is looked up BEFORE the signature is
+ * checked, because the secret belongs to whoever collected the money: a
+ * group collecting into its own Paystack account signs with its own key.
+ * Looking the row up changes nothing; nothing settles until the signature
+ * passes. The signature is computed over the raw bytes Paystack sent.
+ */
 router.post("/payments/paystack/webhook", async (req, res, next) => {
   try {
-    const secret = await getPaystackSecret();
-    const signatureValid = Boolean(secret) && verifyPaystackSignature(req.body, req.headers["x-paystack-signature"], secret);
-
-    if (!signatureValid) {
-      throw new ApiHttpError(400, "PAYSTACK_SIGNATURE_INVALID", "Paystack webhook signature is invalid.");
-    }
-
     const payload = req.body as {
       event?: string;
       data?: {
@@ -589,10 +672,27 @@ router.post("/payments/paystack/webhook", async (req, res, next) => {
         reference?: string;
         transfer_code?: string;
         status?: string;
+        amount?: number;
+        currency?: string;
         gateway_response?: string;
+        reason?: string;
       };
     };
     const reference = payload.data?.reference ?? payload.data?.transfer_code;
+
+    const owner = reference
+      ? await prisma.groupPayment.findFirst({
+          where: { OR: [{ providerReference: reference }, { internalReference: reference }] },
+          select: { groupId: true, collectionMode: true }
+        })
+      : null;
+    const secret = await paystackSecretFor(owner ? credentialGroupId(owner.collectionMode, owner.groupId) : null);
+    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const signatureValid = verifyPaystackSignature(rawBody ?? req.body, req.headers["x-paystack-signature"], secret);
+
+    if (!signatureValid) {
+      throw new ApiHttpError(400, "PAYSTACK_SIGNATURE_INVALID", "Paystack webhook signature is invalid.");
+    }
     if (!payload.event || !reference) {
       throw new ApiHttpError(400, "PAYSTACK_REFERENCE_MISSING", "Paystack webhook reference is missing.");
     }
@@ -607,13 +707,18 @@ router.post("/payments/paystack/webhook", async (req, res, next) => {
 
     if (!webhook.duplicate) {
       if (payload.event === "charge.success") {
-        const success = {
-          providerTransactionId: payload.data?.id ? String(payload.data.id) : undefined,
+        const providerTransactionId = payload.data?.id ? String(payload.data.id) : undefined;
+        await completeIncomingTransaction(reference, {
+          providerTransactionId,
           status: payload.data?.status,
           gatewayResponse: payload.data?.gateway_response
-        };
-        await completeIncomingTransaction(reference, success);
-        await completeGroupPayment(reference, success);
+        });
+        await completeGroupPayment(reference, {
+          source: "PAYSTACK_WEBHOOK",
+          amountCents: typeof payload.data?.amount === "number" ? payload.data.amount : null,
+          providerTransactionId: providerTransactionId ?? null,
+          raw: payload.data
+        });
       } else if (payload.event === "charge.failed") {
         const reason = payload.data?.gateway_response ?? "Paystack payment failed.";
         await failIncomingTransaction(reference, reason, payload);
@@ -623,14 +728,14 @@ router.post("/payments/paystack/webhook", async (req, res, next) => {
           providerTransactionId: payload.data?.id ? String(payload.data.id) : undefined,
           status: payload.data?.status
         });
+        await completeSettlement(reference, payload.data?.transfer_code ?? null, payload.data);
       } else if (payload.event === "transfer.failed" || payload.event === "transfer.reversed") {
-        await failWithdrawal(reference, payload.data?.gateway_response ?? payload.event, payload);
+        const reason = payload.data?.reason ?? payload.data?.gateway_response ?? payload.event;
+        await failWithdrawal(reference, reason, payload);
+        await failSettlement(reference, reason, payload.data);
       }
 
-      await prisma.paymentWebhookEvent.update({
-        where: { id: webhook.event.id },
-        data: { processed: true }
-      });
+      await markProcessed(webhook.event.id);
     }
 
     ok(res, { received: true });

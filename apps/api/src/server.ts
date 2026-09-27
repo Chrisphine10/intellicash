@@ -3,6 +3,7 @@ import { createApp } from "./app";
 import { prisma } from "./lib/prisma";
 import { assertDurableDatabase } from "./lib/storage-safety";
 import { startMeetingReminderLoop } from "./services/meeting-reminder-service";
+import { startSettlementLoop } from "./services/settlement-service";
 
 // Before accepting a single savings entry, make sure the database will still
 // be here after the next deploy.
@@ -18,8 +19,12 @@ const server = app.listen(env.API_PORT, () => {
 // reminders. It never starts a meeting.
 const stopMeetingReminders = startMeetingReminderLoop();
 
+// Builds settlement batches; pays them only when ENABLE_AUTOMATED_SETTLEMENT is on.
+const stopSettlements = startSettlementLoop();
+
 async function shutdown() {
   stopMeetingReminders();
+  stopSettlements();
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

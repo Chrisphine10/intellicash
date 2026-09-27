@@ -12,6 +12,7 @@ import { authRouter } from "./routes/auth";
 import { cyclesRouter } from "./routes/cycles";
 import { externalLoansRouter } from "./routes/external-loans";
 import { groupPaymentsRouter } from "./routes/group-payments";
+import { paymentAdminRouter } from "./routes/payment-admin";
 import { groupPolicyRouter } from "./routes/group-policy";
 import { consistencyRouter } from "./routes/consistency";
 import { publicJoinRouter } from "./routes/public-join";
@@ -125,7 +126,19 @@ export function createApp(
       credentials: true
     })
   );
-  app.use(express.json({ limit: "5mb" }));
+  app.use(
+    express.json({
+      limit: "5mb",
+      // Payment webhooks are signed over the exact bytes the provider sent.
+      // Keep those bytes for the payment callback paths only; re-serialising
+      // the parsed body can change them and fail a genuine signature.
+      verify: (req, _res, buffer) => {
+        if ((req as { url?: string }).url?.startsWith("/api/v1/payments/")) {
+          (req as unknown as { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+        }
+      }
+    })
+  );
 
   app.get("/health", (_req, res) => {
     ok(res, { status: "ok", service: "intellicash-api" });
@@ -175,6 +188,7 @@ export function createApp(
   app.use("/api/v1", externalLoansRouter);
   app.use("/api/v1", groupPaymentsRouter);
   app.use("/api/v1", groupPaymentProvidersRouter);
+  app.use("/api/v1", paymentAdminRouter);
   app.use("/api/v1", cyclesRouter);
   app.use("/api/v1", shareOutsRouter);
   app.use("/api/v1", restoreBundleRouter);

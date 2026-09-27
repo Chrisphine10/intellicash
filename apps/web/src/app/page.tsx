@@ -529,6 +529,14 @@ export default function LandingPage() {
               </figure>
             ))}
           </div>
+          {/* Members pay into their group online, through these. */}
+          <div className="hero-payments" aria-label="Members pay with M-Pesa and Paystack">
+            <span className="hero-payments-label">Pay into your group with</span>
+            <div className="hero-payments-logos">
+              <img alt="M-Pesa" height={96} loading="lazy" src="/brand/payments/mpesa.png" width={231} />
+              <img alt="Paystack" height={96} loading="lazy" src="/brand/payments/paystack.png" width={455} />
+            </div>
+          </div>
         </div>
       </section>
 

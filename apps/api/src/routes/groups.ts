@@ -40,6 +40,7 @@ import type { AuthenticatedUser } from "../middleware/auth";
 import { appendAuditEvent } from "../services/audit-service";
 import { createNotifications } from "../services/notification-service";
 import { dispatchAfterResponse } from "../services/outbound-sms-service";
+import { findPaymentForPhoneEntry, linkPhoneEntry } from "../services/group-payment-service";
 import { notifySharePurchases, sendMeetingSummaries } from "../services/meeting-sms-service";
 import {
   generateAndQueueMemberOtp,
@@ -373,7 +374,13 @@ const meetingLedgerEntrySchema = z.object({
   loan: loanTermsSchema.optional(),
   description: z.string().trim().max(500).optional(),
   externalReference: z.string().max(120).optional(),
-  clientRequestId: z.string().trim().min(4).max(120).optional()
+  clientRequestId: z.string().trim().min(4).max(120).optional(),
+  /**
+   * The gateway payment this entry records, when the member paid online. The
+   * server posts a verified payment itself, so the phone's copy of it is
+   * linked, never written a second time.
+   */
+  groupPaymentId: z.string().trim().min(4).max(64).optional()
 });
 
 const meetingLedgerBatchSchema = z.object({
@@ -489,6 +496,15 @@ const meetingLedgerRules: Record<
   // a group cannot distribute welfare money it has already spent.
   WELFARE_SHARE_OUT: { fundType: "SOCIAL", direction: "DEBIT", label: "Welfare share-out" }
 };
+
+/**
+ * The fund and direction a ledger type moves money in — the ONE definition,
+ * used by meetings, the web and online payments alike, so they can never book
+ * the same kind of money into different funds.
+ */
+export function ledgerRuleFor(type: string) {
+  return (meetingLedgerRules as Partial<Record<string, { fundType: FundType; direction: "CREDIT" | "DEBIT"; label: string }>>)[type] ?? null;
+}
 
 const memberSelect = {
   id: true,
@@ -858,9 +874,20 @@ async function notifyMeetingActive(groupId: string, title: string) {
 // Exported so the welfare module can reuse the SAME money path — signing,
 // cycle stamping and the overdraw guard — instead of writing its own.
 export async function resolveFundAccount(tx: Prisma.TransactionClient, groupId: string, fundType: FundType) {
-  const fundAccount = await tx.fundAccount.findUnique({
+  let fundAccount = await tx.fundAccount.findUnique({
     where: { groupId_type: { groupId, type: fundType } }
   });
+
+  // Every group is meant to hold all the standard funds, but groups made by
+  // the FLOURISH import were created with none, so their first entry failed.
+  // An account with no ledger rows holds zero, so creating it here changes no
+  // balance — it only lets the money land where it belongs.
+  if (!fundAccount && (fundTypes as readonly string[]).includes(fundType)) {
+    const group = await tx.group.findUnique({ where: { id: groupId }, select: { id: true } });
+    if (group) {
+      fundAccount = await tx.fundAccount.create({ data: { groupId, type: fundType, balanceCents: 0 } });
+    }
+  }
 
   if (!fundAccount) {
     throw new ApiHttpError(404, "FUND_ACCOUNT_NOT_FOUND", `No ${fundType} fund account exists for this group.`);
@@ -1142,6 +1169,36 @@ async function appendMeetingLedgerEntry(
   meetingId: string,
   entry: z.infer<typeof meetingLedgerEntrySchema>
 ) {
+  // Paid online? Then the server may already have posted it on verification.
+  // Answer with that entry instead of writing the money twice. Phones already
+  // in the field (2.6.x) send no payment id but put the M-Pesa receipt or the
+  // payment id in the reference, which finds the same payment.
+  const onlinePayment = await findPaymentForPhoneEntry(tx, groupId, entry);
+  if (onlinePayment?.ledgerEntryId) {
+    const posted = await tx.ledgerEntry.findUnique({
+      where: { id: onlinePayment.ledgerEntryId },
+      include: {
+        member: { select: nestedMemberSelect },
+        meeting: { select: { id: true, title: true, status: true } },
+        fundAccount: { select: { id: true, type: true, currency: true } }
+      }
+    });
+    if (posted) {
+      if (posted.amountCents !== entry.amountCents) {
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            event: "ledger.online_payment.amount_differs",
+            groupPaymentId: onlinePayment.id,
+            posted: posted.amountCents,
+            sent: entry.amountCents
+          })
+        );
+      }
+      return posted;
+    }
+  }
+
   const rule = meetingLedgerRules[entry.type];
   const fundAccount = await resolveFundAccount(tx, groupId, rule.fundType);
 
@@ -1175,7 +1232,7 @@ async function appendMeetingLedgerEntry(
     }
   }
 
-  return appendLedgerEntry(tx, {
+  const saved = await appendLedgerEntry(tx, {
     groupId,
     memberId: entry.memberId,
     meetingId,
@@ -1188,6 +1245,10 @@ async function appendMeetingLedgerEntry(
     clientRequestId: entry.clientRequestId,
     loanTerms: entry.type === "INTERNAL_LOAN_DISBURSEMENT" ? entry.loan : undefined
   });
+  // The phone got there before the server: claim the payment for this entry
+  // so verification never posts it again.
+  if (onlinePayment) await linkPhoneEntry(tx, onlinePayment, saved.id);
+  return saved;
 }
 
 /**

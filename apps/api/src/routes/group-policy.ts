@@ -43,8 +43,18 @@ export const POLICY_DEFAULTS = {
   smsMeetingSummaryEnabled: false
 } as const;
 
-/** Which funds an expense may legitimately be drawn from. */
-const EXPENSE_FUND_TYPES = ["SOCIAL", "SAVINGS", "INTERNAL_LOAN"] as const;
+/**
+ * Which funds an expense may legitimately be drawn from — real fund types only.
+ *
+ * "SAVINGS" used to be offered here, but no SAVINGS fund exists: a group's
+ * shares are held in the INTERNAL_LOAN (loan) fund. It is still accepted from
+ * older phones and read from older rows, as the loan fund it always meant.
+ */
+const EXPENSE_FUND_TYPES = ["SOCIAL", "INTERNAL_LOAN"] as const;
+const expenseFundTypeSchema = z.preprocess(
+  (value) => (value === "SAVINGS" ? "INTERNAL_LOAN" : value),
+  z.enum(EXPENSE_FUND_TYPES)
+);
 
 /**
  * The effective policy for a group.
@@ -59,7 +69,7 @@ export async function policyFor(groupId: string) {
   return {
     groupId,
     defaultLoanTermMonths: row?.defaultLoanTermMonths ?? POLICY_DEFAULTS.defaultLoanTermMonths,
-    expenseFundType: row?.expenseFundType ?? POLICY_DEFAULTS.expenseFundType,
+    expenseFundType: row?.expenseFundType === "SAVINGS" ? "INTERNAL_LOAN" : row?.expenseFundType ?? POLICY_DEFAULTS.expenseFundType,
     loanInterestRateBps: row?.loanInterestRateBps ?? POLICY_DEFAULTS.loanInterestRateBps,
     smsSharePurchaseEnabled: row?.smsSharePurchaseEnabled ?? POLICY_DEFAULTS.smsSharePurchaseEnabled,
     smsMeetingSummaryEnabled:
@@ -127,7 +137,7 @@ const updateSchema = z.object({
   // 1..60 months. A zero-month loan would be due the instant it is made, and a
   // term measured in years is not a VSLA loan.
   defaultLoanTermMonths: z.number().int().min(1).max(60).optional(),
-  expenseFundType: z.enum(EXPENSE_FUND_TYPES).optional(),
+  expenseFundType: expenseFundTypeSchema.optional(),
   // 0..2000 bps a month, i.e. up to 20%. VSLA groups commonly charge 10%
   // (1000). The ceiling is deliberate: a typo of 10000 for "10%" would charge
   // 100% a month and, on a flat rate over a 12-month term, bill a member

@@ -4268,3 +4268,50 @@ html[data-theme="dark"] .hero-phone {
     padding-inline: 18px;
   }
 }
+
+/* Hero: the ways members pay into their group, under the phones. */
+.hero-payments {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.hero-payments-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft, #4b5563);
+}
+
+.hero-payments-logos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.hero-payments-logos img {
+  height: 44px;
+  width: auto;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.12);
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  /* Side by side even where the hero shows a single narrow phone. */
+  .hero-payments-logos {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-inline: -24px;
+  }
+
+  .hero-payments-logos img {
+    height: 30px;
+    padding: 6px 8px;
+  }
+}

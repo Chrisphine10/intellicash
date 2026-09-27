@@ -13,10 +13,10 @@ export default function NotFound() {
           <p>Check the link, or return to the dashboard to continue working.</p>
         </div>
         <div className="app-error-actions">
-          <a className="primary-action" href="/dashboard">
+          <a className="button" href="/dashboard">
             Open dashboard
           </a>
-          <a className="secondary-action" href="/">
+          <a className="button secondary" href="/">
             Go home
           </a>
         </div>

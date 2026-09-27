@@ -9994,3 +9994,498 @@ html[data-theme="dark"] .sidebar-logo {
   border-top: 0;
   padding-top: 8px;
 }
+
+/* Payments: inline reason form and the fee breakdown table. */
+.note-action {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  max-width: 420px;
+}
+
+.note-action label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.fee-breakdown {
+  width: 100%;
+  max-width: 420px;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.fee-breakdown td,
+.fee-breakdown th {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.fee-breakdown td:last-child,
+.fee-breakdown th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Payment forms: one field per row, label above its input. */
+.stacked-form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.stacked-form label:not(.checkbox-field) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stacked-form label > input:not([type="checkbox"]):not([type="radio"]),
+.stacked-form label > select,
+.stacked-form label > textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.stacked-form label > input:focus-visible,
+.stacked-form label > select:focus-visible,
+.stacked-form label > textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--green-dark);
+}
+
+.stacked-form .form-actions {
+  margin-top: 4px;
+}
+
+/* Body content of a card sits inside its padding, not against its border. */
+.data-card > :is(form, .provider-switches, .choice-cards, .account-summary, .quiet-details, .form-actions, .fee-breakdown),
+.data-card > .provider-switch {
+  margin: 16px 20px 20px;
+}
+
+.data-card > .account-summary + .account-summary {
+  margin-top: 0;
+}
+
+.payment-options {
+  display: grid;
+  gap: 16px;
+}
+
+.payment-options > .form-actions {
+  margin-top: 0;
+}
+
+.stacked-form fieldset {
+  display: grid;
+  gap: 8px;
+}
+
+/* Money in the reconciliation totals keeps its cents on one line. */
+.payments-stats .stat-card strong {
+  white-space: nowrap;
+  font-size: clamp(18px, 2.1vw, 26px);
+}
+
+/* Group payments page: status strip, provider switches, choice cards. */
+.payment-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill img {
+  height: 16px;
+  width: auto;
+  border-radius: 3px;
+  background: #ffffff;
+}
+
+.status-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+
+.status-pill.is-on {
+  border-color: color-mix(in srgb, var(--green-dark) 35%, var(--line));
+  background: var(--tint-positive);
+  color: var(--green-dark);
+}
+
+.status-pill.is-on::before {
+  background: var(--green);
+}
+
+.status-pill.is-off {
+  color: var(--muted);
+}
+
+.status-pill.is-off::before {
+  background: var(--line);
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+.status-pill.is-wait {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  background: var(--tint-warning);
+  color: var(--ink-warning);
+}
+
+.status-pill.is-wait::before {
+  background: var(--gold);
+}
+
+.payment-tabs {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.provider-switches {
+  display: grid;
+  gap: 10px;
+}
+
+.provider-switch {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.provider-switch:hover {
+  background: var(--surface-hover);
+}
+
+.provider-switch.is-on {
+  border-color: color-mix(in srgb, var(--green-dark) 40%, var(--line));
+  background: var(--tint-positive);
+}
+
+.provider-switch-logo {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 36px;
+  object-fit: contain;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 4px 8px;
+}
+
+.provider-switch-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provider-switch-text strong {
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.provider-switch-text small,
+.choice-card small,
+.account-summary small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+input.toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+input.toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: var(--shadow-theme-sm);
+  transition: transform 0.15s ease;
+}
+
+input.toggle:checked {
+  background: var(--green);
+}
+
+input.toggle:checked::after {
+  transform: translateX(20px);
+}
+
+input.toggle:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+input.toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: 14px;
+  cursor: pointer;
+}
+
+.choice-card input {
+  margin-top: 3px;
+  accent-color: var(--green-dark);
+}
+
+.choice-card span {
+  display: grid;
+  gap: 4px;
+}
+
+.choice-card strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.choice-card.is-selected {
+  border-color: var(--green-dark);
+  background: var(--tint-positive);
+  box-shadow: inset 0 0 0 1px var(--green-dark);
+}
+
+.account-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--green-dark) 35%, var(--line));
+  border-radius: var(--radius-control);
+  background: var(--tint-positive);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.account-summary > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.account-summary.is-waiting {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  background: var(--tint-warning);
+}
+
+.account-summary .form-actions {
+  margin: 0;
+}
+
+.quiet-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+
+.quiet-details > summary {
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quiet-details[open] > summary {
+  margin-bottom: 10px;
+}
+
+.form-actions-note {
+  align-self: center;
+  color: var(--ink-warning);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* A long form in columns of fields, its button and notes under them. */
+.stacked-form.is-columns {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  column-gap: 16px;
+}
+
+.stacked-form.is-columns > .form-actions,
+.stacked-form.is-columns > button,
+.stacked-form.is-columns > p,
+.stacked-form.is-columns > .dashboard-notice {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+/* Used by several pages but never defined, so their cards sat edge to edge. */
+.dashboard-grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .payment-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .payment-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .data-card > :is(form, .provider-switches, .choice-cards, .account-summary, .quiet-details, .form-actions, .fee-breakdown),
+  .data-card > .provider-switch {
+    margin: 12px;
+  }
+
+  .provider-switch {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .provider-switch-logo {
+    width: 64px;
+    height: 30px;
+    padding: 3px 5px;
+  }
+
+  .status-pill {
+    white-space: normal;
+  }
+}
+
+/* Plain labelled fields in a filter row (dates, provider, amount) look like
+   the rest of the console's controls instead of bare browser inputs. */
+.dashboard-filter-row:has(> label:not([class])) {
+  justify-content: flex-start;
+  gap: 16px;
+}
+
+.dashboard-filter-row > label:not([class]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.dashboard-filter-row > label:not([class]) > :is(input, select) {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  color: var(--ink);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.dashboard-filter-row > label:not([class]) > input[type="number"] {
+  width: 140px;
+}
+
+.data-card > header > .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.stacked-form.policy-form {
+  max-width: 760px;
+}
+
+/* Loose paragraphs in a card body keep the card's inner margin. */
+.data-card > p {
+  margin: 14px 20px;
+  line-height: 1.55;
+}
+
+/* Long variable names (MPESA_B2C_TIMEOUT_URL) in a narrow setup panel wrapped
+   into the next column's label; let them break and let the grid collapse. */
+.credential-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.credential-field {
+  min-width: 0;
+}
+
+.credential-field > span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

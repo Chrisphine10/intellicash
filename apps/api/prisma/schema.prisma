@@ -96,7 +96,6 @@ model Session {
   lastUsedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
 }
 
 model ApiKey {
@@ -196,10 +195,10 @@ model Programme {
   /// Optional modules, switched on per programme by an IWL admin. A group has
   /// a module when ANY programme it belongs to has it on. Both start off:
   /// Intelli-Store is not open to groups yet, and voting is opt-in.
-  storeEnabled  Boolean @default(false)
-  votingEnabled Boolean @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  storeEnabled  Boolean  @default(false)
+  votingEnabled Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   partner              Partner                    @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   partnerLinks         ProgrammePartner[]
@@ -624,7 +623,6 @@ model StoreCreditRepayment {
 
   request     StoreCreditRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   installment StoreCreditInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
-
 }
 
 model AgentBookingRequest {
@@ -721,6 +719,9 @@ model Group {
   storeCreditRequests      StoreCreditRequest[]
   externalLoanApplications ExternalLoanApplication[]
   groupPayments            GroupPayment[]
+  paymentSettings          GroupPaymentSettings?
+  settlementDestinations   SettlementDestination[]
+  settlements              Settlement[]
   integrationConfigs       GroupIntegrationConfig[]
   polls                    Poll[]
   joinRequests             GroupJoinRequest[]
@@ -1648,26 +1649,26 @@ model Attendance {
 /// clients that know nothing about cycles keep working; the backfill fills them
 /// in. Making it required would have been a breaking change to a live system.
 model Cycle {
-  id             String    @id @default(cuid())
-  groupId        String
-  number         Int
-  startedAt      DateTime  @default(now())
-  closedAt       DateTime?
+  id                 String    @id @default(cuid())
+  groupId            String
+  number             Int
+  startedAt          DateTime  @default(now())
+  closedAt           DateTime?
   /// ACTIVE | CLOSED. Exactly one ACTIVE cycle per group is expected, but it is
   /// not a DB constraint - SQLite cannot express a partial unique index here,
   /// so openCycleFor() enforces it transactionally instead.
-  status         String    @default("ACTIVE")
+  status             String    @default("ACTIVE")
   /// Set when the cycle is closed by a share-out, so the payout that ended a
   /// cycle is traceable from the cycle itself.
-  closedByUserId String?
+  closedByUserId     String?
   /// The phone share-out that closed this cycle, by the id the phone gave it.
   /// A phone that lost the reply and sends the same share-out again is answered
   /// with what was already recorded instead of closing a second cycle. NULL for
   /// every cycle closed any other way.
   closedByShareOutId String?
-  notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   group           Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   meetings        Meeting[]
@@ -1961,7 +1962,6 @@ model Vote {
 
   group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-
 }
 
 model CreditScore {
@@ -1972,7 +1972,6 @@ model CreditScore {
   computedAt    DateTime @default(now())
 
   group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
 }
 
 model AuditEvent {
@@ -1986,7 +1985,6 @@ model AuditEvent {
   createdAt   DateTime @default(now())
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-
 }
 
 /// Per-group payment provider credentials.
@@ -2471,12 +2469,181 @@ model GroupPayment {
   completedAt           DateTime?
   updatedAt             DateTime  @updatedAt
 
-  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  member  Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
-  meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  // ---- Payment & settlement layer (Sep 2026) ----
+  // `amountCents` above stays "what the member was charged" (old phones read
+  // it). It always equals groupAmountCents + platformFeeCents + providerFeeCents.
+  /// What the group receives. The ONLY figure that enters the VSLA ledger.
+  groupAmountCents    Int       @default(0)
+  /// IWL's platform fee.
+  platformFeeCents    Int       @default(0)
+  /// The payment provider's cost, grossed up so the group is never short.
+  providerFeeCents    Int       @default(0)
+  /// The fee rules used, frozen, so later price changes never rewrite history.
+  feeSnapshotJson     String?
+  /// SYSTEM (IWL collects, then settles) | OWN_ACCOUNT (lands with the group)
+  collectionMode      String    @default("SYSTEM")
+  /// INITIATED | PROCESSING | SUCCESSFUL | VERIFIED | LEDGER_POSTED |
+  /// FAILED | CANCELLED | EXPIRED | REVERSED | REFUNDED | HELD |
+  /// COMPLETED_LEGACY (before this layer; the phone posted it)
+  state               String    @default("INITIATED")
+  /// COLLECTED (in IWL's account) | RECEIVABLE (inside the group's own account) | NONE
+  platformFeeStatus   String    @default("NONE")
+  verifiedAt          DateTime?
+  /// The amount the provider reported, as checked against amountCents.
+  verifiedAmountCents Int?
+  /// The ledger entry this payment was posted as. Unique: one payment, one entry.
+  ledgerEntryId       String?   @unique
+  /// NOT_REQUIRED | PENDING | IN_SETTLEMENT | SETTLED | SETTLEMENT_FAILED | UNKNOWN
+  settlementStatus    String    @default("NOT_REQUIRED")
+  settlementId        String?
+
+  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member     Member?     @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  meeting    Meeting?    @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
 
   @@index([groupId, status])
   @@index([providerReference])
+  @@index([providerTransactionId])
+  @@index([state])
+  @@index([settlementStatus, groupId])
+}
+
+/**
+ * A fee band. PLATFORM rules are IWL's fee, banded on the amount the group
+ * receives. PROVIDER rules are a gateway's cost (fixed + percentage), banded
+ * on the total charged, and grossed up so the group still receives exactly
+ * what the member asked for. An edit retires the rule and creates a new
+ * version; old payments keep the snapshot they were quoted with.
+ */
+model FeeRule {
+  id          String   @id @default(cuid())
+  /// PLATFORM | PROVIDER
+  kind        String
+  /// MPESA_DARAJA | PAYSTACK; null = any provider
+  provider    String?
+  minCents    Int      @default(0)
+  /// Inclusive upper bound; null = no upper bound
+  maxCents    Int?
+  fixedCents  Int      @default(0)
+  /// Basis points (150 = 1.5%)
+  percentBps  Int      @default(0)
+  active      Boolean  @default(true)
+  version     Int      @default(1)
+  /// The rule this one replaced, when edited.
+  replacesId  String?
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([kind, active])
+}
+
+/**
+ * How a group collects gateway payments. Absent row = inferred (see payment-settings-service).
+ */
+model GroupPaymentSettings {
+  id                   String   @id @default(cuid())
+  groupId              String   @unique
+  /// SYSTEM | OWN_ACCOUNT
+  collectionMode       String   @default("SYSTEM")
+  /// JSON array of enabled providers, e.g. ["MPESA_DARAJA","PAYSTACK"]
+  enabledProvidersJson String   @default("[]")
+  /// Members may pay into the group from their own passbook.
+  memberSelfPayEnabled Boolean  @default(false)
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Where a group's settled money is paid. Proposed by the group side, approved
+ * by a DIFFERENT platform user holding payments:approve; one is ACTIVE per
+ * group. Never edited in place: a change is a new row.
+ */
+model SettlementDestination {
+  id               String    @id @default(cuid())
+  groupId          String
+  /// MPESA_PHONE (B2C) | MPESA_PAYBILL | MPESA_TILL (B2B) | PAYSTACK_BANK | PAYSTACK_MOBILE_MONEY
+  type             String
+  /// MPESA_DARAJA | PAYSTACK: the rail that pays out
+  provider         String
+  accountNumber    String
+  accountName      String
+  /// Paystack bank code, or the mobile-money operator code
+  bankCode         String?
+  /// Paybill account reference
+  accountReference String?
+  /// Paystack transfer recipient, created on approval
+  recipientCode    String?
+  currency         String    @default("KES")
+  /// PROPOSED | ACTIVE | REJECTED | RETIRED
+  status           String    @default("PROPOSED")
+  proposedById     String?
+  verifiedById     String?
+  verifiedAt       DateTime?
+  retiredAt        DateTime?
+  note             String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  settlements Settlement[]
+
+  @@index([groupId, status])
+}
+
+/**
+ * One payout of a group's collected money to its active destination.
+ */
+model Settlement {
+  id                String    @id @default(cuid())
+  groupId           String
+  destinationId     String
+  amountCents       Int
+  currency          String    @default("KES")
+  /// AWAITING_APPROVAL | QUEUED | PROCESSING | SETTLED | FAILED | UNKNOWN | CANCELLED
+  status            String    @default("QUEUED")
+  provider          String
+  internalReference String    @unique
+  providerReference String?
+  providerReceipt   String?
+  approvedById      String?
+  approvedAt        DateTime?
+  settledAt         DateTime?
+  failureReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  group       Group                 @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  destination SettlementDestination @relation(fields: [destinationId], references: [id], onDelete: Restrict)
+  payments    GroupPayment[]
+  attempts    SettlementAttempt[]
+
+  @@index([groupId, status])
+  @@index([status])
+  @@index([providerReference])
+}
+
+/**
+ * Every call made to a provider for a settlement, request and answer kept.
+ */
+model SettlementAttempt {
+  id           String   @id @default(cuid())
+  settlementId String
+  provider     String
+  /// STARTED | ACCEPTED | REJECTED | ERROR | RESULT_SUCCESS | RESULT_FAILED | TIMEOUT | STATUS_QUERY | MANUAL
+  result       String
+  requestJson  String?
+  responseJson String?
+  createdAt    DateTime @default(now())
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
 }
 
 /**

@@ -5,6 +5,7 @@ import { createApp } from "../apps/api/src/app";
 import { prisma } from "../apps/api/src/lib/prisma";
 import { assertDurableDatabase } from "../apps/api/src/lib/storage-safety";
 import { startMeetingReminderLoop } from "../apps/api/src/services/meeting-reminder-service";
+import { startSettlementLoop } from "../apps/api/src/services/settlement-service";
 
 // This process serves the API as well as the web app, so the same rule
 // applies: do not take a group's money into storage that gets wiped.
@@ -49,12 +50,19 @@ async function start() {
   } else {
     console.log("Meeting reminders: off (set ENABLE_MEETING_REMINDERS=true to send them)");
   }
+
+  // Groups collected payments into settlement batches. Paying them out is a
+  // separate switch (ENABLE_AUTOMATED_SETTLEMENT), off unless set.
+  stopSettlements = startSettlementLoop();
+  console.log(`Settlements: batches built; payouts ${process.env.ENABLE_AUTOMATED_SETTLEMENT === "true" ? "ON" : "off"}`);
 }
 
 let stopMeetingReminders: () => void = () => undefined;
+let stopSettlements: () => void = () => undefined;
 
 async function shutdown() {
   stopMeetingReminders();
+  stopSettlements();
   if (!server) {
     await prisma.$disconnect();
     process.exit(0);

@@ -76,6 +76,23 @@ export default function SettingsPage() {
         <StatCard icon={<ShieldCheck size={20} />} label="Integrations" note={integrations ? "Sandbox providers ready" : "Restricted for this account"} value={integrations ? `${integrations.configured}/${integrations.total}` : "Scoped"} />
       </section>
 
+      <article className="data-card">
+        <header>
+          <div>
+            <h3>Online payments</h3>
+            <p>The IWL fee and provider charges added when members pay online, and the reconciliation of what was collected and paid out to groups.</p>
+          </div>
+        </header>
+        <div className="form-actions">
+          <Link className="button" href="/dashboard/settings/payments">
+            Payment fees
+          </Link>
+          <Link className="button secondary" href="/dashboard/payments/reconciliation">
+            Reconciliation
+          </Link>
+        </div>
+      </article>
+
       <ProgrammeModulesCard />
 
       <section className="two-column">

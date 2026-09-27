@@ -32,7 +32,7 @@ export default function AppError({
           <p>Please try again. If it keeps happening, send the reference below to IntelliCash support.</p>
         </div>
         <div className="app-error-actions">
-          <button type="button" className="primary-action" onClick={reset}>
+          <button type="button" className="button" onClick={reset}>
             <RefreshCw size={16} />
             Try again
           </button>

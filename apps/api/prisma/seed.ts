@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { defaultPlatformBands } from "../src/services/fee-engine";
 import { assertSafeToWipe } from "./destructive-guard";
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
@@ -143,6 +144,12 @@ export async function seedDatabase(options: { databaseIsEmpty?: boolean } = {}) 
   await prisma.meeting.deleteMany();
   await prisma.member.deleteMany();
   await prisma.programmeGroup.deleteMany();
+  await prisma.settlementAttempt.deleteMany();
+  await prisma.groupPayment.deleteMany();
+  await prisma.settlement.deleteMany();
+  await prisma.settlementDestination.deleteMany();
+  await prisma.groupPaymentSettings.deleteMany();
+  await prisma.feeRule.deleteMany();
   await prisma.group.deleteMany();
   await prisma.villageAgent.deleteMany();
   await prisma.programmePartner.deleteMany();
@@ -1410,6 +1417,37 @@ export async function seedDatabase(options: { databaseIsEmpty?: boolean } = {}) 
         ]
       }
     }
+  });
+
+  // Every seeded ledger row belongs to its group's current cycle,
+  // as production's rows do after the cycle backfill. Without this the first
+  // new entry opened a cycle and every earlier row dropped out of cycle-scoped
+  // figures (a member's shares read KSh 500 instead of KSh 8,000).
+  for (const group of await prisma.group.findMany({ select: { id: true, cycleNumber: true, createdAt: true } })) {
+    const cycleId = `cyc_${group.id}_${group.cycleNumber}`;
+    await prisma.cycle.upsert({
+      where: { id: cycleId },
+      create: { id: cycleId, groupId: group.id, number: group.cycleNumber, startedAt: group.createdAt, status: "ACTIVE" },
+      update: {}
+    });
+    await prisma.ledgerEntry.updateMany({ where: { groupId: group.id, cycleId: null }, data: { cycleId } });
+    // Meetings are left unstamped on purpose: the seed keeps some open, and a
+    // share-out refuses to end a cycle that still has an open meeting.
+  }
+
+  // Suggested IWL platform fee bands, INACTIVE: payments carry no fee until
+  // an administrator switches them on (and the phones then show them).
+  await prisma.feeRule.createMany({
+    data: defaultPlatformBands.map((band) => ({
+      kind: "PLATFORM",
+      provider: null,
+      minCents: band.minCents,
+      maxCents: band.maxCents ?? null,
+      fixedCents: band.fixedCents,
+      percentBps: band.percentBps,
+      active: false,
+      note: "Suggested band (seed)"
+    }))
   });
 }
 

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { fundTypes } from "@intellicash/shared";
 
 import { prisma as defaultClient } from "../src/lib/prisma";
 import { normalisePhone } from "../src/lib/phone";
@@ -412,7 +413,9 @@ export async function importFlourishOnboarding(client: PrismaClient = defaultCli
       summary.groupsUpdated += 1;
     } else {
       const created = await client.group.create({
-        data: { ...data, code: nextCode(row.countyCode) },
+        // Every group holds the standard funds; without them the group's first
+        // entry fails with FUND_ACCOUNT_NOT_FOUND.
+        data: { ...data, code: nextCode(row.countyCode), fundAccounts: { create: fundTypes.map((type) => ({ type })) } },
         select: { id: true }
       });
       groupId = created.id;
