@@ -1,6 +1,6 @@
 # Release notes: online payments (draft, 27 Sep 2026)
 
-**Status: built, tested locally and rehearsed on a copy of production; not deployed.** Phone: 2.7.0 (build 28), local database version 15.
+**Status: server LIVE on 27 Sep 2026 (main 9e6f49e; deploy GUARD OK, backup intellicash-20260927-175757). Phone AAB built (Downloads/IntelliCash-2.7.0-build28.aab, SHA-256 844d5a64…d813), not yet uploaded to Play.** Fee rules are inactive and automatic payouts are off. Phone: 2.7.0 (build 28), local database version 15.
 Server: migration `20260926190000_payment_settlement_layer`.
 
 ## For groups and members
