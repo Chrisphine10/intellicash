@@ -1,0 +1,113 @@
+{
+  "form": "IWL-VSLA-01 Group Profile & Needs Assessment",
+  "export": "2026-10-02 12:04:13",
+  "reviewed": "2026-10-02",
+  "note": "Kobo _uuid -> group code (post-merge). Codes only: no names or phone numbers belong in this public repo.",
+  "submissions": {
+    "d0a496a8-15e9-4c51-a9a4-5ecf6e76bd8d": {
+      "index": 1,
+      "code": "IWL-EMB-0018"
+    },
+    "ee19243b-d4a5-405e-8547-a0bcc2e75115": {
+      "index": 2,
+      "code": "IWL-EMB-0010"
+    },
+    "e4b83a7e-c84f-417a-8c7b-9bbc3fee837a": {
+      "index": 3,
+      "code": "IWL-EMB-0008",
+      "why": "register lists Manyatta/Kithimu, form Runyenjes/Kagaari South — sub-county conflict reported, not changed"
+    },
+    "0f976e71-73a0-41b4-8825-ab7ebcb56467": {
+      "index": 4,
+      "code": "IWL-EMB-0012"
+    },
+    "52ba8a08-fcc4-47f8-86f0-0598cbb804d0": {
+      "index": 5,
+      "rejected": "duplicate submission of #4 (same group: share value, welfare, cycle, members); its money columns are shifted (savings typed as minimum shares). Kept #4, which has sound share data — decided 2 Oct 2026."
+    },
+    "029eb65a-8f18-4fc2-95b9-d478a83ca57c": {
+      "index": 6,
+      "code": "IWL-EMB-0015"
+    },
+    "f70ef164-2849-4351-b403-f4714dadd69b": {
+      "index": 7,
+      "code": "IWL-EMB-0007"
+    },
+    "a49daf90-6de8-42fc-91b2-fdc97a06d448": {
+      "index": 8,
+      "code": "IWL-EMB-0003",
+      "why": "'Nduva Happy Women' is the register's 'Happy Women Group'"
+    },
+    "ec7a30a6-b1fd-455d-91ad-f256327f8d25": {
+      "index": 9,
+      "code": "IWL-EMB-0016",
+      "why": "Kathangari, not Kariguri: same words, different order"
+    },
+    "3912329b-e6bc-40d4-b6de-44c474315c5e": {
+      "index": 10,
+      "code": "IWL-EMB-0019"
+    },
+    "c476ed03-8870-48e4-95f0-576743e9be68": {
+      "index": 11,
+      "code": "IWL-EMB-0020"
+    },
+    "fa71a991-806b-44a0-959b-43a75b95f8db": {
+      "index": 12,
+      "code": "IWL-EMB-0014"
+    },
+    "68f4d357-1c9f-482a-872d-405d54a41bd0": {
+      "index": 13,
+      "code": "IWL-EMB-0021"
+    },
+    "a3e263d8-cdca-420d-b762-eff8f7ae3aea": {
+      "index": 14,
+      "code": "IWL-EMB-0009"
+    },
+    "90dc8138-0bfd-4fff-bab3-85248e10babb": {
+      "index": 15,
+      "code": "IWL-EMB-0001"
+    },
+    "816602fb-c76b-43b4-8fac-bd8d43b40e26": {
+      "index": 16,
+      "code": "IWL-EMB-0006"
+    },
+    "203fa67e-39e2-4eb0-8188-c914f0090d6e": {
+      "index": 17,
+      "code": "IWL-EMB-0017"
+    },
+    "d2c03a75-3d8c-4f73-a173-5b28060edea1": {
+      "index": 18,
+      "code": "IWL-EMB-0022"
+    },
+    "e85ffb7c-8d1b-4c1e-81f6-347fde042aea": {
+      "index": 19,
+      "code": "IWL-KRG-0014"
+    },
+    "f9af38c3-3edf-4acc-ba9a-48037bd5ee49": {
+      "index": 20,
+      "code": "IWL-EMB-0023"
+    },
+    "8ececec4-9b46-4def-aa62-945d0f0082eb": {
+      "index": 21,
+      "code": "IWL-EMB-0024"
+    },
+    "3a4f93af-a060-4d36-97f4-bc914265dd86": {
+      "index": 22,
+      "code": "IWL-KRG-0015"
+    },
+    "a1768746-047e-4336-991d-0d3a392fab9e": {
+      "index": 23,
+      "code": "IWL-KRG-0003"
+    },
+    "09e43aeb-74b4-4e7c-99ae-f3c4fd304238": {
+      "index": 24,
+      "code": "IWL-KRG-0001",
+      "why": "the register code; the phone-registered Tupande Joy Farmers carries it after the duplicate merge"
+    },
+    "5ce71487-0c6f-4076-9523-71aaf13152b4": {
+      "index": 25,
+      "code": "IWL-KRG-0002",
+      "why": "'One Faith Interdenomination Fellowship' is the register's 'One Faith Women Group'"
+    }
+  }
+}

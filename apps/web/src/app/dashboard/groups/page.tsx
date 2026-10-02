@@ -11,6 +11,7 @@ import { DataTable } from "../../../components/dashboard/data-table";
 import type { AgentRow, GroupRow, ProgrammeRow, User } from "../../../components/dashboard/types";
 import { groupAgentNames } from "../../../types/dashboard";
 import { sourceLabel } from "../../../features/reports/model";
+import { PossibleDuplicatesCard } from "../../../features/groups/possible-duplicates-card";
 
 const defaultGroupForm = {
   name: "",
@@ -500,6 +501,8 @@ export default function GroupsPage() {
           </section>
         </div>
       ) : null}
+
+      {user?.role === "IWL_ADMIN" ? <PossibleDuplicatesCard /> : null}
 
       <section className="data-card">
         <header>

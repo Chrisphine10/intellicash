@@ -64,7 +64,7 @@ async function assessmentSeries(groupIds: string[]): Promise<{
   units: PairedUnit[];
   perGroup: Array<{
     groupId: string;
-    first: { percentage: number; version: number; at: Date } | null;
+    first: { percentage: number; version: number; at: Date; asked: number; total: number } | null;
     latest: { percentage: number; version: number; at: Date } | null;
     readings: number;
     comparable: boolean;
@@ -78,9 +78,13 @@ async function assessmentSeries(groupIds: string[]): Promise<{
       templateVersion: true,
       templateId: true,
       createdAt: true,
-      visit: { select: { groupId: true } }
+      breakdownJson: true,
+      visit: { select: { groupId: true, startedAt: true } }
     },
-    orderBy: { createdAt: "asc" }
+    // By when the visit HAPPENED. A baseline back-recorded months later (the
+    // May 2026 needs assessment, imported in October) is still the first
+    // reading; ordering by when the row was written made it the latest.
+    orderBy: [{ visit: { startedAt: "asc" } }, { createdAt: "asc" }]
   });
 
   const byGroup = new Map<string, typeof assessments>();
@@ -99,7 +103,7 @@ async function assessmentSeries(groupIds: string[]): Promise<{
     const first = rows[0];
     const latest = rows.at(-1);
 
-    if (latest && latest.createdAt >= freshThreshold) freshGroupIds.add(groupId);
+    if (latest && latest.visit.startedAt >= freshThreshold) freshGroupIds.add(groupId);
 
     // The same reading twice is not two readings.
     const hasPair = rows.length >= 2 && first !== undefined && latest !== undefined;
@@ -115,9 +119,11 @@ async function assessmentSeries(groupIds: string[]): Promise<{
 
     perGroup.push({
       groupId,
-      first: first ? { percentage: first.percentage, version: first.templateVersion, at: first.createdAt } : null,
+      first: first
+        ? { percentage: first.percentage, version: first.templateVersion, at: first.visit.startedAt, ...coverage(first.breakdownJson) }
+        : null,
       latest: latest
-        ? { percentage: latest.percentage, version: latest.templateVersion, at: latest.createdAt }
+        ? { percentage: latest.percentage, version: latest.templateVersion, at: latest.visit.startedAt }
         : null,
       readings: rows.length,
       comparable: hasPair ? comparable : true
@@ -125,6 +131,23 @@ async function assessmentSeries(groupIds: string[]): Promise<{
   }
 
   return { units, perGroup, freshGroupIds };
+}
+
+/**
+ * How much of the scorecard a reading actually covers. A baseline taken from
+ * the needs-assessment form answers about a dozen questions and records the
+ * rest as not asked, so its percentage is over those alone — shown with it.
+ */
+function coverage(breakdownJson: string): { asked: number; total: number } {
+  try {
+    const score = JSON.parse(breakdownJson) as {
+      sections?: Array<{ questions?: Array<{ answered?: boolean; excluded?: boolean }> }>;
+    };
+    const questions = (score.sections ?? []).flatMap((section) => section.questions ?? []);
+    return { asked: questions.filter((q) => q.answered && !q.excluded).length, total: questions.length };
+  } catch {
+    return { asked: 0, total: 0 };
+  }
 }
 
 interface EnterpriseReading {

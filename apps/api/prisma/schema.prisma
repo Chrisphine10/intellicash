@@ -736,6 +736,7 @@ model Group {
   documents                GroupDocument[]
   actionItems              VisitActionItem[]
   enterprises              GroupEnterprise[]
+  needsAssessments         GroupNeedsAssessment[]
 }
 
 /// One field visit: one agent, one group, one occasion.
@@ -796,15 +797,16 @@ model GroupVisit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  group        Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  villageAgent VillageAgent?            @relation(fields: [villageAgentId], references: [id])
-  submittedBy  User?                    @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
-  revisions    GroupVisitRevision[]
-  assessment   GroupVisitAssessment?
-  attachments  Attachment[]
-  mentorship   VisitMentorshipSession[]
-  ratings      VisitMentorshipRating[]
-  actionItems  VisitActionItem[]        @relation("ActionItemRaisedAt")
+  group           Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  villageAgent    VillageAgent?            @relation(fields: [villageAgentId], references: [id])
+  submittedBy     User?                    @relation("GroupVisitSubmitter", fields: [submittedByUserId], references: [id])
+  revisions       GroupVisitRevision[]
+  assessment      GroupVisitAssessment?
+  attachments     Attachment[]
+  mentorship      VisitMentorshipSession[]
+  ratings         VisitMentorshipRating[]
+  actionItems     VisitActionItem[]        @relation("ActionItemRaisedAt")
+  needsAssessment GroupNeedsAssessment?
 
   @@index([groupId, startedAt])
   @@index([villageAgentId, startedAt])
@@ -2794,4 +2796,62 @@ model UserLoginOtp {
   createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A group's needs assessment as reported in the field (Kobo form
+/// IWL-VSLA-01, May 2026 onwards): its profile, governance, the figures the
+/// group reported, records inspection, training needs, linkages and digital
+/// readiness. The first one is the group's baseline.
+///
+/// Reported figures are context, never the books: nothing here becomes a
+/// ledger entry or an opening balance, which must be validated and minuted.
+/// Leaders' phone numbers are not stored.
+model GroupNeedsAssessment {
+  id              String   @id @default(cuid())
+  groupId         String
+  visitId         String   @unique
+  sourceSystem    String
+  /// The submission's own id (Kobo `_uuid`): what makes a re-import a no-op.
+  sourceReference String   @unique
+  formVersion     String?
+  /// Date-only, anchored at UTC midday so no timezone moves it a day.
+  assessedOn      DateTime
+  fieldOfficer    String?
+  enumerator      String?
+
+  totalMembers          Int?
+  womenMembers          Int?
+  youthMembers          Int?
+  membersWithDisability Int?
+  dateFormed            DateTime?
+  completedCycles       Int?
+  currentCycle          Int?
+
+  shareValueCents     Int?
+  totalSavingsCents   Int?
+  loanPortfolioCents  Int?
+  arrearsCents        Int?
+  par30Cents          Int?
+  welfareBalanceCents Int?
+  interestCents       Int?
+
+  smartphoneMembers Int?
+  basicPhoneMembers Int?
+  literacyPct       Int?
+  digitalChampion   Boolean?
+  gpsLatitude       Float?
+  gpsLongitude      Float?
+  gpsPrecisionM     Float?
+
+  /// Every other answer, keyed by section and question.
+  answersJson      String
+  /// Checks the submission failed (default GPS, figures that do not add up).
+  qualityFlagsJson String   @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  group Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  visit GroupVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, assessedOn])
 }

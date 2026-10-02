@@ -28,6 +28,8 @@ import { enterprisesRouter } from "./routes/enterprises";
 import { groupPaymentProvidersRouter } from "./routes/group-payment-providers";
 import { groupJoinRouter } from "./routes/group-join";
 import { groupsRouter } from "./routes/groups";
+import { groupDuplicatesRouter } from "./routes/group-duplicates";
+import { needsAssessmentsRouter } from "./routes/needs-assessments";
 import { memberRolesRouter } from "./routes/member-roles";
 import { integrationsRouter } from "./routes/integrations";
 import { intelliStoreRouter } from "./routes/intelli-store";
@@ -171,6 +173,8 @@ export function createApp(
   app.use("/api/v1", uploadsRouter);
   app.use("/api/v1", apiKeysRouter);
   app.use("/api/v1", adminRouter);
+  app.use("/api/v1", groupDuplicatesRouter);
+  app.use("/api/v1", needsAssessmentsRouter);
   app.use("/api/v1", groupsRouter);
   app.use("/api/v1", visitsRouter);
   app.use("/api/v1", assessmentsRouter);

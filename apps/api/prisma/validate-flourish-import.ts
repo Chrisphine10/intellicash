@@ -55,6 +55,7 @@ export async function validateFlourishImport(client: PrismaClient = defaultClien
       subCounty: true,
       location: true,
       phase: true,
+      createdAt: true,
       sourceReference: true,
       villageAgentId: true,
       programmeId: true,
@@ -62,11 +63,27 @@ export async function validateFlourishImport(client: PrismaClient = defaultClien
       programmeLinks: { select: { programmeId: true, programme: { select: { name: true } } } },
       userAccounts: { where: { role: "GROUP_ACCOUNT" }, select: { id: true, email: true } },
       visits: { select: { id: true } },
-      enterprises: { select: { id: true } }
+      enterprises: { select: { id: true, createdAt: true } }
     }
   });
 
   const byKey = new Map(rows.map((row) => [row.sourceReference ?? "", row]));
+
+  // Groups changed on purpose since the import, each with an audit record:
+  // a register entry folded into the same group signed up from a phone keeps
+  // the name the group gave itself, and a county corrected from the baseline
+  // needs assessment no longer matches the register.
+  const auditedIds = async (type: string) =>
+    new Set(
+      (
+        await client.auditEvent.findMany({
+          where: { type, entityType: "GROUP", entityId: { in: rows.map((r) => r.id) } },
+          select: { entityId: true }
+        })
+      ).map((event) => event.entityId)
+    );
+  const merged = await auditedIds("GROUP_MERGED");
+  const relocated = await auditedIds("GROUP_LOCATION_CORRECTED");
 
   // --- every group in the workbook is in the database ---------------------
   const missing = pack.groups.filter((g) => !byKey.has(g.key));
@@ -88,15 +105,22 @@ export async function validateFlourishImport(client: PrismaClient = defaultClien
     const row = byKey.get(source.key);
     if (!row) continue;
 
-    if (row.name !== source.name) problems.push(`${source.name}: name is "${row.name}"`);
-    if (row.county !== source.county) {
-      problems.push(`${source.name}: county is "${row.county}", workbook says "${source.county}"`);
+    if (row.name !== source.name && !merged.has(row.id)) {
+      problems.push(`${source.name}: name is "${row.name}"`);
     }
-    if ((row.subCounty ?? "") !== source.subCounty) {
-      problems.push(`${source.name}: sub-county is "${row.subCounty}", workbook says "${source.subCounty}"`);
-    }
-    if ((row.location ?? "") !== source.ward) {
-      problems.push(`${source.name}: ward is "${row.location}", workbook says "${source.ward}"`);
+    // A folded group keeps the location of the record in use; a corrected one
+    // has its audit record. A ward the register left blank and the needs
+    // assessment filled in is a gap closed, not a contradiction.
+    if (!relocated.has(row.id) && !merged.has(row.id)) {
+      if (row.county !== source.county) {
+        problems.push(`${source.name}: county is "${row.county}", workbook says "${source.county}"`);
+      }
+      if (source.subCounty && (row.subCounty ?? "") !== source.subCounty) {
+        problems.push(`${source.name}: sub-county is "${row.subCounty}", workbook says "${source.subCounty}"`);
+      }
+      if (source.ward && (row.location ?? "") !== source.ward) {
+        problems.push(`${source.name}: ward is "${row.location}", workbook says "${source.ward}"`);
+      }
     }
     if (row.phase !== source.phase) {
       problems.push(`${source.name}: phase is ${row.phase}, expected ${source.phase}`);
@@ -138,7 +162,17 @@ export async function validateFlourishImport(client: PrismaClient = defaultClien
     ok.push(`all ${visits} historic visits recorded`);
   }
 
-  const enterprises = rows.reduce((sum, row) => sum + row.enterprises.length, 0);
+  // The import's own run: everything it wrote is dated no later than its last
+  // group, plus a margin. Records the groups have added since are theirs.
+  const importedAt = rows
+    .filter((r) => !merged.has(r.id))
+    .reduce((latest, r) => (r.createdAt > latest ? r.createdAt : latest), new Date(0));
+  const cutoff = new Date(importedAt.getTime() + 60 * 60 * 1000);
+
+  const enterprises = rows.reduce(
+    (sum, row) => sum + row.enterprises.filter((enterprise) => enterprise.createdAt <= cutoff).length,
+    0
+  );
   // Two rows say only "Mwikuria", which fits two groups; they are left out on
   // purpose rather than attached to a guess.
   const expectedEnterprises = pack.groupEnterprises.length - 2;
@@ -149,16 +183,21 @@ export async function validateFlourishImport(client: PrismaClient = defaultClien
   }
 
   // --- nothing financial was invented --------------------------------------
+  // By the IMPORT. These groups have since started keeping their books in the
+  // app (and folded duplicates brought theirs), so rows that exist now are
+  // the groups' own; what must never exist is a row created by the import
+  // run itself — anything dated no later than the import's own groups.
   const groupIds = rows.map((r) => r.id);
+  const during = { groupId: { in: groupIds }, createdAt: { lte: cutoff } };
   const [members, ledger, loans, meetings] = await Promise.all([
-    client.member.count({ where: { groupId: { in: groupIds } } }),
-    client.ledgerEntry.count({ where: { groupId: { in: groupIds } } }),
-    client.loan.count({ where: { groupId: { in: groupIds } } }),
-    client.meeting.count({ where: { groupId: { in: groupIds } } })
+    client.member.count({ where: during }),
+    client.ledgerEntry.count({ where: during }),
+    client.loan.count({ where: during }),
+    client.meeting.count({ where: during })
   ]);
   if (members || ledger || loans || meetings) {
     problems.push(
-      `financial or roster data exists against imported groups (members ${members}, ledger ${ledger}, loans ${loans}, meetings ${meetings}) — the workbook has none and none should have been created`
+      `financial or roster data was created with the import (members ${members}, ledger ${ledger}, loans ${loans}, meetings ${meetings}) — the workbook has none and none should have been created`
     );
   } else {
     ok.push("no members, ledger, loans or meetings invented");

@@ -26,6 +26,7 @@ import { meetingStatusClass, meetingStatusLabel, meetingStatusName } from "../..
 import { DataTable } from "../../../../components/dashboard/data-table";
 import { GroupMoneyCards, type GroupMoneyStatement } from "../../../../features/groups/group-money";
 import { ChampionAccessCard } from "../../../../components/dashboard/champion-access-card";
+import { NeedsAssessmentCard } from "../../../../features/groups/needs-assessment-card";
 import {
   isGroupSteward,
   isViewOnlyOverGroups,
@@ -687,6 +688,8 @@ export default function DashboardGroupDetailPage({ params }: { params: Promise<{
           </div>
         </section>
       ) : null}
+
+      {!isMember ? <NeedsAssessmentCard groupId={group.id} /> : null}
 
       {manage.length > 0 ? (
         <section className="data-card group-manage">

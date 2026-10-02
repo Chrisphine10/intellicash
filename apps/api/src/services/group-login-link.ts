@@ -65,6 +65,29 @@ export function normaliseGroupName(name: string) {
     .trim();
 }
 
+/**
+ * The part of a group's name that tells it apart: normalised, then without the
+ * generic words people add or drop when they type it ("group", "SHG", "CBO").
+ * "Bethsaida Women Group" and "Bethsaida Women SHG" share a key; "women",
+ * "men", "youth" and a "(II)" stay, because those name different groups.
+ */
+export function groupNameKey(name: string) {
+  return normaliseGroupName(name)
+    .split(" ")
+    .filter((word) => word && !["shg", "group", "grp", "cbo", "the"].includes(word))
+    .join(" ");
+}
+
+/** Word-set similarity of two group names (0–1), for flagging likely duplicates. */
+export function groupNameSimilarity(a: string, b: string) {
+  const left = new Set(groupNameKey(a).split(" ").filter(Boolean));
+  const right = new Set(groupNameKey(b).split(" ").filter(Boolean));
+  if (left.size === 0 || right.size === 0) return 0;
+  let shared = 0;
+  for (const word of left) if (right.has(word)) shared += 1;
+  return shared / Math.min(left.size, right.size);
+}
+
 export async function ensureGroupForLogin(
   userId: string,
   options: { apply?: boolean; actorUserId?: string | null } = {}

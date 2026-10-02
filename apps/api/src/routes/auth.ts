@@ -19,7 +19,7 @@ import { prisma } from "../lib/prisma";
 import { modulesForUser } from "../services/module-service";
 import { assertMemberMaySignIn } from "../services/member-accounts-service";
 import { generateGroupCode } from "../services/group-code";
-import { ensureGroupForLogin } from "../services/group-login-link";
+import { ensureGroupForLogin, groupNameKey } from "../services/group-login-link";
 
 const router = Router();
 
@@ -253,14 +253,18 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
         })
       ).some((group) => samePhone(group.contactPhone, body.phone));
 
-      const wantedName = body.name.trim().toLowerCase().replace(/\s+/g, " ");
-      const county = body.county?.trim();
-      const byName = (
-        await prisma.group.findMany({
-          where: county ? { county } : {},
-          select: { name: true }
-        })
-      ).some((group) => group.name.trim().toLowerCase().replace(/\s+/g, " ") === wantedName);
+      // Compared across every county: a group signing up from a phone often
+      // leaves the county unset or picks a neighbouring one, and "SHG" vs
+      // "Self Help Group" vs "Group" is how the same group is typed twice.
+      const wantedName = groupNameKey(body.name);
+      const byName =
+        wantedName.length > 0 &&
+        (
+          await prisma.group.findMany({
+            where: { isDemo: false },
+            select: { name: true }
+          })
+        ).some((group) => groupNameKey(group.name) === wantedName);
 
       if (byNumber || byName) {
         throw new ApiHttpError(
@@ -268,7 +272,7 @@ router.post("/register", registerRateLimit, async (req, res, next) => {
           "GROUP_EXISTS",
           byNumber
             ? "This group is already registered with this number. Sign in with a code sent to it — that opens the group's existing book."
-            : "A group with this name is already registered in this county. Sign in with a code sent to the group's number, or ask your programme officer to link you to it.",
+            : "A group with this name is already registered. Sign in with a code sent to the group's number, or ask your programme officer to link you to it.",
           { canSignInWithCode: true }
         );
       }
