@@ -2,6 +2,7 @@
 
 import React, { type ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { listenForClientErrors } from "../../lib/report-client-error";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { languagePreferenceLabels, languagePreferences, type LanguagePreference } from "@intellicash/shared";
@@ -34,6 +35,10 @@ const routeTitles = [
   {
     match: "/dashboard/users",
     title: "Users"
+  },
+  {
+    match: "/dashboard/system-issues",
+    title: "System issues"
   },
   {
     match: "/dashboard/payments/reconciliation",
@@ -179,6 +184,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
    * whole list jump.
    */
   const navListRef = useRef<HTMLElement | null>(null);
+  // Uncaught errors in any dashboard screen go to the developers' issue log.
+  useEffect(() => listenForClientErrors(), []);
   useEffect(() => {
     const active = navListRef.current?.querySelector(".nav-item.active");
     active?.scrollIntoView({ block: "nearest" });

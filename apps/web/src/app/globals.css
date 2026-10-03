@@ -10560,3 +10560,122 @@ input.toggle:disabled {
 .osm-group-map {
   z-index: 0;
 }
+
+/* System issues — the development team's log */
+.issue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.issue-row {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line-soft);
+  border-left: 3px solid transparent;
+}
+
+.issue-row.severity-error,
+.issue-row.severity-critical {
+  border-left-color: var(--ink-danger);
+}
+
+.issue-row.severity-warning {
+  border-left-color: var(--ink-warning);
+}
+
+.issue-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.issue-title {
+  overflow-wrap: anywhere;
+}
+
+.issue-meta {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.issue-detail {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.issue-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .issue-row {
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .issue-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* Needs assessment — baseline groups */
+.needs-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 0 20px 16px;
+}
+
+.needs-group {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.needs-group h4 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: var(--muted-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.needs-group .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.needs-group .row span:first-child {
+  color: var(--muted);
+}
+
+.needs-group .row span:last-child {
+  font-weight: 600;
+  text-align: right;
+}

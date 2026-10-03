@@ -207,6 +207,14 @@ export const navigationItems: NavigationItem[] = [
     priority: { default: 30, IWL_ADMIN: 30 }
   },
   {
+    label: "System issues",
+    href: "/dashboard/system-issues",
+    icon: Activity,
+    roles: ["IWL_ADMIN"],
+    section: "setup",
+    priority: { default: 35, IWL_ADMIN: 35 }
+  },
+  {
     label: "API Docs",
     href: "/dashboard/api-docs",
     icon: BookOpenText,

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { groupVisitTypes } from "@intellicash/shared";
+import { groupVisitTypes, seesFieldComments } from "@intellicash/shared";
 import { requireAuth } from "../middleware/auth";
 import type { AuthenticatedUser } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
@@ -99,7 +99,7 @@ visitsRouter.get("/groups/:groupId/visits", requireAuth("visits:read"), async (r
     });
     ok(res, {
       group: { id: group.id, name: group.name, code: group.code },
-      visits: visits.map(serializeVisit)
+      visits: visits.map((visit) => serializeVisit(visit, req.user?.role ?? null))
     });
   } catch (error) {
     next(error);
@@ -137,7 +137,7 @@ visitsRouter.get("/visits", requireAuth("visits:read"), async (req, res, next) =
 
     ok(res, {
       visits: visits.map((visit) => ({
-        ...serializeVisit(visit),
+        ...serializeVisit(visit, req.user?.role ?? null),
         group: visit.group,
         agent: visit.villageAgent
       }))
@@ -175,13 +175,13 @@ visitsRouter.get("/visits/:visitId", requireAuth("visits:read"), async (req, res
     if (!visit) throw new ApiHttpError(404, "VISIT_NOT_FOUND", "That visit does not exist.");
 
     ok(res, {
-      visit: serializeVisit(visit),
+      visit: serializeVisit(visit, req.user?.role ?? null),
       group: visit.group,
       agent: visit.villageAgent,
       submittedBy: visit.submittedBy,
       revisions: visit.revisions.map((revision) => ({
         revision: revision.revision,
-        reason: revision.reason,
+        reason: seesFieldComments(req.user?.role) ? revision.reason : null,
         amendedByUserId: revision.amendedByUserId,
         createdAt: revision.createdAt.toISOString()
       }))
@@ -208,7 +208,7 @@ visitsRouter.get("/agents/me/visits", requireAuth("visits:read"), async (req, re
       include: { group: { select: { id: true, name: true, code: true } } }
     });
     ok(res, {
-      visits: visits.map((visit) => ({ ...serializeVisit(visit), group: visit.group }))
+      visits: visits.map((visit) => ({ ...serializeVisit(visit, req.user?.role ?? null), group: visit.group }))
     });
   } catch (error) {
     next(error);

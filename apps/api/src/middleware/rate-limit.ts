@@ -157,3 +157,19 @@ export const otpVerifyRateLimit = rateLimit(
     }
   })
 );
+
+/**
+ * Error reports from the console and phone, keyed on the signed-in user. A
+ * render loop can throw on every frame; thirty a minute is plenty to record
+ * the problem and not enough to fill the log.
+ */
+export const issueReportRateLimit = rateLimit(
+  baseOptions({
+    windowMs: 60 * 1000,
+    limit: 30,
+    keyGenerator: (req) => `issue-report:${req.user?.id ?? "anonymous"}`,
+    message: {
+      error: { code: "TOO_MANY_REPORTS", message: "Too many error reports from this account. They will be accepted again in a minute." }
+    }
+  })
+);

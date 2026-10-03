@@ -1,3 +1,4 @@
+import { seesFieldComments } from "@intellicash/shared";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
@@ -186,7 +187,7 @@ mentorshipRouter.put(
         }
       });
 
-      ok(res, await readMentorship(visit.id));
+      ok(res, await readMentorship(visit.id, req.user?.role ?? null));
     } catch (error) {
       next(error);
     }
@@ -199,14 +200,15 @@ mentorshipRouter.get(
   async (req, res, next) => {
     try {
       const visit = await loadVisitInScope(req.user, req.params.visitId as string);
-      ok(res, await readMentorship(visit.id));
+      ok(res, await readMentorship(visit.id, req.user?.role ?? null));
     } catch (error) {
       next(error);
     }
   }
 );
 
-async function readMentorship(visitId: string) {
+async function readMentorship(visitId: string, viewerRole?: string | null) {
+  const comments = viewerRole === undefined || seesFieldComments(viewerRole);
   const [sessions, ratings] = await Promise.all([
     prisma.visitMentorshipSession.findMany({ where: { visitId }, orderBy: { createdAt: "asc" } }),
     prisma.visitMentorshipRating.findMany({ where: { visitId } })
@@ -222,14 +224,14 @@ async function readMentorship(visitId: string) {
     sessions: sessions.map((session) => ({
       topicKey: session.topicKeySnapshot,
       topicTitle: session.topicTitleSnapshot,
-      notes: session.notes,
+      notes: comments ? session.notes : null,
       durationMinutes: session.durationMinutes
     })),
     ratings: ratings.map((rating) => ({
       dimensionKey: rating.dimensionKeySnapshot,
       score: rating.score,
       ratedByRole: rating.ratedByRole,
-      comment: rating.comment
+      comment: comments ? rating.comment : null
     })),
     averageGroupRating: averageRating(groupScores),
     ratedByGroup: groupScores.length > 0
@@ -294,7 +296,9 @@ mentorshipRouter.get(
       }
 
       const rows = await prisma.visitActionItem.findMany({ where: { groupId: group.id } });
-      const items = rows.map(serializeActionItem).sort((a, b) => byUrgency(a.state, b.state));
+      const items = rows
+        .map((row) => serializeActionItem(row, req.user?.role ?? null))
+        .sort((a, b) => byUrgency(a.state, b.state));
 
       ok(res, {
         group,
@@ -319,7 +323,7 @@ mentorshipRouter.get(
       });
 
       const items = rows
-        .map((row) => ({ ...serializeActionItem(row), group: row.group }))
+        .map((row) => ({ ...serializeActionItem(row, req.user?.role ?? null), group: row.group }))
         .sort((a, b) => byUrgency(a.state, b.state));
 
       ok(res, {
@@ -399,17 +403,19 @@ function serializeActionItem(row: {
   closedAt: Date | null;
   closingNote: string | null;
   createdAt: Date;
-}) {
+}, viewerRole?: string | null) {
+  // The action itself stays visible; who it was given to and the agent's notes do not.
+  const comments = viewerRole === undefined || seesFieldComments(viewerRole);
   return {
     id: row.id,
     visitId: row.visitId,
     groupId: row.groupId,
     title: row.title,
-    detail: row.detail,
-    owner: row.owner,
+    detail: comments ? row.detail : null,
+    owner: comments ? row.owner : null,
     status: row.status,
     closedAt: row.closedAt,
-    closingNote: row.closingNote,
+    closingNote: comments ? row.closingNote : null,
     createdAt: row.createdAt,
     // Lateness is worked out here, on every read, rather than stored.
     state: actionItemState({ status: row.status, dueDate: row.dueDate })

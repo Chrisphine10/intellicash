@@ -2865,3 +2865,40 @@ model PlatformSetting {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+/// Problems for the development team to sort out: server errors, errors the
+/// web console or phone reports, and data-quality findings (a submission's
+/// figures that do not add up). Never shown to group members or partners.
+///
+/// One row per distinct problem: `fingerprint` groups repeats, which bump
+/// `occurrences` and `lastSeenAt` instead of filling the table. A RESOLVED
+/// problem that happens again is reopened.
+model SystemIssue {
+  id             String    @id @default(cuid())
+  fingerprint    String    @unique
+  /// API | WEB | MOBILE | DATA_QUALITY | JOB
+  source         String
+  /// INFO | WARNING | ERROR | CRITICAL
+  severity       String
+  category       String
+  title          String
+  detail         String?
+  entityType     String?
+  entityId       String?
+  groupId        String?
+  /// Scrubbed context: route, status, version — never passwords, tokens or phones.
+  contextJson    String    @default("{}")
+  /// OPEN | ACKNOWLEDGED | RESOLVED | IGNORED
+  status         String    @default("OPEN")
+  occurrences    Int       @default(1)
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  lastTraceId    String?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolutionNote String?
+
+  @@index([status, lastSeenAt])
+  @@index([source, category])
+  @@index([groupId])
+}

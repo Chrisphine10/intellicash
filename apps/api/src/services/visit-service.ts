@@ -1,3 +1,4 @@
+import { seesFieldComments } from "@intellicash/shared";
 /**
  * Field visits: submission, amendment, and serialization.
  *
@@ -234,7 +235,9 @@ export function serializeVisit(visit: {
   authenticityFlagsJson: string;
   notes: string | null;
   revision: number;
-}) {
+}, viewerRole?: string | null) {
+  // Field comments are for staff; omit the role (internal callers) to keep them.
+  const comments = viewerRole === undefined || seesFieldComments(viewerRole);
   let flags: unknown = [];
   try {
     flags = JSON.parse(visit.authenticityFlagsJson);
@@ -259,10 +262,10 @@ export function serializeVisit(visit: {
       distanceFromGroupM: visit.distanceFromGroupM,
       outcome: visit.locationOutcome,
       withinGeofence: visit.withinGeofence,
-      note: visit.locationNote
+      note: comments ? visit.locationNote : null
     },
     authenticityFlags: Array.isArray(flags) ? flags : [],
-    notes: visit.notes,
+    notes: comments ? visit.notes : null,
     revision: visit.revision
   };
 }

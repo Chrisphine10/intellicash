@@ -154,6 +154,7 @@ describe("web smoke helpers", () => {
       "Users",
       "SMS",
       "Integrations",
+      "System issues",
       "API Docs",
       "Settings",
       "Help & Docs"
@@ -237,6 +238,7 @@ describe("web smoke helpers", () => {
       "Users",
       "SMS",
       "Integrations",
+      "System issues",
       "API Docs",
       "Settings",
       "Help & Docs"

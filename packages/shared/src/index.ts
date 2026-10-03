@@ -327,6 +327,21 @@ export function oversightMayHold(role: string, permission: string): boolean {
   return (OVERSIGHT_WRITES[role as Role] ?? []).includes(permission as Permission);
 }
 
+/**
+ * Who reads what field staff WRITE about a group: visit and location notes,
+ * mentorship notes, rating comments, action-item detail and owners, and the
+ * observations in a needs assessment. These are working notes — they can name
+ * people and say things meant for the team — so only IWL staff and the VA/CBTs
+ * who write them see them. Everyone else (partners, lenders, read-only
+ * viewers, the group's own login and its members) gets the facts without the
+ * comments.
+ */
+export const fieldCommentRoles = ["IWL_ADMIN", "VILLAGE_AGENT"] as const;
+
+export function seesFieldComments(role: string | null | undefined): boolean {
+  return (fieldCommentRoles as readonly string[]).includes(role ?? "");
+}
+
 /** The accounts that belong to one group: the group's own login and its members. */
 export const groupSideRoles = ["GROUP_ACCOUNT", "MEMBER"] as const;
 
@@ -626,6 +641,8 @@ export const auditEventTypes = [
   "INTEGRATION_HEALTH_CHECKED",
   "INTEGRATION_CREDENTIALS_UPDATED",
   "MAP_PROVIDER_CHANGED",
+  "SYSTEM_ISSUE_UPDATED",
+  "VILLAGE_AGENT_CREATED",
   "WEBHOOK_SUBSCRIBED",
   "VA_UPDATED",
   "MEMBER_UPDATED",

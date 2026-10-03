@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "@/lib/theme-icons";
+import { reportClientError } from "@/lib/report-client-error";
 
 export default function AppError({
   error,
@@ -18,6 +19,8 @@ export default function AppError({
       message: error.message,
       stack: error.stack
     });
+    // To the development team's issue log, not just this browser's console.
+    reportClientError({ message: error.message, stack: error.stack, digest: error.digest ?? null, category: "PAGE_CRASH" });
   }, [error, traceId]);
 
   return (

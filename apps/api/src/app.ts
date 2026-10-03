@@ -47,7 +47,10 @@ import { webhooksRouter } from "./routes/webhooks";
 import { welfareExpensesRouter } from "./routes/welfare-expenses";
 import { ApiHttpError, fail, ok, validationMessage } from "./lib/http";
 import { PUBLICLY_SERVED_UPLOAD_KINDS, ensureUploadDirectory, uploadRoot } from "./lib/uploads";
-import { requestTracingMiddleware } from "./middleware/request-tracing";
+import { requestTracingMiddleware, traceIdFromResponse } from "./middleware/request-tracing";
+import { redactUrlForLogs } from "./lib/privacy";
+import { normaliseMessage, reportSystemIssue } from "./services/system-issue-service";
+import { systemIssuesRouter } from "./routes/system-issues";
 
 function isAllowedCorsOrigin(origin: string) {
   const configuredOrigins = env.WEB_ORIGIN.split(",")
@@ -175,6 +178,7 @@ export function createApp(
   app.use("/api/v1", adminRouter);
   app.use("/api/v1", groupDuplicatesRouter);
   app.use("/api/v1", needsAssessmentsRouter);
+  app.use("/api/v1", systemIssuesRouter);
   app.use("/api/v1", groupsRouter);
   app.use("/api/v1", visitsRouter);
   app.use("/api/v1", assessmentsRouter);
@@ -224,7 +228,7 @@ export function createApp(
     });
   }
 
-  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof ZodError) {
       return fail(
         res,
@@ -232,8 +236,29 @@ export function createApp(
       );
     }
 
-    return fail(res, error);
+    const result = fail(res, error);
+    // Anything that ended as a server fault goes to the issue log, where the
+    // development team works through it — the person only saw "try again".
+    if (res.statusCode >= 500) reportServerError(error, req, res);
+    return result;
   });
 
   return app;
+}
+
+function reportServerError(error: unknown, req: express.Request, res: express.Response) {
+  const known = error instanceof ApiHttpError;
+  const message = error instanceof Error ? error.message : String(error);
+  // The route pattern (/groups/:id), not the URL, so one bug is one row.
+  const route = `${req.baseUrl}${req.route?.path ?? ""}` || redactUrlForLogs(req.path);
+  reportSystemIssue({
+    source: "API",
+    severity: known ? "WARNING" : "ERROR",
+    category: known ? (error as ApiHttpError).code : "INTERNAL_ERROR",
+    title: `${req.method} ${route}: ${message}`.slice(0, 300),
+    detail: error instanceof Error && error.stack ? error.stack : null,
+    traceId: traceIdFromResponse(res) ?? null,
+    context: { method: req.method, route, status: res.statusCode, role: req.user?.role ?? null, userId: req.user?.id ?? null },
+    fingerprintParts: ["API", req.method, route, known ? (error as ApiHttpError).code : normaliseMessage(message)]
+  });
 }

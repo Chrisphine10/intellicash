@@ -36,6 +36,7 @@ afterAll(async () => {
   });
   const ids = groups.map((g) => g.id);
   await prisma.user.deleteMany({ where: { OR: [{ groupId: { in: ids } }, { email: { contains: RUN.toLowerCase() } }] } });
+  await prisma.systemIssue.deleteMany({ where: { groupId: { in: ids } } });
   await prisma.groupVisit.deleteMany({ where: { groupId: { in: ids } } });
   await prisma.group.deleteMany({ where: { id: { in: ids } } });
   await prisma.programme.deleteMany({ where: { name: { contains: RUN } } });
@@ -229,7 +230,8 @@ describe("importing the needs assessment as the baseline", () => {
 
   it("records the visit, profile and partial scorecard once, corrects the county, and invents no money", async () => {
     const uuid = `uuid-${RUN}`;
-    const text = csv([submission(uuid), submission(`dup-${RUN}`)]);
+    // Loans of KSh 250,000 against savings of KSh 20,000: a check that must fail.
+    const text = csv([submission(uuid, { "Active Loan Portfolio (KES)": "250000" }), submission(`dup-${RUN}`)]);
     const matches = {
       submissions: {
         [uuid]: { index: 1, code: target.code },
@@ -272,6 +274,13 @@ describe("importing the needs assessment as the baseline", () => {
     expect(baseline.scorecard.asked).toBeGreaterThan(0);
     expect(baseline.scorecard.asked).toBeLessThan(baseline.scorecard.total);
     expect(baseline.answers.leadership).toBeTruthy();
+    expect(baseline.answers.observations).toBeTruthy();
+    expect(baseline.qualityFlags.join(" ")).toMatch(/more than ten times/);
+
+    // The failed check is in the developers' issue log, once, however often the import runs.
+    const issues = await prisma.systemIssue.findMany({ where: { groupId: target.id, source: "DATA_QUALITY" } });
+    expect(issues.map((issue) => issue.title).join(" ")).toMatch(/loan portfolio is more than ten times total savings/);
+    expect(issues.every((issue) => issue.occurrences === 1)).toBe(true);
   });
 
   it("shows a partner the group's profile but not the people in it", async () => {
@@ -288,5 +297,9 @@ describe("importing the needs assessment as the baseline", () => {
     expect(baseline.answers.signOff).toBeUndefined();
     expect(JSON.stringify(baseline.answers)).not.toMatch(/A private concern/);
     expect(baseline.fieldOfficer).toBeNull();
+    // The field team's comments and the quality checks are not for partners.
+    expect(baseline.answers.observations).toBeUndefined();
+    expect(JSON.stringify(baseline)).not.toMatch(/Regular; "active" meetings/);
+    expect(baseline.qualityFlags).toEqual([]);
   });
 });

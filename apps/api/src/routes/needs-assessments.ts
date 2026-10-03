@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { isOversightRole } from "@intellicash/shared";
+import { isOversightRole, seesFieldComments } from "@intellicash/shared";
 import { requireAuth } from "../middleware/auth";
 import { ApiHttpError, ok } from "../lib/http";
 import { prisma } from "../lib/prisma";
@@ -11,6 +11,12 @@ export const needsAssessmentsRouter = Router();
 /** Answers about named people: the group's and IWL's to see, not a partner's. */
 const PERSONAL_SECTIONS = ["leadership", "signOff"];
 const PERSONAL_ANSWERS = ["Safeguarding or Protection Concerns"];
+/**
+ * The field team's own remarks — what the enumerator observed and recommended.
+ * IWL staff and the CBTs who visit see them; partners and the group do not.
+ * The automatic quality checks go to the system issue log, not to readers.
+ */
+const COMMENT_SECTIONS = ["observations"];
 
 /**
  * A group's needs assessments, oldest first — the first is its baseline.
@@ -28,6 +34,7 @@ needsAssessmentsRouter.get("/groups/:groupId/needs-assessments", requireAuth("gr
     if (!group) throw new ApiHttpError(404, "GROUP_NOT_FOUND", "Group does not exist or is outside your access.");
 
     const viewOnly = isOversightRole(req.user?.role);
+    const comments = seesFieldComments(req.user?.role);
     const rows = await prisma.groupNeedsAssessment.findMany({
       where: { groupId: group.id },
       orderBy: { assessedOn: "asc" },
@@ -50,6 +57,7 @@ needsAssessmentsRouter.get("/groups/:groupId/needs-assessments", requireAuth("gr
           for (const section of PERSONAL_SECTIONS) delete answers[section];
           for (const section of Object.values(answers)) for (const label of PERSONAL_ANSWERS) delete section[label];
         }
+        if (!comments) for (const section of COMMENT_SECTIONS) delete answers[section];
         const score = row.visit.assessment
           ? (JSON.parse(row.visit.assessment.breakdownJson) as AssessmentScore)
           : null;
@@ -59,10 +67,11 @@ needsAssessmentsRouter.get("/groups/:groupId/needs-assessments", requireAuth("gr
         return {
           ...fields,
           baseline: index === 0,
-          fieldOfficer: viewOnly ? null : row.fieldOfficer,
-          enumerator: viewOnly ? null : row.enumerator,
+          fieldOfficer: comments ? row.fieldOfficer : null,
+          enumerator: comments ? row.enumerator : null,
           answers,
-          qualityFlags: JSON.parse(qualityFlagsJson) as string[],
+          // Only for the people who can fix them; everyone else gets an empty list.
+          qualityFlags: comments ? (JSON.parse(qualityFlagsJson) as string[]) : [],
           visitId: visit.id,
           scorecard: visit.assessment
             ? {

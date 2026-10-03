@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../src/lib/prisma";
 import { normalisePhone } from "../src/lib/phone";
 import { appendAuditEvent } from "../src/services/audit-service";
+import { logNeedsAssessmentFlags } from "../src/services/system-issue-service";
 import { ensureAssessmentTemplate } from "../src/services/assessment-template-bootstrap";
 import { currentSnapshot, submitVisitAssessment } from "../src/services/visit-assessment-service";
 import {
@@ -208,7 +209,7 @@ export async function importNeedsAssessment(options: {
         },
         select: { id: true }
       });
-      await tx.groupNeedsAssessment.create({
+      const needs = await tx.groupNeedsAssessment.create({
         data: {
           groupId: group.id,
           visitId: created.id,
@@ -229,7 +230,17 @@ export async function importNeedsAssessment(options: {
       if (Object.keys(groupData).length) {
         await tx.group.update({ where: { id: group.id }, data: groupData });
       }
-      return created;
+      return { ...created, needsAssessmentId: needs.id };
+    });
+
+    // Figures that do not add up go to the developers' issue log, not to readers.
+    await logNeedsAssessmentFlags({
+      needsAssessmentId: visit.needsAssessmentId,
+      groupId: group.id,
+      groupCode: group.code,
+      assessedOn: parsed.assessedOn,
+      flags: parsed.qualityFlags,
+      fieldOfficer: parsed.fieldOfficer
     });
 
     if ("county" in groupData) {
