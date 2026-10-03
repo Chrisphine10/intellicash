@@ -86,11 +86,9 @@ const initiateSchema = z
   .refine((body) => body.provider !== "MPESA_DARAJA" || Boolean(body.phoneNumber), {
     message: "M-Pesa needs the phone number to prompt.",
     path: ["phoneNumber"]
-  })
-  .refine((body) => body.provider !== "PAYSTACK" || Boolean(body.customerEmail), {
-    message: "Paystack needs an email address for the receipt.",
-    path: ["customerEmail"]
   });
+// Paystack needs an email on every charge, but the member is never asked:
+// `paystackEmailFor` takes it from the system (see createPayment).
 
 /** Daraja wants 2547XXXXXXXX. */
 function toDarajaMsisdn(phone: string) {
@@ -258,9 +256,34 @@ interface CreatePaymentInput {
   customerName?: string | null;
 }
 
+/**
+ * The email Paystack is given for a charge, without asking the member: their
+ * own login's email, else that of the account making the request (the group's
+ * login, charging at a meeting), else a per-member address on our own domain.
+ * Paystack requires an email to open a checkout but delivers nothing the
+ * group depends on to it, so a placeholder is safe; it is per member so
+ * Paystack does not merge every member into one customer.
+ */
+async function paystackEmailFor(input: { memberId: string | null; actorUserId?: string | null; groupId: string }) {
+  if (input.memberId) {
+    const own = await prisma.user.findFirst({
+      where: { memberId: input.memberId, status: { not: "CLOSED" } },
+      select: { email: true }
+    });
+    if (own?.email) return own.email;
+  }
+  if (input.actorUserId) {
+    const actor = await prisma.user.findUnique({ where: { id: input.actorUserId }, select: { email: true } });
+    if (actor?.email) return actor.email;
+  }
+  return `member-${(input.memberId ?? input.groupId).toLowerCase()}@pay.intellicash.co.ke`;
+}
+
 /** Shared by the group route and the member self-pay route. */
 async function createPayment(input: CreatePaymentInput) {
   const { body } = input;
+  const customerEmail =
+    body.provider === "PAYSTACK" ? body.customerEmail ?? (await paystackEmailFor(input)) : body.customerEmail;
 
   // Replaying the same clientRequestId returns the in-flight or settled
   // payment rather than prompting the member's phone a second time. A
@@ -342,7 +365,7 @@ async function createPayment(input: CreatePaymentInput) {
       feeSnapshotJson: JSON.stringify(snapshot),
       collectionMode,
       phoneNumber,
-      customerEmail: body.customerEmail,
+      customerEmail,
       internalReference,
       clientRequestId: body.clientRequestId,
       status: "PENDING",
@@ -360,7 +383,7 @@ async function createPayment(input: CreatePaymentInput) {
       amountCents: fees.totalCents,
       internalReference,
       phoneNumber,
-      customerEmail: body.customerEmail,
+      customerEmail,
       customerName: input.customerName,
       description: `${body.purpose.replace(/_/g, " ").toLowerCase()} for ${input.groupName}`,
       metadata: { groupId: input.groupId, memberId: input.memberId, purpose: body.purpose },

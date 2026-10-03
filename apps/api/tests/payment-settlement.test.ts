@@ -665,6 +665,32 @@ describe("payment and settlement layer", () => {
     });
   });
 
+  describe("Paystack without asking for an email", () => {
+    it("opens a checkout with the email the system already holds", async () => {
+      await request(app)
+        .put(`/api/v1/groups/${groupId}/payment-settings`)
+        .set("Cookie", groupAccount)
+        .send({ collectionMode: "SYSTEM", enabledProviders: ["MPESA_DARAJA", "PAYSTACK"], memberSelfPayEnabled: false })
+        .expect(200);
+      const quote = await request(app)
+        .post(`/api/v1/groups/${groupId}/payments/quote`)
+        .set("Cookie", groupAccount)
+        .send({ provider: "PAYSTACK", purpose: "SHARE_PURCHASE", groupAmountCents: shareCents, memberId })
+        .expect(200);
+      const created = await request(app)
+        .post(`/api/v1/groups/${groupId}/payments`)
+        .set("Cookie", groupAccount)
+        .send({ provider: "PAYSTACK", purpose: "SHARE_PURCHASE", quoteId: quote.body.data.quoteId, memberId })
+        .expect(201);
+      const row = await prisma.groupPayment.findUniqueOrThrow({ where: { id: created.body.data.id } });
+      // The member's own login if they have one, else the group's account.
+      const memberLogin = await prisma.user.findFirst({ where: { memberId }, select: { email: true } });
+      const groupLogin = await prisma.user.findFirst({ where: { groupId, role: "GROUP_ACCOUNT" }, select: { email: true } });
+      expect(row.customerEmail).toBe(memberLogin?.email ?? groupLogin?.email);
+      expect(row.customerEmail).toMatch(/@/);
+    });
+  });
+
   describe("payment module permissions", () => {
     it("only an IWL admin or the group's own account may ever hold group-payments:configure", () => {
       for (const role of ["PARTNER_OFFICER", "LENDER", "READ_ONLY", "VILLAGE_AGENT", "MEMBER"] as const) {
