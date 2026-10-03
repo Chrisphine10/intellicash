@@ -11,11 +11,11 @@ import { DataTable } from "../../../components/dashboard/data-table";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { GroupRow, LedgerEntry, User } from "../../../components/dashboard/types";
 import {
-  GoogleGroupMap,
   MeetingCalendar,
   MeetingDetailDialog,
   MeetingPassbookView
 } from "../../../features/meetings/components";
+import { GroupMap } from "../../../features/maps/group-map";
 import {
   buildMeetingPassbookRows,
   countyCoordinates,
@@ -433,10 +433,9 @@ export default function MeetingsPage() {
           <div>
             <h3>Group Meeting Map</h3>
             <span>
-              Google Maps view with exact GPS pins where captured; other groups
-              are clustered by county.
+              Exact GPS pins where captured; other groups are clustered by county.
               {googleMapsConfig?.source === "stored"
-                ? " Using the saved integration key."
+                ? " Google Maps uses the saved integration key."
                 : null}
             </span>
           </div>
@@ -447,7 +446,7 @@ export default function MeetingsPage() {
           </div>
         </header>
         <div className="meeting-map-layout">
-          <GoogleGroupMap apiKey={googleMapsApiKey} pins={mapPins} />
+          <GroupMap pins={mapPins} />
           <div className="map-summary">
             <div>
               <span>Groups</span>

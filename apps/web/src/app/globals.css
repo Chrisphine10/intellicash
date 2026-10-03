@@ -10541,3 +10541,22 @@ input.toggle:disabled {
 .table-scroll > .data-table {
   width: 100%;
 }
+
+/* OpenStreetMap (Leaflet): the count on a clustered pin, drawn on the pin. */
+.leaflet-tooltip.osm-pin-count {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 0;
+}
+
+.leaflet-tooltip.osm-pin-count::before {
+  display: none;
+}
+
+.osm-group-map {
+  z-index: 0;
+}

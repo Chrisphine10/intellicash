@@ -2855,3 +2855,13 @@ model GroupNeedsAssessment {
 
   @@index([groupId, assessedOn])
 }
+
+/// Platform-wide choices an IWL admin makes in the console, one row per key —
+/// e.g. which map the console draws (`MAP_PROVIDER`). Not for secrets:
+/// credentials live encrypted in IntegrationConfig.
+model PlatformSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

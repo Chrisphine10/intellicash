@@ -18,46 +18,119 @@ const credentialSchema = z.object({
   credentials: z.record(z.string()).default({})
 });
 
+/** The browser key for Google Maps: stored in the console first, then the environment. */
+async function googleMapsKey() {
+  const adapter = getIntegrationAdapter("GOOGLE_MAPS");
+  if (!adapter) throw new ApiHttpError(404, "INTEGRATION_NOT_FOUND", "Integration provider is unknown.");
+  const config = await prisma.integrationConfig.upsert({
+    where: { provider: adapter.provider },
+    create: {
+      provider: adapter.provider,
+      displayName: adapter.displayName,
+      requiredEnvJson: JSON.stringify(adapter.requiredEnv)
+    },
+    update: {
+      displayName: adapter.displayName,
+      requiredEnvJson: JSON.stringify(adapter.requiredEnv)
+    }
+  });
+  const credentials = decryptCredentials(config.credentialsJson);
+  const storedKey = credentials.GOOGLE_MAPS_BROWSER_API_KEY;
+  const envKey = env.GOOGLE_MAPS_BROWSER_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const apiKey = (config.enabled ? storedKey || envKey : "") || "";
+  return {
+    adapter,
+    apiKey,
+    source: (config.enabled && storedKey ? "stored" : config.enabled && envKey ? "env" : "none") as "stored" | "env" | "none"
+  };
+}
+
 router.get(
   "/integrations/GOOGLE_MAPS/public-config",
   requireAuth(),
   async (_req, res, next) => {
     try {
-      const adapter = getIntegrationAdapter("GOOGLE_MAPS");
-
-      if (!adapter) {
-        throw new ApiHttpError(404, "INTEGRATION_NOT_FOUND", "Integration provider is unknown.");
-      }
-
-      const config = await prisma.integrationConfig.upsert({
-        where: { provider: adapter.provider },
-        create: {
-          provider: adapter.provider,
-          displayName: adapter.displayName,
-          requiredEnvJson: JSON.stringify(adapter.requiredEnv)
-        },
-        update: {
-          displayName: adapter.displayName,
-          requiredEnvJson: JSON.stringify(adapter.requiredEnv)
-        }
-      });
-      const credentials = decryptCredentials(config.credentialsJson);
-      const storedKey = credentials.GOOGLE_MAPS_BROWSER_API_KEY;
-      const envKey = env.GOOGLE_MAPS_BROWSER_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-      const apiKey = storedKey || envKey || "";
-
+      const { adapter, apiKey, source } = await googleMapsKey();
       ok(res, {
         provider: adapter.provider,
         displayName: adapter.displayName,
         configured: Boolean(apiKey),
         apiKey: apiKey || null,
-        source: storedKey ? "stored" : envKey ? "env" : "none"
+        source
       });
     } catch (error) {
       next(error);
     }
   }
 );
+
+// ---------------------------------------------------------------------------
+// Which map the console draws
+// ---------------------------------------------------------------------------
+
+export const MAP_PROVIDERS = ["GOOGLE_MAPS", "OPENSTREETMAP"] as const;
+type MapProvider = (typeof MAP_PROVIDERS)[number];
+const MAP_PROVIDER_KEY = "MAP_PROVIDER";
+
+/**
+ * OpenStreetMap needs no key: its tiles are public images (the page's
+ * img-src already allows https:). Google Maps needs the browser key above.
+ * With no choice saved, Google is used when a key exists, otherwise OSM — so
+ * a deployment without a key still shows a real map.
+ */
+async function mapConfig() {
+  const google = await googleMapsKey();
+  const saved = await prisma.platformSetting.findUnique({ where: { key: MAP_PROVIDER_KEY } });
+  const chosen = (MAP_PROVIDERS as readonly string[]).includes(saved?.value ?? "") ? (saved!.value as MapProvider) : null;
+  const provider: MapProvider = chosen ?? (google.apiKey ? "GOOGLE_MAPS" : "OPENSTREETMAP");
+  return {
+    provider,
+    chosen,
+    google: { configured: Boolean(google.apiKey), apiKey: google.apiKey || null, source: google.source },
+    openStreetMap: {
+      tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19
+    }
+  };
+}
+
+router.get("/integrations/map-config", requireAuth(), async (_req, res, next) => {
+  try {
+    ok(res, await mapConfig());
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/integrations/map-config", requireAuth("integrations:write"), requireAdmin, async (req, res, next) => {
+  try {
+    const { provider } = z.object({ provider: z.enum(MAP_PROVIDERS) }).parse(req.body);
+    const before = await mapConfig();
+    if (provider === "GOOGLE_MAPS" && !before.google.configured) {
+      throw new ApiHttpError(
+        400,
+        "GOOGLE_MAPS_NOT_CONFIGURED",
+        "Add a Google Maps browser key under Integrations first, or keep OpenStreetMap."
+      );
+    }
+    await prisma.platformSetting.upsert({
+      where: { key: MAP_PROVIDER_KEY },
+      create: { key: MAP_PROVIDER_KEY, value: provider, updatedById: req.user?.id ?? null },
+      update: { value: provider, updatedById: req.user?.id ?? null }
+    });
+    await appendAuditEvent({
+      actorUserId: req.user?.id,
+      entityType: "INTEGRATION",
+      entityId: MAP_PROVIDER_KEY,
+      type: "MAP_PROVIDER_CHANGED",
+      payload: { from: before.provider, to: provider }
+    });
+    ok(res, await mapConfig());
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/integrations/health", requireAuth("integrations:read"), requireAdmin, async (req, res, next) => {
   try {

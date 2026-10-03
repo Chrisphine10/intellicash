@@ -64,8 +64,26 @@ describe("content security policy", () => {
     const imgSrc = current.get("img-src") ?? [];
 
     for (const source of current.get("connect-src") ?? []) {
-      expect(imgSrc).toContain(source);
+      // A scheme source covers every host on it: `https:` permits any
+      // https://… image, so the Google Maps hosts need no line of their own.
+      const coveredByScheme = imgSrc.some((allowed) => allowed.endsWith(":") && source.startsWith(allowed));
+      if (!coveredByScheme) expect(imgSrc).toContain(source);
     }
+  });
+
+  /*
+   * The Maps JavaScript API fetches over XHR and draws in a blob: worker. With
+   * only 'self' allowed the script loaded and every map stayed grey — the
+   * production fault of 3 Oct 2026.
+   */
+  it("lets Google Maps fetch its data and run its worker", () => {
+    const current = policy();
+    const connect = current.get("connect-src") ?? [];
+    for (const host of ["https://*.googleapis.com", "https://*.gstatic.com", "https://*.google.com"]) {
+      expect(connect).toContain(host);
+    }
+    expect(current.get("worker-src") ?? []).toContain("blob:");
+    expect(current.get("script-src") ?? []).toContain("https://maps.googleapis.com");
   });
 
   it("nonces scripts rather than allowing inline ones", () => {

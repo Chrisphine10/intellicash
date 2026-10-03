@@ -44,6 +44,9 @@ function extraConnectSrc() {
   }
 }
 
+const GOOGLE_MAPS_SCRIPTS = "https://maps.googleapis.com https://maps.gstatic.com";
+const GOOGLE_MAPS_CONNECT = "https://*.googleapis.com https://*.google.com https://*.gstatic.com data: blob:";
+
 export function middleware(request: NextRequest) {
   const nonce = generateNonce();
 
@@ -58,7 +61,11 @@ export function middleware(request: NextRequest) {
     // "Loading workspace…" forever — the app is unusable locally. A production
     // build contains no eval, so the directive never reaches production and
     // the policy there is unchanged.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${
+    //
+    // The Google Maps hosts are listed for browsers without 'strict-dynamic'
+    // (which ignore it and fall back to the allowlist); modern browsers trust
+    // the Maps loader through the nonce'd script that inserts it.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${GOOGLE_MAPS_SCRIPTS}${
       process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"
     }`,
     // Next inlines critical CSS and the font loader emits style attributes;
@@ -89,7 +96,15 @@ export function middleware(request: NextRequest) {
     // origin the client is about to use, which is precisely what happened
     // before: the client hardcoded :4000 on localhost while this said 'self',
     // so every dashboard fetch was blocked.
-    `connect-src 'self'${extraConnectSrc()}`,
+    //
+    // Google Maps loads its tiles as images but fetches everything else —
+    // map metadata, fonts, telemetry — over XHR to these hosts, and draws in
+    // a blob: worker. Without them the script loaded and every map stayed
+    // grey (the production fault of 3 Oct 2026). These are the hosts Google
+    // documents for the Maps JavaScript API under a strict CSP.
+    // OpenStreetMap needs nothing here: its tiles are plain images.
+    `connect-src 'self'${extraConnectSrc()} ${GOOGLE_MAPS_CONNECT}`,
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { CheckCircle2, FlaskConical, KeyRound, LockKeyhole, PlugZap, Trash2 } from "@/lib/theme-icons";
 import { apiFetch, humanizeEnum } from "../../../lib/api";
+import { MapProviderCard } from "../../../features/maps/map-provider-card";
 import { StatCard } from "../../../components/dashboard/stat-card";
 import type { IntegrationHealth, IntegrationStatus, User } from "../../../components/dashboard/types";
 
@@ -521,6 +522,8 @@ export default function IntegrationsPage() {
           )}
         </section>
       </section>
+
+      <MapProviderCard canConfigure />
 
       <section className="data-card notification-sms">
         <header>

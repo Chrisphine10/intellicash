@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BookOpenText, CalendarDays, ChevronLeft, ChevronRight, Pencil, X } from "@/lib/theme-icons";
 import { formatKes, humanizeEnum } from "../../lib/api";
 import type { LedgerEntry } from "../../types/dashboard";
+import { GroupMap } from "../maps/group-map";
 import {
   addDays,
   buildMeetingMapPins,
@@ -77,7 +78,16 @@ function GoogleMapsEmbedFallback({ error, pins }: { error?: string | null; pins:
   );
 }
 
-export function GoogleGroupMap({ apiKey, pins }: { apiKey: string; pins: MapPin[] }) {
+export function GoogleGroupMap({
+  apiKey,
+  pins,
+  onFailure
+}: {
+  apiKey: string;
+  pins: MapPin[];
+  /** When given, a load failure is handed up (to switch to OpenStreetMap) instead of the embed. */
+  onFailure?: (message: string) => void;
+}) {
   const mapElementRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<GoogleMarkerInstance[]>([]);
   const effectiveApiKey = apiKey.trim();
@@ -171,8 +181,13 @@ export function GoogleGroupMap({ apiKey, pins }: { apiKey: string; pins: MapPin[
         setStatus("ready");
       } catch (mapError) {
         if (!cancelled) {
+          const message = mapError instanceof Error ? mapError.message : "Google Maps failed to load.";
+          if (onFailure) {
+            onFailure(message);
+            return;
+          }
           setStatus("error");
-          setError(mapError instanceof Error ? mapError.message : "Google Maps failed to load.");
+          setError(message);
         }
       }
     }
@@ -184,7 +199,7 @@ export function GoogleGroupMap({ apiKey, pins }: { apiKey: string; pins: MapPin[
       markersRef.current.forEach((marker) => marker.setMap(null));
       markersRef.current = [];
     };
-  }, [effectiveApiKey, pins]);
+  }, [effectiveApiKey, pins, onFailure]);
 
   if (!effectiveApiKey || status === "embed" || status === "error") {
     return <GoogleMapsEmbedFallback error={status === "error" ? error : null} pins={pins} />;
@@ -578,7 +593,7 @@ export function MeetingDetailDialog({
           {isMember ? (
             <div className="member-meeting-detail-map">
               {mapPins.length > 0 ? (
-                <GoogleGroupMap apiKey={googleMapsApiKey} pins={mapPins} />
+                <GroupMap pins={mapPins} />
               ) : (
                 <div className="empty-state">No meeting location available</div>
               )}
